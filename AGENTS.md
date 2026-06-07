@@ -1,4 +1,4 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 ## Project Identity
 
@@ -38,6 +38,16 @@ Run after successful build:
 ```powershell
 Start-Process -FilePath .\bin\x64\Debug\net8.0-windows\PhotoRetouch.exe -WindowStyle Hidden
 ```
+
+## Korean Text And Encoding
+
+The app has Korean UI text, so source encoding must stay predictable.
+
+- The project uses `.editorconfig` with `charset = utf-8-bom` for source and config files.
+- Keep Korean text files such as `.cs`, `.xaml`, `.json`, and `.md` as UTF-8 with BOM.
+- If Korean looks broken in terminal output, first suspect the viewer or shell encoding before rewriting source files.
+- In PowerShell, prefer explicit UTF-8 reads for inspection, for example `Get-Content -Encoding UTF8`.
+- Avoid broad encoding conversions across the whole repository unless there is a verified file-level problem.
 
 ## Important Documents
 

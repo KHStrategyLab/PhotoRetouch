@@ -72,6 +72,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<PhotoItem> SelectedPhotos { get; } = new();
 
     private PhotoItem? _selectedPhoto;
+    private SolidColorBrush _previewBackgroundBrush = CreatePreviewBackgroundBrush(PreviewBackgroundSettings.BackgroundColor);
     private double _zoomPercent = 100;
     private double _panX;
     private double _panY;
@@ -141,6 +142,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility PhotoPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility MockPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     public string PreviewTitleText => _isShowingOriginalPreview ? "Original" : "Preview";
+    public System.Windows.Media.Brush PreviewBackgroundBrush => _previewBackgroundBrush;
     public bool IsSplitPreview => SelectedPhotos.Count > 1;
     public int PreviewRows => SelectedPhotos.Count switch
     {
@@ -642,6 +644,48 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ShowEditedPreview();
     }
 
+    private void PreviewBackgroundBlack_Click(object sender, RoutedEventArgs e)
+    {
+        SetPreviewBackgroundColor("#000000");
+    }
+
+    private void PreviewBackgroundGray_Click(object sender, RoutedEventArgs e)
+    {
+        SetPreviewBackgroundColor("#404040");
+    }
+
+    private void PreviewBackgroundCustom_Click(object sender, RoutedEventArgs e)
+    {
+        ColorInputWindow colorInputWindow = new(PreviewBackgroundSettings.BackgroundColor)
+        {
+            Owner = this
+        };
+
+        if (colorInputWindow.ShowDialog() == true)
+        {
+            SetPreviewBackgroundColor(colorInputWindow.ColorText);
+        }
+    }
+
+    private void PreviewBackgroundChooseColor_Click(object sender, RoutedEventArgs e)
+    {
+        using Forms.ColorDialog dialog = new()
+        {
+            AllowFullOpen = true,
+            FullOpen = true
+        };
+
+        if (TryParsePreviewBackgroundColor(PreviewBackgroundSettings.BackgroundColor, out System.Windows.Media.Color currentColor))
+        {
+            dialog.Color = System.Drawing.Color.FromArgb(currentColor.R, currentColor.G, currentColor.B);
+        }
+
+        if (dialog.ShowDialog() == Forms.DialogResult.OK)
+        {
+            SetPreviewBackgroundColor($"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}");
+        }
+    }
+
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         ColorManagementMode previousMode = ColorManagementSettings.Mode;
@@ -1043,6 +1087,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             AddPhotosWithReusableCache(imagePaths, reusablePhotos);
         }
+
+        ActivatePhotoListNavigationForCurrentSelection();
     }
 
     private void ClearPhotoListForWorkingFolderReload()
@@ -1055,6 +1101,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SetSelectedPhotos(Array.Empty<PhotoItem>(), null);
         Photos.Clear();
         _selectionAnchor = null;
+        _isPhotoListNavigationActive = false;
+    }
+
+    private void ActivatePhotoListNavigationForCurrentSelection()
+    {
+        _selectionAnchor = SelectedPhoto;
+        _isPhotoListNavigationActive = SelectedPhoto is not null;
+
+        if (SelectedPhoto is null)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            PhotoListPanel.Focus();
+            Keyboard.Focus(PhotoListPanel);
+        }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private Dictionary<string, PhotoItem> CaptureReusablePhotoCache()
@@ -2943,6 +3007,83 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         OriginalMockPreview.Visibility = Visibility.Collapsed;
         EditedMockPreview.Visibility = Visibility.Visible;
+    }
+
+    private void SetPreviewBackgroundColor(string colorText)
+    {
+        if (!TryParsePreviewBackgroundColor(colorText, out System.Windows.Media.Color color))
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                "Use HEX (#202224) or RGB (32,34,36).",
+                "Preview background",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        string normalizedColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        PreviewBackgroundSettings.BackgroundColor = normalizedColor;
+        PreviewBackgroundSettings.Save();
+        _previewBackgroundBrush = CreatePreviewBackgroundBrush(normalizedColor);
+        OnPropertyChanged(nameof(PreviewBackgroundBrush));
+    }
+
+    private static SolidColorBrush CreatePreviewBackgroundBrush(string colorText)
+    {
+        if (!TryParsePreviewBackgroundColor(colorText, out System.Windows.Media.Color color))
+        {
+            TryParsePreviewBackgroundColor(PreviewBackgroundSettings.DefaultBackgroundColor, out color);
+        }
+
+        SolidColorBrush brush = new(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static bool TryParsePreviewBackgroundColor(string colorText, out System.Windows.Media.Color color)
+    {
+        color = System.Windows.Media.Colors.Transparent;
+        string normalizedText = colorText.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return false;
+        }
+
+        if (normalizedText.Contains(','))
+        {
+            string[] parts = normalizedText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 3 &&
+                byte.TryParse(parts[0], out byte red) &&
+                byte.TryParse(parts[1], out byte green) &&
+                byte.TryParse(parts[2], out byte blue))
+            {
+                color = System.Windows.Media.Color.FromRgb(red, green, blue);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (!normalizedText.StartsWith('#') && normalizedText.Length is 6 or 8)
+        {
+            normalizedText = $"#{normalizedText}";
+        }
+
+        try
+        {
+            object? converted = System.Windows.Media.ColorConverter.ConvertFromString(normalizedText);
+            if (converted is System.Windows.Media.Color convertedColor)
+            {
+                color = System.Windows.Media.Color.FromRgb(convertedColor.R, convertedColor.G, convertedColor.B);
+                return true;
+            }
+        }
+        catch (FormatException)
+        {
+        }
+
+        return false;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

@@ -294,6 +294,7 @@
 
             <Border x:Name="PhotoListPanel"
                     Grid.Column="0"
+                    Focusable="True"
                     Background="{StaticResource PanelBg}"
                     BorderBrush="{StaticResource Stroke}"
                     BorderThickness="0,0,1,0"
@@ -394,7 +395,16 @@
                               PreviewMouseLeftButtonUp="PreviewFrame_PreviewMouseLeftButtonUp"
                               PreviewMouseMove="PreviewFrame_PreviewMouseMove"
                               PreviewMouseWheel="PreviewFrame_PreviewMouseWheel">
-                            <Border Background="#25282B"
+                            <Grid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Black" Click="PreviewBackgroundBlack_Click"/>
+                                    <MenuItem Header="Gray" Click="PreviewBackgroundGray_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="Custom RGB / HEX..." Click="PreviewBackgroundCustom_Click"/>
+                                    <MenuItem Header="Choose Color..." Click="PreviewBackgroundChooseColor_Click"/>
+                                </ContextMenu>
+                            </Grid.ContextMenu>
+                            <Border Background="{Binding PreviewBackgroundBrush}"
                                     BorderThickness="0"
                                     ClipToBounds="True"
                                     HorizontalAlignment="Stretch"
@@ -418,7 +428,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Background="#101112"
+                                                    <Border Background="{Binding DataContext.PreviewBackgroundBrush, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             BorderThickness="0"
                                                             ClipToBounds="True"
                                                             Margin="0">
@@ -438,7 +448,7 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Rectangle Fill="#2D3033" Margin="28" Visibility="{Binding MockPreviewVisibility}"/>
+                                        <Rectangle Fill="{Binding PreviewBackgroundBrush}" Margin="28" Visibility="{Binding MockPreviewVisibility}"/>
                                     </Grid>
                                     <Grid x:Name="OriginalMockPreview" Visibility="Collapsed">
                                         <ItemsControl ItemsSource="{Binding SelectedPhotos}"
@@ -458,7 +468,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Background="#101112"
+                                                    <Border Background="{Binding DataContext.PreviewBackgroundBrush, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             BorderThickness="0"
                                                             ClipToBounds="True"
                                                             Margin="0">
@@ -478,7 +488,7 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Rectangle Fill="#272A2D" Margin="28" Visibility="{Binding MockPreviewVisibility}"/>
+                                        <Rectangle Fill="{Binding PreviewBackgroundBrush}" Margin="28" Visibility="{Binding MockPreviewVisibility}"/>
                                     </Grid>
                                     <TextBlock Text="Space &#xB204;&#xB974;&#xB294; &#xB3D9;&#xC548; &#xC6D0;&#xBCF8; &#xBCF4;&#xAE30;"
                                                Visibility="{Binding MockPreviewVisibility}"
@@ -492,13 +502,14 @@
                         </Grid>
 
                         <Border Grid.Row="0"
-                                Background="#33000000"
-                                BorderBrush="#55000000"
-                                BorderThickness="0,0,0,1"
+                                Background="Transparent"
+                                BorderThickness="0"
                                 IsHitTestVisible="False">
                             <Grid Margin="14,0">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Border Background="#33000000"
+                                            BorderBrush="#55000000"
+                                            BorderThickness="0,0,0,1"
                                             Padding="10,3">
                                         <TextBlock Text="{Binding PreviewTitleText}"
                                                    FontSize="24"
