@@ -6,34 +6,34 @@
         mc:Ignorable="d"
         Title="PhotoRetouch Studio" Height="820" Width="1280"
         MinHeight="720" MinWidth="1100"
-        Background="#171615"
-        WindowStartupLocation="CenterScreen"
+        Background="#171819"
+        WindowStartupLocation="Manual"
         Loaded="Window_Loaded"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewKeyUp="Window_PreviewKeyUp">
     <Window.Resources>
-        <SolidColorBrush x:Key="AppBg" Color="#171615"/>
-        <SolidColorBrush x:Key="TopBg" Color="#201F1D"/>
-        <SolidColorBrush x:Key="PanelBg" Color="#242321"/>
-        <SolidColorBrush x:Key="PanelSoft" Color="#2D2B28"/>
-        <SolidColorBrush x:Key="Stroke" Color="#403C36"/>
-        <SolidColorBrush x:Key="TextMain" Color="#F6F1EA"/>
-        <SolidColorBrush x:Key="TextSub" Color="#BDB5AA"/>
-        <SolidColorBrush x:Key="Accent" Color="#E2774B"/>
-        <SolidColorBrush x:Key="ControlBg" Color="#34312D"/>
-        <SolidColorBrush x:Key="ControlBgHover" Color="#3D3934"/>
-        <SolidColorBrush x:Key="ControlStroke" Color="#5A544D"/>
-        <SolidColorBrush x:Key="ControlStrokeSoft" Color="#48433D"/>
-        <SolidColorBrush x:Key="ControlActive" Color="#A7654A"/>
-        <SolidColorBrush x:Key="ControlActiveSoft" Color="#47362F"/>
-        <SolidColorBrush x:Key="ScrollTrack" Color="#211F1D"/>
-        <SolidColorBrush x:Key="ScrollThumb" Color="#4B4640"/>
-        <SolidColorBrush x:Key="ScrollThumbHover" Color="#5A544D"/>
-        <SolidColorBrush x:Key="SwitchTrack" Color="#302D2A"/>
-        <SolidColorBrush x:Key="SwitchTrackChecked" Color="#45372F"/>
-        <SolidColorBrush x:Key="SwitchStroke" Color="#5A544D"/>
-        <SolidColorBrush x:Key="SwitchDot" Color="#B68268"/>
-        <SolidColorBrush x:Key="SliderTrack" Color="#2A2724"/>
+        <SolidColorBrush x:Key="AppBg" Color="#171819"/>
+        <SolidColorBrush x:Key="TopBg" Color="#202224"/>
+        <SolidColorBrush x:Key="PanelBg" Color="#242628"/>
+        <SolidColorBrush x:Key="PanelSoft" Color="#2D3033"/>
+        <SolidColorBrush x:Key="Stroke" Color="#3F4448"/>
+        <SolidColorBrush x:Key="TextMain" Color="#F1F3F4"/>
+        <SolidColorBrush x:Key="TextSub" Color="#B9C0C5"/>
+        <SolidColorBrush x:Key="Accent" Color="#7D8A94"/>
+        <SolidColorBrush x:Key="ControlBg" Color="#33373B"/>
+        <SolidColorBrush x:Key="ControlBgHover" Color="#3B4045"/>
+        <SolidColorBrush x:Key="ControlStroke" Color="#555D64"/>
+        <SolidColorBrush x:Key="ControlStrokeSoft" Color="#474E54"/>
+        <SolidColorBrush x:Key="ControlActive" Color="#7A8791"/>
+        <SolidColorBrush x:Key="ControlActiveSoft" Color="#384148"/>
+        <SolidColorBrush x:Key="ScrollTrack" Color="#212426"/>
+        <SolidColorBrush x:Key="ScrollThumb" Color="#4A5157"/>
+        <SolidColorBrush x:Key="ScrollThumbHover" Color="#596169"/>
+        <SolidColorBrush x:Key="SwitchTrack" Color="#303438"/>
+        <SolidColorBrush x:Key="SwitchTrackChecked" Color="#39434A"/>
+        <SolidColorBrush x:Key="SwitchStroke" Color="#555D64"/>
+        <SolidColorBrush x:Key="SwitchDot" Color="#A8B3BB"/>
+        <SolidColorBrush x:Key="SliderTrack" Color="#2A2D30"/>
         <SolidColorBrush x:Key="SliderFill" Color="#3F4C55"/>
         <SolidColorBrush x:Key="SliderFillHover" Color="#4A5963"/>
         <SolidColorBrush x:Key="SliderThumb" Color="#718391"/>
@@ -52,6 +52,29 @@
             <Setter Property="BorderBrush" Value="{StaticResource ControlStroke}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="RadioButton">
@@ -208,8 +231,8 @@
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="PhotoRetouch Studio" FontSize="20" FontWeight="SemiBold" Margin="0,0,14,0"/>
-                    <Border Background="#3A332D" BorderBrush="#614633" BorderThickness="1" Padding="8,3">
-                        <TextBlock Text="UI REVIEW" Foreground="#F0B797" FontSize="11" FontWeight="SemiBold"/>
+                    <Border Background="#353A3F" BorderBrush="#596169" BorderThickness="1" Padding="8,3">
+                        <TextBlock Text="UI REVIEW" Foreground="#D4DADE" FontSize="11" FontWeight="SemiBold"/>
                     </Border>
                 </StackPanel>
 
@@ -251,10 +274,10 @@
                         <TextBlock Text="&#xC791;&#xC5C5; &#xC0AC;&#xC9C4;" Style="{StaticResource SectionTitle}"/>
                     </StackPanel>
 
-                    <Border Background="#1C1B19" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
+                    <Border Background="#1C1E20" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
                         <Grid>
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="180">
-                                <Border Height="96" BorderBrush="#5A544D" BorderThickness="1" Background="#24211E" Margin="0,0,0,12">
+                                <Border Height="96" BorderBrush="{StaticResource ControlStroke}" BorderThickness="1" Background="#24272A" Margin="0,0,0,12">
                                     <TextBlock Text="+" FontSize="32" Foreground="{StaticResource TextSub}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <TextBlock Text="&#xC0AC;&#xC9C4; &#xBAA9;&#xB85D;" TextAlignment="Center"/>
@@ -272,8 +295,8 @@
                 </Grid.RowDefinitions>
 
                 <Border Margin="20"
-                        Background="#10100F"
-                        BorderBrush="#383530"
+                        Background="#101112"
+                        BorderBrush="#383D41"
                         BorderThickness="1">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -281,7 +304,7 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <Border Background="#181716" BorderBrush="#302D29" BorderThickness="0,0,0,1">
+                        <Border Background="#181A1C" BorderBrush="#303438" BorderThickness="0,0,0,1">
                             <Grid Margin="14,0">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="&#xBBF8;&#xB9AC;&#xBCF4;&#xAE30;" FontWeight="SemiBold"/>
@@ -296,30 +319,30 @@
 
                         <Grid Grid.Row="1">
                             <Border Width="560" Height="420"
-                                    Background="#252320"
-                                    BorderBrush="#4A453E"
+                                    Background="#25282B"
+                                    BorderBrush="#485058"
                                     BorderThickness="1"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center">
                                 <Grid>
                                     <Grid x:Name="EditedMockPreview">
-                                        <Rectangle Fill="#2D2B27" Margin="28"/>
-                                        <Ellipse Width="128" Height="128" Fill="#7A675B" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,74,0,0"/>
-                                        <Rectangle Width="260" Height="140" Fill="#66574D" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,68"/>
-                                        <Border Background="#AA1A1715" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="10,5" Margin="12">
+                                        <Rectangle Fill="#2D3033" Margin="28"/>
+                                        <Ellipse Width="128" Height="128" Fill="#68737B" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,74,0,0"/>
+                                        <Rectangle Width="260" Height="140" Fill="#5A6268" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,68"/>
+                                        <Border Background="#AA171A1C" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="10,5" Margin="12">
                                             <TextBlock Text="&#xBCF4;&#xC815;&#xBCF8;" FontWeight="SemiBold"/>
                                         </Border>
                                     </Grid>
                                     <Grid x:Name="OriginalMockPreview" Visibility="Collapsed">
-                                        <Rectangle Fill="#272624" Margin="28"/>
-                                        <Ellipse Width="128" Height="128" Fill="#5F5852" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,74,0,0"/>
-                                        <Rectangle Width="260" Height="140" Fill="#4F4A45" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,68"/>
-                                        <Border Background="#AA1A1715" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="10,5" Margin="12">
+                                        <Rectangle Fill="#272A2D" Margin="28"/>
+                                        <Ellipse Width="128" Height="128" Fill="#596169" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,74,0,0"/>
+                                        <Rectangle Width="260" Height="140" Fill="#4D555B" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,68"/>
+                                        <Border Background="#AA171A1C" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="10,5" Margin="12">
                                             <TextBlock Text="&#xC6D0;&#xBCF8;" FontWeight="SemiBold"/>
                                         </Border>
                                     </Grid>
                                     <TextBlock Text="Space &#xB204;&#xB974;&#xB294; &#xB3D9;&#xC548; &#xC6D0;&#xBCF8; &#xBCF4;&#xAE30;"
-                                               Foreground="#D8D0C5"
+                                               Foreground="#D4DADE"
                                                FontSize="17"
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
@@ -330,7 +353,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Row="1" Background="#1D1C1A" BorderBrush="{StaticResource Stroke}" BorderThickness="0,1,0,0" Padding="18,0">
+                <Border Grid.Row="1" Background="#1D2022" BorderBrush="{StaticResource Stroke}" BorderThickness="0,1,0,0" Padding="18,0">
                     <Grid>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="&#xC774;&#xC804;" Width="74"/>
@@ -350,7 +373,7 @@
                     BorderBrush="{StaticResource Stroke}"
                     BorderThickness="1,0,0,0"
                     Padding="16">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Visible">
                     <StackPanel>
                         <TextBlock Text="&#xBCF4;&#xC815; &#xD328;&#xB110;" Style="{StaticResource SectionTitle}"/>
 
@@ -377,7 +400,7 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Background="#35312D" BorderBrush="#5A544D" BorderThickness="1" Padding="8,6" Margin="0,0,6,6">
+                                            <Border Background="{StaticResource ControlBg}" BorderBrush="{StaticResource ControlStroke}" BorderThickness="1" Padding="8,6" Margin="0,0,6,6">
                                                 <TextBlock Text="{Binding ShortName}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
                                             </Border>
                                         </DataTemplate>
@@ -386,11 +409,51 @@
                             </StackPanel>
                         </Border>
 
+                        <Button Content="&#xBAA8;&#xB450; &#xB2EB;&#xAE30;"
+                                Height="34"
+                                Margin="0,0,0,10"
+                                HorizontalContentAlignment="Center"
+                                Click="CollapseAllSectionsButton_Click"/>
+
                         <ItemsControl ItemsSource="{Binding RetouchSections}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Expander Header="{Binding Title}" IsExpanded="{Binding IsExpanded}" Margin="0,0,0,10" Foreground="{StaticResource TextMain}" Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}">
-                                        <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1,0,1,1" Padding="12">
+                                    <Border AllowDrop="True"
+                                            PreviewDragOver="RetouchSection_PreviewDragOver"
+                                            PreviewDrop="RetouchSection_PreviewDrop"
+                                            Padding="{Binding SectionPadding}"
+                                            Margin="0,0,0,10"
+                                            Background="Transparent">
+                                        <Expander IsExpanded="{Binding IsExpanded}"
+                                                  Foreground="{StaticResource TextMain}"
+                                                  Background="{StaticResource PanelSoft}"
+                                                  BorderBrush="{StaticResource Stroke}">
+                                            <Expander.Header>
+                                            <Grid Width="276">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
+                                                <Border Grid.Column="1"
+                                                        Width="46"
+                                                        Height="34"
+                                                        Background="Transparent"
+                                                        Cursor="SizeAll"
+                                                        ToolTip="목록 순서 변경"
+                                                        PreviewMouseLeftButtonDown="SectionDragHandle_PreviewMouseLeftButtonDown"
+                                                        PreviewMouseLeftButtonUp="SectionDragHandle_PreviewMouseLeftButtonUp"
+                                                        PreviewMouseMove="SectionDragHandle_PreviewMouseMove">
+                                                    <TextBlock Text="☰"
+                                                               Foreground="{StaticResource TextSub}"
+                                                               FontSize="17"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                            </Grid>
+                                            </Expander.Header>
+                                            <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1,0,1,1" Padding="12">
                                             <ItemsControl ItemsSource="{Binding Controls}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
@@ -411,6 +474,49 @@
                                                                     <TextBlock Text="{Binding ColorValue}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center"/>
                                                                 </StackPanel>
                                                             </Grid>
+                                                            <Grid x:Name="ActionEditor" Visibility="Collapsed" Margin="0,0,0,14">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                                <Button Grid.Column="1" Content="{Binding ActionText}" Height="30" Padding="12,0" Margin="10,0,0,0"/>
+                                                            </Grid>
+                                                            <StackPanel x:Name="BackgroundLibraryEditor" Visibility="Collapsed" Margin="0,0,0,16">
+                                                                <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextSub}" FontSize="12" Margin="0,0,0,8"/>
+                                                                <ScrollViewer HorizontalScrollBarVisibility="Hidden"
+                                                                              VerticalScrollBarVisibility="Disabled"
+                                                                              CanContentScroll="True"
+                                                                              PanningMode="HorizontalOnly">
+                                                                    <ItemsControl ItemsSource="{Binding BackgroundOptions}">
+                                                                        <ItemsControl.ItemsPanel>
+                                                                            <ItemsPanelTemplate>
+                                                                                <StackPanel Orientation="Horizontal"/>
+                                                                            </ItemsPanelTemplate>
+                                                                        </ItemsControl.ItemsPanel>
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <Border Width="86"
+                                                                                        Background="{StaticResource ControlBg}"
+                                                                                        BorderBrush="{StaticResource ControlStroke}"
+                                                                                        BorderThickness="1"
+                                                                                        Margin="0,0,8,0"
+                                                                                        Padding="4">
+                                                                                    <StackPanel>
+                                                                                        <Border Height="48" Background="{Binding PreviewColor}" BorderBrush="{StaticResource ControlStrokeSoft}" BorderThickness="1"/>
+                                                                                        <TextBlock Text="{Binding Name}"
+                                                                                                   Foreground="{StaticResource TextSub}"
+                                                                                                   FontSize="11"
+                                                                                                   TextTrimming="CharacterEllipsis"
+                                                                                                   HorizontalAlignment="Center"
+                                                                                                   Margin="0,5,0,0"/>
+                                                                                    </StackPanel>
+                                                                                </Border>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </ScrollViewer>
+                                                            </StackPanel>
                                                         </StackPanel>
                                                         <DataTemplate.Triggers>
                                                             <DataTrigger Binding="{Binding IsColorPicker}" Value="True">
@@ -418,12 +524,23 @@
                                                                 <Setter TargetName="ValueSlider" Property="Visibility" Value="Collapsed"/>
                                                                 <Setter TargetName="ColorEditor" Property="Visibility" Value="Visible"/>
                                                             </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsActionButton}" Value="True">
+                                                                <Setter TargetName="SliderEditor" Property="Visibility" Value="Collapsed"/>
+                                                                <Setter TargetName="ValueSlider" Property="Visibility" Value="Collapsed"/>
+                                                                <Setter TargetName="ActionEditor" Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsBackgroundLibrary}" Value="True">
+                                                                <Setter TargetName="SliderEditor" Property="Visibility" Value="Collapsed"/>
+                                                                <Setter TargetName="ValueSlider" Property="Visibility" Value="Collapsed"/>
+                                                                <Setter TargetName="BackgroundLibraryEditor" Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
                                                         </DataTemplate.Triggers>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
-                                        </Border>
-                                    </Expander>
+                                            </Border>
+                                        </Expander>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
