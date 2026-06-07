@@ -237,7 +237,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Button Content="&#xC0AC;&#xC9C4; &#xBD88;&#xB7EC;&#xC624;&#xAE30;"/>
+                    <Button Content="&#xC0AC;&#xC9C4; &#xBD88;&#xB7EC;&#xC624;&#xAE30;" Click="LoadPhotosButton_Click"/>
                     <Button Content="&#xC800;&#xC7A5;"/>
                     <Button x:Name="CompareButton" Content="&#xC6D0;&#xBCF8; &#xBE44;&#xAD50;" PreviewMouseDown="CompareButton_PreviewMouseDown" PreviewMouseUp="CompareButton_PreviewMouseUp" MouseLeave="CompareButton_MouseLeave"/>
                     <Button Content="&#xCD08;&#xAE30;&#xD654;"/>
@@ -261,28 +261,74 @@
                     Background="{StaticResource PanelBg}"
                     BorderBrush="{StaticResource Stroke}"
                     BorderThickness="0,0,1,0"
-                    Padding="16">
+                    Padding="16"
+                    AllowDrop="True"
+                    DragOver="PhotoDropTarget_DragOver"
+                    Drop="PhotoDropTarget_Drop">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top">
                         <TextBlock Text="&#xD504;&#xB85C;&#xC81D;&#xD2B8;" Style="{StaticResource SectionTitle}"/>
                         <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="12" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="Portrait Session"/>
-                                <TextBlock Text="0 photos selected" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding PhotoCountText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
                             </StackPanel>
                         </Border>
                         <TextBlock Text="&#xC791;&#xC5C5; &#xC0AC;&#xC9C4;" Style="{StaticResource SectionTitle}"/>
                     </StackPanel>
 
+                    <Button DockPanel.Dock="Bottom"
+                            Content="&#xC124;&#xC815;"
+                            Height="36"
+                            Margin="0,14,0,0"
+                            HorizontalContentAlignment="Center"
+                            Click="SettingsButton_Click"/>
+
                     <Border Background="#1C1E20" BorderBrush="{StaticResource Stroke}" BorderThickness="1">
                         <Grid>
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="180">
-                                <Border Height="96" BorderBrush="{StaticResource ControlStroke}" BorderThickness="1" Background="#24272A" Margin="0,0,0,12">
-                                    <TextBlock Text="+" FontSize="32" Foreground="{StaticResource TextSub}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="&#xC0AC;&#xC9C4; &#xBAA9;&#xB85D;" TextAlignment="Center"/>
-                                <TextBlock Text="JPG, PNG, TIFF" Style="{StaticResource MutedText}" TextAlignment="Center" Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <Grid Visibility="{Binding EmptyPhotoListVisibility}">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="180">
+                                    <Border Height="96"
+                                            BorderBrush="{StaticResource ControlStroke}"
+                                            BorderThickness="1"
+                                            Background="#24272A"
+                                            Margin="0,0,0,12"
+                                            Cursor="Hand"
+                                            MouseLeftButtonUp="LoadPhotosButton_Click">
+                                        <TextBlock Text="+" FontSize="32" Foreground="{StaticResource TextSub}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="&#xC0AC;&#xC9C4; &#xBAA9;&#xB85D;" TextAlignment="Center"/>
+                                    <TextBlock Text="JPG, PNG, TIFF" Style="{StaticResource MutedText}" TextAlignment="Center" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding PhotoListVisibility}">
+                                <ItemsControl ItemsSource="{Binding Photos}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource ControlBg}"
+                                                    BorderBrush="{StaticResource ControlStroke}"
+                                                    BorderThickness="1"
+                                                    Padding="8"
+                                                    Margin="8,8,8,0"
+                                                    MouseLeftButtonUp="PhotoItem_MouseLeftButtonUp">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="54"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Width="46" Height="46" Background="#101112" BorderBrush="{StaticResource ControlStrokeSoft}" BorderThickness="1">
+                                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding DisplayInfo}" Style="{StaticResource MutedText}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                         </Grid>
                     </Border>
                 </DockPanel>
@@ -317,31 +363,54 @@
                             </Grid>
                         </Border>
 
-                        <Grid Grid.Row="1">
-                            <Border Width="560" Height="420"
+                        <Grid Grid.Row="1"
+                              AllowDrop="True"
+                              DragOver="PhotoDropTarget_DragOver"
+                              Drop="PhotoDropTarget_Drop"
+                              PreviewMouseLeftButtonDown="PreviewFrame_PreviewMouseLeftButtonDown"
+                              PreviewMouseLeftButtonUp="PreviewFrame_PreviewMouseLeftButtonUp"
+                              PreviewMouseMove="PreviewFrame_PreviewMouseMove"
+                              PreviewMouseWheel="PreviewFrame_PreviewMouseWheel">
+                            <Border Margin="2"
                                     Background="#25282B"
                                     BorderBrush="#485058"
                                     BorderThickness="1"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center">
-                                <Grid>
+                                    ClipToBounds="True"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch">
+                                <Grid ClipToBounds="True">
                                     <Grid x:Name="EditedMockPreview">
-                                        <Rectangle Fill="#2D3033" Margin="28"/>
-                                        <Ellipse Width="128" Height="128" Fill="#68737B" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,74,0,0"/>
-                                        <Rectangle Width="260" Height="140" Fill="#5A6268" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,68"/>
-                                        <Border Background="#AA171A1C" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="10,5" Margin="12">
-                                            <TextBlock Text="&#xBCF4;&#xC815;&#xBCF8;" FontWeight="SemiBold"/>
-                                        </Border>
+                                        <Image x:Name="EditedPhotoImage"
+                                               Source="{Binding SelectedPhoto.Image}"
+                                               Stretch="Uniform"
+                                               RenderTransformOrigin="0.5,0.5"
+                                               Visibility="{Binding PhotoPreviewVisibility}">
+                                            <Image.RenderTransform>
+                                                <TransformGroup>
+                                                    <ScaleTransform ScaleX="{Binding ZoomScale}" ScaleY="{Binding ZoomScale}"/>
+                                                    <TranslateTransform X="{Binding PanX}" Y="{Binding PanY}"/>
+                                                </TransformGroup>
+                                            </Image.RenderTransform>
+                                        </Image>
+                                        <Rectangle Fill="#2D3033" Margin="28" Visibility="{Binding MockPreviewVisibility}"/>
                                     </Grid>
                                     <Grid x:Name="OriginalMockPreview" Visibility="Collapsed">
-                                        <Rectangle Fill="#272A2D" Margin="28"/>
-                                        <Ellipse Width="128" Height="128" Fill="#596169" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,74,0,0"/>
-                                        <Rectangle Width="260" Height="140" Fill="#4D555B" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,68"/>
-                                        <Border Background="#AA171A1C" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="10,5" Margin="12">
-                                            <TextBlock Text="&#xC6D0;&#xBCF8;" FontWeight="SemiBold"/>
-                                        </Border>
+                                        <Image x:Name="OriginalPhotoImage"
+                                               Source="{Binding SelectedPhoto.Image}"
+                                               Stretch="Uniform"
+                                               RenderTransformOrigin="0.5,0.5"
+                                               Visibility="{Binding PhotoPreviewVisibility}">
+                                            <Image.RenderTransform>
+                                                <TransformGroup>
+                                                    <ScaleTransform ScaleX="{Binding ZoomScale}" ScaleY="{Binding ZoomScale}"/>
+                                                    <TranslateTransform X="{Binding PanX}" Y="{Binding PanY}"/>
+                                                </TransformGroup>
+                                            </Image.RenderTransform>
+                                        </Image>
+                                        <Rectangle Fill="#272A2D" Margin="28" Visibility="{Binding MockPreviewVisibility}"/>
                                     </Grid>
                                     <TextBlock Text="Space &#xB204;&#xB974;&#xB294; &#xB3D9;&#xC548; &#xC6D0;&#xBCF8; &#xBCF4;&#xAE30;"
+                                               Visibility="{Binding MockPreviewVisibility}"
                                                Foreground="#D4DADE"
                                                FontSize="17"
                                                FontWeight="SemiBold"
@@ -362,7 +431,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                             <TextBlock Text="Zoom" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                            <Slider Width="160" Minimum="25" Maximum="200" Value="100" Margin="0"/>
+                            <Slider Width="160" Minimum="25" Maximum="200" Value="{Binding ZoomPercent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -372,7 +441,7 @@
                     Background="{StaticResource PanelBg}"
                     BorderBrush="{StaticResource Stroke}"
                     BorderThickness="1,0,0,0"
-                    Padding="16">
+                    Padding="16,16,2,16">
                 <ScrollViewer VerticalScrollBarVisibility="Visible">
                     <StackPanel>
                         <TextBlock Text="&#xBCF4;&#xC815; &#xD328;&#xB110;" Style="{StaticResource SectionTitle}"/>
@@ -409,12 +478,6 @@
                             </StackPanel>
                         </Border>
 
-                        <Button Content="&#xBAA8;&#xB450; &#xB2EB;&#xAE30;"
-                                Height="34"
-                                Margin="0,0,0,10"
-                                HorizontalContentAlignment="Center"
-                                Click="CollapseAllSectionsButton_Click"/>
-
                         <ItemsControl ItemsSource="{Binding RetouchSections}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -425,6 +488,7 @@
                                             Margin="0,0,0,10"
                                             Background="Transparent">
                                         <Expander IsExpanded="{Binding IsExpanded}"
+                                                  Expanded="RetouchSection_Expanded"
                                                   Foreground="{StaticResource TextMain}"
                                                   Background="{StaticResource PanelSoft}"
                                                   BorderBrush="{StaticResource Stroke}">
@@ -482,6 +546,40 @@
                                                                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
                                                                 <Button Grid.Column="1" Content="{Binding ActionText}" Height="30" Padding="12,0" Margin="10,0,0,0"/>
                                                             </Grid>
+                                                            <StackPanel x:Name="CurveEditor" Visibility="Collapsed" Margin="0,0,0,16">
+                                                                <TextBlock Text="{Binding Label}" Margin="0,0,0,8"/>
+                                                                <UniformGrid Columns="4" Margin="0,0,0,10">
+                                                                    <Button Content="전체" Height="30" Margin="0,0,6,0" FontWeight="SemiBold"/>
+                                                                    <Button Content="R" Height="30" Margin="0,0,6,0"/>
+                                                                    <Button Content="G" Height="30" Margin="0,0,6,0"/>
+                                                                    <Button Content="B" Height="30" Margin="0"/>
+                                                                </UniformGrid>
+                                                                <Border Height="188"
+                                                                        Background="#101112"
+                                                                        BorderBrush="{StaticResource ControlStroke}"
+                                                                        BorderThickness="1">
+                                                                    <Viewbox Stretch="Uniform">
+                                                                        <Canvas Width="180" Height="180" Background="#151719">
+                                                                            <Line X1="0" Y1="36" X2="180" Y2="36" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="0" Y1="72" X2="180" Y2="72" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="0" Y1="108" X2="180" Y2="108" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="0" Y1="144" X2="180" Y2="144" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="36" Y1="0" X2="36" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="72" Y1="0" X2="72" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="108" Y1="0" X2="108" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="144" Y1="0" X2="144" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="0" Y1="180" X2="180" Y2="0" Stroke="#56616A" StrokeThickness="1.1" StrokeDashArray="4 4"/>
+                                                                            <Path Stroke="#D4DADE" StrokeThickness="2" Fill="Transparent" Data="M 0 180 C 42 159, 61 119, 89 93 C 118 66, 141 35, 180 0"/>
+                                                                            <Ellipse Width="7" Height="7" Fill="#D4DADE" Stroke="#101112" StrokeThickness="1" Canvas.Left="86" Canvas.Top="90"/>
+                                                                            <Ellipse Width="7" Height="7" Fill="#D4DADE" Stroke="#101112" StrokeThickness="1" Canvas.Left="138" Canvas.Top="32"/>
+                                                                        </Canvas>
+                                                                    </Viewbox>
+                                                                </Border>
+                                                                <Grid Margin="0,8,0,0">
+                                                                    <TextBlock Text="입력" Foreground="{StaticResource TextSub}" FontSize="11"/>
+                                                                    <TextBlock Text="출력" Foreground="{StaticResource TextSub}" FontSize="11" HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                            </StackPanel>
                                                             <StackPanel x:Name="BackgroundLibraryEditor" Visibility="Collapsed" Margin="0,0,0,16">
                                                                 <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextSub}" FontSize="12" Margin="0,0,0,8"/>
                                                                 <ScrollViewer HorizontalScrollBarVisibility="Hidden"
@@ -533,6 +631,11 @@
                                                                 <Setter TargetName="SliderEditor" Property="Visibility" Value="Collapsed"/>
                                                                 <Setter TargetName="ValueSlider" Property="Visibility" Value="Collapsed"/>
                                                                 <Setter TargetName="BackgroundLibraryEditor" Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsCurveEditor}" Value="True">
+                                                                <Setter TargetName="SliderEditor" Property="Visibility" Value="Collapsed"/>
+                                                                <Setter TargetName="ValueSlider" Property="Visibility" Value="Collapsed"/>
+                                                                <Setter TargetName="CurveEditor" Property="Visibility" Value="Visible"/>
                                                             </DataTrigger>
                                                         </DataTemplate.Triggers>
                                                     </DataTemplate>
