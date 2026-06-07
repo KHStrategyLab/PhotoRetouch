@@ -41,6 +41,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private System.Windows.Point _previewZoomOrigin = new(0.5, 0.5);
     private bool _isPreviewProcessing;
     private bool _showPreviewProcessingOverlay;
+    private bool _isShowingOriginalPreview;
     private bool _pendingPreviewAdjustment;
     private bool _pendingPreviewAdjustmentShowsOverlay;
     private RetouchControl? _draggingCurveControl;
@@ -138,6 +139,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility PhotoListVisibility => Photos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility PhotoPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility MockPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    public string PreviewTitleText => _isShowingOriginalPreview ? "Original" : "Preview";
     public bool IsSplitPreview => SelectedPhotos.Count > 1;
     public int PreviewRows => SelectedPhotos.Count switch
     {
@@ -451,6 +453,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        if (!IsTextEditingElementFocused() && TryNavigatePhotoListByKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (ShortcutSettings.Matches(e, ShortcutSettings.RenamePhotoShortcut))
         {
             RenameSelectedPhoto();
@@ -493,6 +501,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private static bool IsTextEditingElementFocused()
     {
         return Keyboard.FocusedElement is System.Windows.Controls.TextBox;
+    }
+
+    private bool TryNavigatePhotoListByKey(System.Windows.Input.KeyEventArgs e)
+    {
+        if (IsPreviewProcessing || Photos.Count == 0)
+        {
+            return false;
+        }
+
+        Key key = ShortcutSettings.NormalizeKey(e.Key, e.SystemKey);
+        int direction = key switch
+        {
+            Key.Up or Key.Left => -1,
+            Key.Down or Key.Right => 1,
+            _ => 0
+        };
+
+        if (direction == 0)
+        {
+            return false;
+        }
+
+        NavigatePhotoList(direction);
+        return true;
     }
 
     private bool TryNudgeSelectedCurvePoint(System.Windows.Input.KeyEventArgs e)
@@ -1184,8 +1216,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if ((sender as FrameworkElement)?.DataContext is PhotoItem photo)
         {
             ModifierKeys modifiers = Keyboard.Modifiers;
-            bool isAddSelectionPressed = ShortcutSettings.HasModifiers(modifiers, ShortcutSettings.AddSelectionModifiers);
-            bool isRangeSelectionPressed = ShortcutSettings.HasModifiers(modifiers, ShortcutSettings.RangeSelectionModifiers);
+            bool isSpacePressed = IsSpacePressed();
+            bool isAddSelectionPressed = ShortcutSettings.MatchesMouseGesture(modifiers, isSpacePressed, ShortcutSettings.AddSelectionGesture);
+            bool isRangeSelectionPressed = ShortcutSettings.MatchesMouseGesture(modifiers, isSpacePressed, ShortcutSettings.RangeSelectionGesture);
 
             if (isRangeSelectionPressed && _selectionAnchor is not null)
             {
@@ -1751,6 +1784,42 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void SelectOnly(PhotoItem? photo)
     {
         SetSelectedPhotos(photo is null ? Array.Empty<PhotoItem>() : new[] { photo }, photo);
+    }
+
+    private void PreviousPhotoButton_Click(object sender, RoutedEventArgs e)
+    {
+        NavigatePhotoList(-1);
+    }
+
+    private void NextPhotoButton_Click(object sender, RoutedEventArgs e)
+    {
+        NavigatePhotoList(1);
+    }
+
+    private void NavigatePhotoList(int direction)
+    {
+        if (IsPreviewProcessing || Photos.Count == 0 || direction == 0)
+        {
+            return;
+        }
+
+        int currentIndex = SelectedPhoto is not null ? Photos.IndexOf(SelectedPhoto) : -1;
+        if (currentIndex < 0)
+        {
+            SelectOnly(Photos.FirstOrDefault());
+            _selectionAnchor = SelectedPhoto;
+            return;
+        }
+
+        int nextIndex = currentIndex + Math.Sign(direction);
+        if (nextIndex < 0 || nextIndex >= Photos.Count)
+        {
+            return;
+        }
+
+        PhotoItem nextPhoto = Photos[nextIndex];
+        SelectOnly(nextPhoto);
+        _selectionAnchor = nextPhoto;
     }
 
     private void TogglePhotoSelection(PhotoItem photo)
@@ -2420,7 +2489,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private static bool IsControlShiftPressed()
     {
-        return ShortcutSettings.HasModifiers(Keyboard.Modifiers, ShortcutSettings.WholeSplitPreviewModifiers);
+        return ShortcutSettings.MatchesMouseGesture(
+            Keyboard.Modifiers,
+            IsSpacePressed(),
+            ShortcutSettings.WholeSplitPreviewGesture);
+    }
+
+    private static bool IsSpacePressed()
+    {
+        return Keyboard.IsKeyDown(Key.Space);
     }
 
     private static PhotoItem? GetPreviewPhotoFromEvent(DependencyObject? source, out FrameworkElement? previewElement)
@@ -2525,6 +2602,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         double usableSafetyPixels = Math.Min(safetyPixels, Math.Max(0, (scaledSize - viewportSize) / 2));
         double minPan = viewportSize + usableSafetyPixels - scaledEnd;
         double maxPan = -scaledStart - usableSafetyPixels;
+        if (minPan > maxPan)
+        {
+            return 0;
+        }
+
         return Math.Clamp(pan, minPan, maxPan);
     }
 
@@ -2807,12 +2889,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void ShowOriginalPreview()
     {
+        if (!_isShowingOriginalPreview)
+        {
+            _isShowingOriginalPreview = true;
+            OnPropertyChanged(nameof(PreviewTitleText));
+        }
+
         OriginalMockPreview.Visibility = Visibility.Visible;
         EditedMockPreview.Visibility = Visibility.Collapsed;
     }
 
     private void ShowEditedPreview()
     {
+        if (_isShowingOriginalPreview)
+        {
+            _isShowingOriginalPreview = false;
+            OnPropertyChanged(nameof(PreviewTitleText));
+        }
+
         OriginalMockPreview.Visibility = Visibility.Collapsed;
         EditedMockPreview.Visibility = Visibility.Visible;
     }

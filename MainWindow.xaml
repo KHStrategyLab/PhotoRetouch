@@ -382,16 +382,9 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <Border Background="#181A1C" BorderBrush="#303438" BorderThickness="0,0,0,1">
-                            <Grid Margin="14,0">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="&#xBBF8;&#xB9AC;&#xBCF4;&#xAE30;" FontWeight="SemiBold"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-
                         <Grid x:Name="PreviewSurface"
-                              Grid.Row="1"
+                              Grid.Row="0"
+                              Grid.RowSpan="2"
                               AllowDrop="True"
                               DragOver="PhotoDropTarget_DragOver"
                               Drop="PhotoDropTarget_Drop"
@@ -495,14 +488,31 @@
                                 </Grid>
                             </Border>
                         </Grid>
+
+                        <Border Grid.Row="0"
+                                Background="#33000000"
+                                BorderBrush="#55000000"
+                                BorderThickness="0,0,0,1"
+                                IsHitTestVisible="False">
+                            <Grid Margin="14,0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Background="#33000000"
+                                            Padding="10,3">
+                                        <TextBlock Text="{Binding PreviewTitleText}"
+                                                   FontSize="24"
+                                                   FontWeight="SemiBold"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </Border>
 
                 <Border Grid.Row="1" Background="#1D2022" BorderBrush="{StaticResource Stroke}" BorderThickness="0,1,0,0" Padding="18,0">
                     <Grid>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Content="&#xC774;&#xC804;" Width="74"/>
-                            <Button Content="&#xB2E4;&#xC74C;" Width="74"/>
+                            <Button Content="&#xC774;&#xC804;" Width="74" Click="PreviousPhotoButton_Click"/>
+                            <Button Content="&#xB2E4;&#xC74C;" Width="74" Click="NextPhotoButton_Click"/>
                             <TextBlock Text="Frame 0 / 0" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">

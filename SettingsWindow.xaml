@@ -8,7 +8,8 @@
         MinHeight="480"
         Background="#171819"
         WindowStartupLocation="CenterOwner"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp">
     <Window.Resources>
         <SolidColorBrush x:Key="PanelSoft" Color="#2D3033"/>
         <SolidColorBrush x:Key="SettingsBg" Color="#171819"/>
@@ -399,7 +400,7 @@
                                 <ColumnDefinition Width="190"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="사진 선택 추가" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="AddSelectionModifierComboBox" Grid.Column="1" SelectionChanged="ModifierComboBox_SelectionChanged"/>
+                            <Button x:Name="AddSelectionModifierButton" Grid.Column="1" HorizontalContentAlignment="Center" Click="ModifierButton_Click"/>
                         </Grid>
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
@@ -407,7 +408,7 @@
                                 <ColumnDefinition Width="190"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="사진 범위 선택" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="RangeSelectionModifierComboBox" Grid.Column="1" SelectionChanged="ModifierComboBox_SelectionChanged"/>
+                            <Button x:Name="RangeSelectionModifierButton" Grid.Column="1" HorizontalContentAlignment="Center" Click="ModifierButton_Click"/>
                         </Grid>
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
@@ -415,7 +416,7 @@
                                 <ColumnDefinition Width="190"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="전체 분할 화면 조작" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="WholeSplitModifierComboBox" Grid.Column="1" SelectionChanged="ModifierComboBox_SelectionChanged"/>
+                            <Button x:Name="WholeSplitModifierButton" Grid.Column="1" HorizontalContentAlignment="Center" Click="ModifierButton_Click"/>
                         </Grid>
 
                         <Button Content="기본값으로 되돌리기" Width="150" HorizontalAlignment="Left" Margin="0,8,0,0" Click="ResetShortcutsButton_Click"/>

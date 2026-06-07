@@ -10,7 +10,9 @@ public partial class SettingsWindow : Window
 {
     private System.Windows.Controls.Button? _capturingShortcutButton;
     private ShortcutKeyTarget? _capturingShortcutTarget;
-    private bool _isLoadingShortcuts;
+    private System.Windows.Controls.Button? _capturingModifierButton;
+    private ModifierKeyTarget? _capturingModifierTarget;
+    private MouseModifierGesture? _pendingModifierCapture;
 
     public SettingsWindow()
     {
@@ -44,31 +46,6 @@ public partial class SettingsWindow : Window
 
     private void InitializeShortcutControls()
     {
-        _isLoadingShortcuts = true;
-        ModifierOption[] modifierOptions =
-        {
-            new("Ctrl", ModifierKeys.Control),
-            new("Shift", ModifierKeys.Shift),
-            new("Alt", ModifierKeys.Alt),
-            new("Ctrl+Shift", ModifierKeys.Control | ModifierKeys.Shift),
-            new("Ctrl+Alt", ModifierKeys.Control | ModifierKeys.Alt),
-            new("Alt+Shift", ModifierKeys.Alt | ModifierKeys.Shift),
-            new("Ctrl+Alt+Shift", ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift)
-        };
-
-        AddSelectionModifierComboBox.ItemsSource = modifierOptions;
-        RangeSelectionModifierComboBox.ItemsSource = modifierOptions;
-        WholeSplitModifierComboBox.ItemsSource = modifierOptions;
-
-        AddSelectionModifierComboBox.SelectedValuePath = nameof(ModifierOption.Modifiers);
-        RangeSelectionModifierComboBox.SelectedValuePath = nameof(ModifierOption.Modifiers);
-        WholeSplitModifierComboBox.SelectedValuePath = nameof(ModifierOption.Modifiers);
-
-        AddSelectionModifierComboBox.SelectedValue = ShortcutSettings.AddSelectionModifiers;
-        RangeSelectionModifierComboBox.SelectedValue = ShortcutSettings.RangeSelectionModifiers;
-        WholeSplitModifierComboBox.SelectedValue = ShortcutSettings.WholeSplitPreviewModifiers;
-
-        _isLoadingShortcuts = false;
         UpdateShortcutButtonText();
     }
 
@@ -171,11 +148,38 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void ModifierButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender == AddSelectionModifierButton)
+        {
+            BeginModifierCapture(AddSelectionModifierButton, ModifierKeyTarget.AddSelection);
+        }
+        else if (sender == RangeSelectionModifierButton)
+        {
+            BeginModifierCapture(RangeSelectionModifierButton, ModifierKeyTarget.RangeSelection);
+        }
+        else if (sender == WholeSplitModifierButton)
+        {
+            BeginModifierCapture(WholeSplitModifierButton, ModifierKeyTarget.WholeSplitPreview);
+        }
+    }
+
     private void BeginShortcutCapture(System.Windows.Controls.Button button, ShortcutKeyTarget target)
     {
+        CancelModifierCapture();
         _capturingShortcutButton = button;
         _capturingShortcutTarget = target;
         button.Content = "키 입력...";
+        button.Focus();
+    }
+
+    private void BeginModifierCapture(System.Windows.Controls.Button button, ModifierKeyTarget target)
+    {
+        CancelShortcutCapture();
+        _capturingModifierButton = button;
+        _capturingModifierTarget = target;
+        _pendingModifierCapture = null;
+        button.Content = "보조키 입력...";
         button.Focus();
     }
 
@@ -183,7 +187,30 @@ public partial class SettingsWindow : Window
     {
         if (e.Key == Key.Escape)
         {
+            if (_capturingShortcutButton is not null || _capturingModifierButton is not null)
+            {
+                CancelShortcutCapture();
+                CancelModifierCapture();
+                UpdateShortcutButtonText();
+                e.Handled = true;
+                return;
+            }
+
             Close();
+            e.Handled = true;
+            return;
+        }
+
+        if (_capturingModifierButton is not null && _capturingModifierTarget is not null)
+        {
+            Key modifierKey = ShortcutSettings.NormalizeKey(e.Key, e.SystemKey);
+            MouseModifierGesture? gesture = GetModifierCaptureValue(modifierKey);
+            if (gesture is not null)
+            {
+                _pendingModifierCapture = gesture;
+                _capturingModifierButton.Content = ShortcutSettings.FormatMouseGesture(gesture);
+            }
+
             e.Handled = true;
             return;
         }
@@ -221,41 +248,74 @@ public partial class SettingsWindow : Window
         }
 
         ShortcutSettings.Save();
-        _capturingShortcutButton = null;
-        _capturingShortcutTarget = null;
+        CancelShortcutCapture();
         UpdateShortcutButtonText();
         e.Handled = true;
     }
 
-    private void ModifierComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Window_PreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (_isLoadingShortcuts)
+        if (_capturingModifierButton is null ||
+            _capturingModifierTarget is null ||
+            _pendingModifierCapture is null)
         {
             return;
         }
 
-        if (AddSelectionModifierComboBox.SelectedValue is ModifierKeys addSelectionModifiers)
+        if (_capturingModifierTarget == ModifierKeyTarget.AddSelection)
         {
-            ShortcutSettings.AddSelectionModifiers = addSelectionModifiers;
+            ShortcutSettings.AddSelectionGesture = _pendingModifierCapture;
         }
-
-        if (RangeSelectionModifierComboBox.SelectedValue is ModifierKeys rangeSelectionModifiers)
+        else if (_capturingModifierTarget == ModifierKeyTarget.RangeSelection)
         {
-            ShortcutSettings.RangeSelectionModifiers = rangeSelectionModifiers;
+            ShortcutSettings.RangeSelectionGesture = _pendingModifierCapture;
         }
-
-        if (WholeSplitModifierComboBox.SelectedValue is ModifierKeys wholeSplitModifiers)
+        else
         {
-            ShortcutSettings.WholeSplitPreviewModifiers = wholeSplitModifiers;
+            ShortcutSettings.WholeSplitPreviewGesture = _pendingModifierCapture;
         }
 
         ShortcutSettings.Save();
+        CancelModifierCapture();
+        UpdateShortcutButtonText();
+        e.Handled = true;
     }
 
     private void ResetShortcutsButton_Click(object sender, RoutedEventArgs e)
     {
         ShortcutSettings.ResetToDefaults();
         InitializeShortcutControls();
+    }
+
+    private void CancelShortcutCapture()
+    {
+        _capturingShortcutButton = null;
+        _capturingShortcutTarget = null;
+    }
+
+    private void CancelModifierCapture()
+    {
+        _capturingModifierButton = null;
+        _capturingModifierTarget = null;
+        _pendingModifierCapture = null;
+    }
+
+    private static MouseModifierGesture? GetModifierCaptureValue(Key key)
+    {
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        modifiers |= key switch
+        {
+            Key.LeftCtrl or Key.RightCtrl => ModifierKeys.Control,
+            Key.LeftShift or Key.RightShift => ModifierKeys.Shift,
+            Key.LeftAlt or Key.RightAlt => ModifierKeys.Alt,
+            _ => ModifierKeys.None
+        };
+
+        bool usesSpace = key == Key.Space || Keyboard.IsKeyDown(Key.Space);
+        ModifierKeys cleanModifiers = modifiers & (ModifierKeys.Control | ModifierKeys.Shift | ModifierKeys.Alt);
+        return cleanModifiers == ModifierKeys.None && !usesSpace
+            ? null
+            : new MouseModifierGesture(cleanModifiers, usesSpace);
     }
 
     private void PreviewSizeMode_Changed(object sender, RoutedEventArgs e)
@@ -346,6 +406,9 @@ public partial class SettingsWindow : Window
         ToggleSectionOrderEditShortcutButton.Content = ShortcutSettings.ToggleSectionOrderEditShortcut.DisplayText;
         UndoShortcutButton.Content = ShortcutSettings.UndoShortcut.DisplayText;
         RedoShortcutButton.Content = ShortcutSettings.RedoShortcut.DisplayText;
+        AddSelectionModifierButton.Content = ShortcutSettings.FormatMouseGesture(ShortcutSettings.AddSelectionGesture);
+        RangeSelectionModifierButton.Content = ShortcutSettings.FormatMouseGesture(ShortcutSettings.RangeSelectionGesture);
+        WholeSplitModifierButton.Content = ShortcutSettings.FormatMouseGesture(ShortcutSettings.WholeSplitPreviewGesture);
     }
 
     private void UpdatePreviewSizeControls()
@@ -571,9 +634,11 @@ public enum ShortcutKeyTarget
     Redo
 }
 
-public sealed record ModifierOption(string DisplayText, ModifierKeys Modifiers)
+public enum ModifierKeyTarget
 {
-    public override string ToString() => DisplayText;
+    AddSelection,
+    RangeSelection,
+    WholeSplitPreview
 }
 
 public sealed record ShortcutKey(ModifierKeys Modifiers, Key Key)
@@ -593,6 +658,8 @@ public sealed record ShortcutKey(ModifierKeys Modifiers, Key Key)
     }
 }
 
+public sealed record MouseModifierGesture(ModifierKeys Modifiers, bool UsesSpace);
+
 public static class ShortcutSettings
 {
     private static readonly string SettingsDirectory = Path.Combine(
@@ -610,9 +677,9 @@ public static class ShortcutSettings
     public static ShortcutKey ToggleSectionOrderEditShortcut { get; set; } = new(ModifierKeys.Control, Key.M);
     public static ShortcutKey UndoShortcut { get; set; } = new(ModifierKeys.Control, Key.Z);
     public static ShortcutKey RedoShortcut { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, Key.Z);
-    public static ModifierKeys AddSelectionModifiers { get; set; } = ModifierKeys.Control;
-    public static ModifierKeys RangeSelectionModifiers { get; set; } = ModifierKeys.Shift;
-    public static ModifierKeys WholeSplitPreviewModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Shift;
+    public static MouseModifierGesture AddSelectionGesture { get; set; } = new(ModifierKeys.Control, false);
+    public static MouseModifierGesture RangeSelectionGesture { get; set; } = new(ModifierKeys.Shift, false);
+    public static MouseModifierGesture WholeSplitPreviewGesture { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, false);
 
     public static bool Matches(System.Windows.Input.KeyEventArgs e, ShortcutKey shortcut)
     {
@@ -624,6 +691,16 @@ public static class ShortcutSettings
     {
         return requiredModifiers != ModifierKeys.None &&
                (activeModifiers & requiredModifiers) == requiredModifiers;
+    }
+
+    public static bool MatchesMouseGesture(ModifierKeys activeModifiers, bool isSpacePressed, MouseModifierGesture gesture)
+    {
+        bool modifiersMatch = gesture.Modifiers == ModifierKeys.None ||
+                              (activeModifiers & gesture.Modifiers) == gesture.Modifiers;
+        bool spaceMatches = !gesture.UsesSpace || isSpacePressed;
+        return (gesture.Modifiers != ModifierKeys.None || gesture.UsesSpace) &&
+               modifiersMatch &&
+               spaceMatches;
     }
 
     public static string FormatModifiers(ModifierKeys modifiers)
@@ -647,6 +724,23 @@ public static class ShortcutSettings
         return string.Join("+", parts);
     }
 
+    public static string FormatMouseGesture(MouseModifierGesture gesture)
+    {
+        List<string> parts = new();
+        string modifiers = FormatModifiers(gesture.Modifiers);
+        if (!string.IsNullOrWhiteSpace(modifiers))
+        {
+            parts.AddRange(modifiers.Split('+'));
+        }
+
+        if (gesture.UsesSpace)
+        {
+            parts.Add("Space");
+        }
+
+        return parts.Count == 0 ? "-" : string.Join("+", parts);
+    }
+
     public static Key NormalizeKey(Key key, Key systemKey)
     {
         return key == Key.System ? systemKey : key;
@@ -659,9 +753,9 @@ public static class ShortcutSettings
         ToggleSectionOrderEditShortcut = new ShortcutKey(ModifierKeys.Control, Key.M);
         UndoShortcut = new ShortcutKey(ModifierKeys.Control, Key.Z);
         RedoShortcut = new ShortcutKey(ModifierKeys.Control | ModifierKeys.Shift, Key.Z);
-        AddSelectionModifiers = ModifierKeys.Control;
-        RangeSelectionModifiers = ModifierKeys.Shift;
-        WholeSplitPreviewModifiers = ModifierKeys.Control | ModifierKeys.Shift;
+        AddSelectionGesture = new MouseModifierGesture(ModifierKeys.Control, false);
+        RangeSelectionGesture = new MouseModifierGesture(ModifierKeys.Shift, false);
+        WholeSplitPreviewGesture = new MouseModifierGesture(ModifierKeys.Control | ModifierKeys.Shift, false);
         Save();
     }
 
@@ -680,9 +774,12 @@ public static class ShortcutSettings
             UndoKey = UndoShortcut.Key,
             RedoModifiers = RedoShortcut.Modifiers,
             RedoKey = RedoShortcut.Key,
-            AddSelectionModifiers = AddSelectionModifiers,
-            RangeSelectionModifiers = RangeSelectionModifiers,
-            WholeSplitPreviewModifiers = WholeSplitPreviewModifiers
+            AddSelectionModifiers = AddSelectionGesture.Modifiers,
+            AddSelectionUsesSpace = AddSelectionGesture.UsesSpace,
+            RangeSelectionModifiers = RangeSelectionGesture.Modifiers,
+            RangeSelectionUsesSpace = RangeSelectionGesture.UsesSpace,
+            WholeSplitPreviewModifiers = WholeSplitPreviewGesture.Modifiers,
+            WholeSplitPreviewUsesSpace = WholeSplitPreviewGesture.UsesSpace
         };
 
         File.WriteAllText(ShortcutSettingsPath, JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
@@ -708,9 +805,9 @@ public static class ShortcutSettings
             ToggleSectionOrderEditShortcut = new ShortcutKey(data.ToggleSectionOrderEditModifiers, data.ToggleSectionOrderEditKey);
             UndoShortcut = new ShortcutKey(data.UndoModifiers, data.UndoKey);
             RedoShortcut = new ShortcutKey(data.RedoModifiers, data.RedoKey);
-            AddSelectionModifiers = data.AddSelectionModifiers;
-            RangeSelectionModifiers = data.RangeSelectionModifiers;
-            WholeSplitPreviewModifiers = data.WholeSplitPreviewModifiers;
+            AddSelectionGesture = new MouseModifierGesture(data.AddSelectionModifiers, data.AddSelectionUsesSpace);
+            RangeSelectionGesture = new MouseModifierGesture(data.RangeSelectionModifiers, data.RangeSelectionUsesSpace);
+            WholeSplitPreviewGesture = new MouseModifierGesture(data.WholeSplitPreviewModifiers, data.WholeSplitPreviewUsesSpace);
         }
         catch (IOException)
         {
@@ -733,7 +830,10 @@ public static class ShortcutSettings
         public ModifierKeys RedoModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Shift;
         public Key RedoKey { get; set; } = Key.Z;
         public ModifierKeys AddSelectionModifiers { get; set; } = ModifierKeys.Control;
+        public bool AddSelectionUsesSpace { get; set; }
         public ModifierKeys RangeSelectionModifiers { get; set; } = ModifierKeys.Shift;
+        public bool RangeSelectionUsesSpace { get; set; }
         public ModifierKeys WholeSplitPreviewModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Shift;
+        public bool WholeSplitPreviewUsesSpace { get; set; }
     }
 }
