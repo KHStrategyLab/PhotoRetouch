@@ -626,6 +626,7 @@
                                                                     Value="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
                                                                     IsSnapToTickEnabled="False"
                                                                     PreviewMouseWheel="ValueSlider_PreviewMouseWheel"
+                                                                    ValueChanged="ValueSlider_ValueChanged"
                                                                     PreviewMouseLeftButtonUp="ValueSlider_CommitValue"
                                                                     LostMouseCapture="ValueSlider_CommitValue"/>
                                                             <Grid x:Name="ColorEditor" Visibility="Collapsed" Margin="0,0,0,14">

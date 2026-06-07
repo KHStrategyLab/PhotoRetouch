@@ -16,6 +16,7 @@ namespace PhotoRetouch;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const int CurveAmountLivePreviewIntervalMilliseconds = 140;
+    private const int RetouchSliderLivePreviewIntervalMilliseconds = 140;
     private const int RetouchHistoryLimit = 80;
     private static readonly string SettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -46,8 +47,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _pendingCurveKeyboardPreview;
     private bool _isUpdatingCurveAmountFromSlider;
     private bool _pendingCurveAmountLivePreview;
+    private bool _isUpdatingRetouchSliderFromSlider;
+    private bool _pendingRetouchSliderLivePreview;
     private bool _isResettingRetouchControlsForPhotoChange;
     private bool _isSectionOrderEditMode;
+    private RetouchAdjustmentState? _retouchSliderUndoBeforeState;
     private RetouchAdjustmentState? _curveAmountUndoBeforeState;
     private RetouchAdjustmentState? _curveDragUndoBeforeState;
     private RetouchAdjustmentState? _curveKeyboardUndoBeforeState;
@@ -55,6 +59,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private RetouchControl? _selectedCurveControl;
     private CurvePoint? _selectedCurvePoint;
     private readonly System.Windows.Threading.DispatcherTimer _curveAmountPreviewTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _retouchSliderPreviewTimer;
     private readonly List<RetouchHistoryEntry> _undoHistory = new();
     private readonly List<RetouchHistoryEntry> _redoHistory = new();
 
@@ -361,6 +366,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Interval = TimeSpan.FromMilliseconds(CurveAmountLivePreviewIntervalMilliseconds)
         };
         _curveAmountPreviewTimer.Tick += CurveAmountPreviewTimer_Tick;
+        _retouchSliderPreviewTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(RetouchSliderLivePreviewIntervalMilliseconds)
+        };
+        _retouchSliderPreviewTimer.Tick += RetouchSliderPreviewTimer_Tick;
         RestoreSectionOrder();
         SubscribeRetouchControlChanges();
         InitializeComponent();
@@ -622,6 +632,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (_isUpdatingCurveAmountFromSlider &&
             control.Id == "photo_curves" &&
+            e.PropertyName == nameof(RetouchControl.Value))
+        {
+            return;
+        }
+
+        if (_isUpdatingRetouchSliderFromSlider &&
             e.PropertyName == nameof(RetouchControl.Value))
         {
             return;
@@ -1199,21 +1215,89 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         e.Handled = true;
     }
 
-    private void ValueSlider_CommitValue(object sender, RoutedEventArgs e)
+    private void ValueSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        if (sender is not System.Windows.Controls.Slider slider ||
+            slider.DataContext is not RetouchControl control ||
+            !ShouldLivePreviewSlider(control) ||
+            !slider.IsLoaded ||
+            (!slider.IsMouseCaptureWithin && !slider.IsKeyboardFocusWithin))
+        {
+            return;
+        }
+
+        _retouchSliderUndoBeforeState ??= CaptureRetouchState();
+        if (CommitValueSliderValue(slider))
+        {
+            _pendingRetouchSliderLivePreview = true;
+            if (!_retouchSliderPreviewTimer.IsEnabled)
+            {
+                _retouchSliderPreviewTimer.Start();
+            }
+        }
+    }
+
+    private async void ValueSlider_CommitValue(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Slider slider ||
+            slider.DataContext is not RetouchControl control)
+        {
+            return;
+        }
+
+        RetouchAdjustmentState before = _retouchSliderUndoBeforeState ?? CaptureRetouchState();
+        bool changed = CommitValueSliderValue(slider);
+        bool hadPendingPreview = _pendingRetouchSliderLivePreview;
+        if (ShouldLivePreviewSlider(control))
+        {
+            _retouchSliderUndoBeforeState = null;
+            _pendingRetouchSliderLivePreview = false;
+            _retouchSliderPreviewTimer.Stop();
+        }
+
+        PushRetouchHistory(before, CaptureRetouchState());
+        if (ShouldLivePreviewSlider(control) && (changed || hadPendingPreview))
+        {
+            await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+        }
+    }
+
+    private bool CommitValueSliderValue(System.Windows.Controls.Slider slider)
+    {
+        if (slider.DataContext is not RetouchControl control)
+        {
+            return false;
+        }
+
+        double previousValue = control.Value;
+        _isUpdatingRetouchSliderFromSlider = true;
+        try
+        {
+            slider.GetBindingExpression(System.Windows.Controls.Primitives.RangeBase.ValueProperty)?.UpdateSource();
+        }
+        finally
+        {
+            _isUpdatingRetouchSliderFromSlider = false;
+        }
+
+        return Math.Abs(previousValue - control.Value) >= 0.001;
+    }
+
+    private async void RetouchSliderPreviewTimer_Tick(object? sender, EventArgs e)
+    {
+        if (!_pendingRetouchSliderLivePreview)
+        {
+            _retouchSliderPreviewTimer.Stop();
+            return;
+        }
+
         if (IsPreviewProcessing)
         {
             return;
         }
 
-        if (sender is not System.Windows.Controls.Slider slider)
-        {
-            return;
-        }
-
-        RetouchAdjustmentState before = CaptureRetouchState();
-        slider.GetBindingExpression(System.Windows.Controls.Primitives.RangeBase.ValueProperty)?.UpdateSource();
-        PushRetouchHistory(before, CaptureRetouchState());
+        _pendingRetouchSliderLivePreview = false;
+        await ApplyPhotoAdjustmentsAsync(showOverlay: false);
     }
 
     private void CurveAmountSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1404,6 +1488,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ClearSelectedCurvePoint();
         _pendingCurveAmountLivePreview = false;
         _curveAmountPreviewTimer.Stop();
+        _pendingRetouchSliderLivePreview = false;
+        _retouchSliderUndoBeforeState = null;
+        _retouchSliderPreviewTimer.Stop();
         _isResettingRetouchControlsForPhotoChange = true;
         try
         {
@@ -1434,6 +1521,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "photo_white_balance" or
             "photo_blur_sharpen" or
             "photo_curves";
+    }
+
+    private static bool ShouldLivePreviewSlider(RetouchControl control)
+    {
+        return IsPhotoAdjustmentControl(control) && control.Id != "photo_curves";
     }
 
     private void CurveCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1838,6 +1930,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ClearSelectedCurvePoint();
         _pendingCurveAmountLivePreview = false;
         _curveAmountPreviewTimer.Stop();
+        _pendingRetouchSliderLivePreview = false;
+        _retouchSliderUndoBeforeState = null;
+        _retouchSliderPreviewTimer.Stop();
         _isResettingRetouchControlsForPhotoChange = true;
         try
         {
@@ -1949,6 +2044,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ClearSelectedCurvePoint();
         _pendingCurveAmountLivePreview = false;
         _curveAmountPreviewTimer.Stop();
+        _pendingRetouchSliderLivePreview = false;
+        _retouchSliderUndoBeforeState = null;
+        _retouchSliderPreviewTimer.Stop();
         _isResettingRetouchControlsForPhotoChange = true;
         try
         {

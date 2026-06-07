@@ -131,10 +131,12 @@ public partial class SettingsWindow : Window
 
     private void LoadProfileButton_Click(object sender, RoutedEventArgs e)
     {
+        const string defaultProfileDirectory = @"C:\Windows\System32\spool\drivers\color";
         Microsoft.Win32.OpenFileDialog dialog = new()
         {
             Title = "\uD45C\uC2DC \uD504\uB85C\uD30C\uC77C \uBD88\uB7EC\uC624\uAE30",
             Filter = "ICC profile files|*.icc;*.icm|All files|*.*",
+            InitialDirectory = Directory.Exists(defaultProfileDirectory) ? defaultProfileDirectory : string.Empty,
             Multiselect = false
         };
 
