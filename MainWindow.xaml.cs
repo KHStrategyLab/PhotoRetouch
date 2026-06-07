@@ -141,6 +141,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility PhotoListVisibility => Photos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility PhotoPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility MockPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility PreviewTitleVisibility => SelectedPhotos.Count == 1 ? Visibility.Visible : Visibility.Collapsed;
     public string PreviewTitleText => _isShowingOriginalPreview ? "Original" : "Preview";
     public System.Windows.Media.Brush PreviewBackgroundBrush => _previewBackgroundBrush;
     public bool IsSplitPreview => SelectedPhotos.Count > 1;
@@ -385,6 +386,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(PhotoSelectionText));
             OnPropertyChanged(nameof(PhotoPreviewVisibility));
             OnPropertyChanged(nameof(MockPreviewVisibility));
+            OnPropertyChanged(nameof(PreviewTitleVisibility));
             OnPropertyChanged(nameof(PreviewRows));
             OnPropertyChanged(nameof(PreviewColumns));
             OnPropertyChanged(nameof(IsSplitPreview));
