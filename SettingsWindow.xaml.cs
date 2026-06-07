@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -155,6 +155,18 @@ public partial class SettingsWindow : Window
         {
             BeginShortcutCapture(CompareShortcutButton, ShortcutKeyTarget.CompareOriginal);
         }
+        else if (sender == ToggleSectionOrderEditShortcutButton)
+        {
+            BeginShortcutCapture(ToggleSectionOrderEditShortcutButton, ShortcutKeyTarget.ToggleSectionOrderEdit);
+        }
+        else if (sender == UndoShortcutButton)
+        {
+            BeginShortcutCapture(UndoShortcutButton, ShortcutKeyTarget.Undo);
+        }
+        else if (sender == RedoShortcutButton)
+        {
+            BeginShortcutCapture(RedoShortcutButton, ShortcutKeyTarget.Redo);
+        }
     }
 
     private void BeginShortcutCapture(System.Windows.Controls.Button button, ShortcutKeyTarget target)
@@ -167,6 +179,13 @@ public partial class SettingsWindow : Window
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+            return;
+        }
+
         if (_capturingShortcutButton is null || _capturingShortcutTarget is null)
         {
             return;
@@ -182,9 +201,21 @@ public partial class SettingsWindow : Window
         {
             ShortcutSettings.RenamePhotoShortcut = new ShortcutKey(Keyboard.Modifiers, key);
         }
-        else
+        else if (_capturingShortcutTarget == ShortcutKeyTarget.CompareOriginal)
         {
             ShortcutSettings.CompareOriginalShortcut = new ShortcutKey(Keyboard.Modifiers, key);
+        }
+        else if (_capturingShortcutTarget == ShortcutKeyTarget.ToggleSectionOrderEdit)
+        {
+            ShortcutSettings.ToggleSectionOrderEditShortcut = new ShortcutKey(Keyboard.Modifiers, key);
+        }
+        else if (_capturingShortcutTarget == ShortcutKeyTarget.Undo)
+        {
+            ShortcutSettings.UndoShortcut = new ShortcutKey(Keyboard.Modifiers, key);
+        }
+        else
+        {
+            ShortcutSettings.RedoShortcut = new ShortcutKey(Keyboard.Modifiers, key);
         }
 
         ShortcutSettings.Save();
@@ -294,11 +325,6 @@ public partial class SettingsWindow : Window
         PerformanceSettings.Save();
     }
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
     private void UpdateManualProfileControls()
     {
         if (ManualProfilePathTextBox is null || LoadProfileButton is null)
@@ -315,6 +341,9 @@ public partial class SettingsWindow : Window
     {
         RenameShortcutButton.Content = ShortcutSettings.RenamePhotoShortcut.DisplayText;
         CompareShortcutButton.Content = ShortcutSettings.CompareOriginalShortcut.DisplayText;
+        ToggleSectionOrderEditShortcutButton.Content = ShortcutSettings.ToggleSectionOrderEditShortcut.DisplayText;
+        UndoShortcutButton.Content = ShortcutSettings.UndoShortcut.DisplayText;
+        RedoShortcutButton.Content = ShortcutSettings.RedoShortcut.DisplayText;
     }
 
     private void UpdatePreviewSizeControls()
@@ -534,7 +563,10 @@ public static class PerformanceSettings
 public enum ShortcutKeyTarget
 {
     RenamePhoto,
-    CompareOriginal
+    CompareOriginal,
+    ToggleSectionOrderEdit,
+    Undo,
+    Redo
 }
 
 public sealed record ModifierOption(string DisplayText, ModifierKeys Modifiers)
@@ -573,6 +605,9 @@ public static class ShortcutSettings
 
     public static ShortcutKey RenamePhotoShortcut { get; set; } = new(ModifierKeys.None, Key.F2);
     public static ShortcutKey CompareOriginalShortcut { get; set; } = new(ModifierKeys.None, Key.Space);
+    public static ShortcutKey ToggleSectionOrderEditShortcut { get; set; } = new(ModifierKeys.Control, Key.M);
+    public static ShortcutKey UndoShortcut { get; set; } = new(ModifierKeys.Control, Key.Z);
+    public static ShortcutKey RedoShortcut { get; set; } = new(ModifierKeys.Control | ModifierKeys.Shift, Key.Z);
     public static ModifierKeys AddSelectionModifiers { get; set; } = ModifierKeys.Control;
     public static ModifierKeys RangeSelectionModifiers { get; set; } = ModifierKeys.Shift;
     public static ModifierKeys WholeSplitPreviewModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Shift;
@@ -619,6 +654,9 @@ public static class ShortcutSettings
     {
         RenamePhotoShortcut = new ShortcutKey(ModifierKeys.None, Key.F2);
         CompareOriginalShortcut = new ShortcutKey(ModifierKeys.None, Key.Space);
+        ToggleSectionOrderEditShortcut = new ShortcutKey(ModifierKeys.Control, Key.M);
+        UndoShortcut = new ShortcutKey(ModifierKeys.Control, Key.Z);
+        RedoShortcut = new ShortcutKey(ModifierKeys.Control | ModifierKeys.Shift, Key.Z);
         AddSelectionModifiers = ModifierKeys.Control;
         RangeSelectionModifiers = ModifierKeys.Shift;
         WholeSplitPreviewModifiers = ModifierKeys.Control | ModifierKeys.Shift;
@@ -634,6 +672,12 @@ public static class ShortcutSettings
             RenamePhotoKey = RenamePhotoShortcut.Key,
             CompareOriginalModifiers = CompareOriginalShortcut.Modifiers,
             CompareOriginalKey = CompareOriginalShortcut.Key,
+            ToggleSectionOrderEditModifiers = ToggleSectionOrderEditShortcut.Modifiers,
+            ToggleSectionOrderEditKey = ToggleSectionOrderEditShortcut.Key,
+            UndoModifiers = UndoShortcut.Modifiers,
+            UndoKey = UndoShortcut.Key,
+            RedoModifiers = RedoShortcut.Modifiers,
+            RedoKey = RedoShortcut.Key,
             AddSelectionModifiers = AddSelectionModifiers,
             RangeSelectionModifiers = RangeSelectionModifiers,
             WholeSplitPreviewModifiers = WholeSplitPreviewModifiers
@@ -659,6 +703,9 @@ public static class ShortcutSettings
 
             RenamePhotoShortcut = new ShortcutKey(data.RenamePhotoModifiers, data.RenamePhotoKey);
             CompareOriginalShortcut = new ShortcutKey(data.CompareOriginalModifiers, data.CompareOriginalKey);
+            ToggleSectionOrderEditShortcut = new ShortcutKey(data.ToggleSectionOrderEditModifiers, data.ToggleSectionOrderEditKey);
+            UndoShortcut = new ShortcutKey(data.UndoModifiers, data.UndoKey);
+            RedoShortcut = new ShortcutKey(data.RedoModifiers, data.RedoKey);
             AddSelectionModifiers = data.AddSelectionModifiers;
             RangeSelectionModifiers = data.RangeSelectionModifiers;
             WholeSplitPreviewModifiers = data.WholeSplitPreviewModifiers;
@@ -677,6 +724,12 @@ public static class ShortcutSettings
         public Key RenamePhotoKey { get; set; } = Key.F2;
         public ModifierKeys CompareOriginalModifiers { get; set; }
         public Key CompareOriginalKey { get; set; } = Key.Space;
+        public ModifierKeys ToggleSectionOrderEditModifiers { get; set; } = ModifierKeys.Control;
+        public Key ToggleSectionOrderEditKey { get; set; } = Key.M;
+        public ModifierKeys UndoModifiers { get; set; } = ModifierKeys.Control;
+        public Key UndoKey { get; set; } = Key.Z;
+        public ModifierKeys RedoModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Shift;
+        public Key RedoKey { get; set; } = Key.Z;
         public ModifierKeys AddSelectionModifiers { get; set; } = ModifierKeys.Control;
         public ModifierKeys RangeSelectionModifiers { get; set; } = ModifierKeys.Shift;
         public ModifierKeys WholeSplitPreviewModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Shift;

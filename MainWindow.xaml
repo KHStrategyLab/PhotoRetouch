@@ -38,6 +38,7 @@
         <SolidColorBrush x:Key="SliderFill" Color="#3F4C55"/>
         <SolidColorBrush x:Key="SliderFillHover" Color="#4A5963"/>
         <SolidColorBrush x:Key="SliderThumb" Color="#718391"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
@@ -520,8 +521,10 @@
                     BorderBrush="{StaticResource Stroke}"
                     BorderThickness="1,0,0,0"
                     Padding="16,16,2,16">
-                <ScrollViewer VerticalScrollBarVisibility="Visible">
-                    <StackPanel>
+                <ScrollViewer x:Name="RetouchPanelScrollViewer"
+                              VerticalScrollBarVisibility="Visible"
+                              Background="Transparent">
+                    <StackPanel x:Name="RetouchPanelContent">
                         <TextBlock Text="&#xBCF4;&#xC815; &#xD328;&#xB110;" Style="{StaticResource SectionTitle}"/>
 
                         <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="12" Margin="0,0,0,14">
@@ -583,6 +586,8 @@
                                                         Height="28"
                                                         Padding="0"
                                                         Margin="0,0,4,0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
                                                         Content="&#x21BA;"
                                                         FontSize="16"
                                                         ToolTip="&#xC774; &#xBAA9;&#xB85D; &#xCD08;&#xAE30;&#xD654;"
@@ -592,6 +597,7 @@
                                                         Height="28"
                                                         Background="Transparent"
                                                         Cursor="SizeAll"
+                                                        Visibility="{Binding DataContext.IsSectionOrderEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                         ToolTip="&#xBAA9;&#xB85D; &#xC21C;&#xC11C; &#xBCC0;&#xACBD;"
                                                         PreviewMouseLeftButtonDown="SectionDragHandle_PreviewMouseLeftButtonDown"
                                                         PreviewMouseLeftButtonUp="SectionDragHandle_PreviewMouseLeftButtonUp"
@@ -643,13 +649,13 @@
                                                             </Grid>
                                                             <StackPanel x:Name="CurveEditor" Visibility="Collapsed" Margin="0,0,0,16">
                                                                 <TextBlock Text="{Binding Label}" Margin="0,0,0,8"/>
-                                                                <Border Height="188"
+                                                                <Border Height="190"
                                                                         Background="#101112"
                                                                         BorderBrush="{StaticResource ControlStroke}"
                                                                         BorderThickness="1">
                                                                     <Viewbox Stretch="Uniform">
-                                                                        <Canvas Width="180"
-                                                                                Height="180"
+                                                                        <Canvas Width="278"
+                                                                                Height="188"
                                                                                 Background="#151719"
                                                                                 Cursor="Cross"
                                                                                 MouseLeftButtonDown="CurveCanvas_MouseLeftButtonDown"
@@ -659,15 +665,15 @@
                                                                                      Fill="#30363B"
                                                                                      Opacity="0.58"
                                                                                      IsHitTestVisible="False"/>
-                                                                            <Line X1="0" Y1="36" X2="180" Y2="36" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="0" Y1="72" X2="180" Y2="72" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="0" Y1="108" X2="180" Y2="108" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="0" Y1="144" X2="180" Y2="144" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="36" Y1="0" X2="36" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="72" Y1="0" X2="72" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="108" Y1="0" X2="108" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="144" Y1="0" X2="144" Y2="180" Stroke="#2B3034" StrokeThickness="1"/>
-                                                                            <Line X1="0" Y1="180" X2="180" Y2="0" Stroke="#56616A" StrokeThickness="1.1" StrokeDashArray="4 4"/>
+                                                                            <Line X1="4" Y1="40" X2="274" Y2="40" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="4" Y1="76" X2="274" Y2="76" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="4" Y1="112" X2="274" Y2="112" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="4" Y1="148" X2="274" Y2="148" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="58" Y1="4" X2="58" Y2="184" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="112" Y1="4" X2="112" Y2="184" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="166" Y1="4" X2="166" Y2="184" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="220" Y1="4" X2="220" Y2="184" Stroke="#2B3034" StrokeThickness="1"/>
+                                                                            <Line X1="4" Y1="184" X2="274" Y2="4" Stroke="#56616A" StrokeThickness="1.1" StrokeDashArray="4 4"/>
                                                                             <Polyline Points="{Binding CurvePolylinePoints}" Stroke="#D4DADE" StrokeThickness="2"/>
                                                                             <ItemsControl ItemsSource="{Binding CurvePoints}">
                                                                                 <ItemsControl.ItemsPanel>
