@@ -15,7 +15,7 @@ The current preview engine is a C# CPU engine.
 - WPF handles the UI and image display.
 - Pixel adjustments are calculated on a background thread.
 - Input is blocked while a preview render is running.
-- Most sliders commit changes only when the mouse is released.
+- Tone correction sliders use throttled live preview while dragging; heavier future tools may still commit on mouse release.
 - Curve preview has been experimented with, but heavy image recalculation during point movement should be avoided.
 - Preview processing can use a reduced preview image size from settings.
 
@@ -45,12 +45,15 @@ The preview is for judging the edit, not final export quality.
 
 ## Interaction Policy
 
-Heavy work should not run continuously while the user is dragging.
+Heavy work should not run continuously while the user is dragging unless it is throttled and working against the screen-sized preview source.
 
-- Regular sliders: update UI while dragging, render preview on release.
+- Tone correction sliders: update UI while dragging and render throttled live preview.
+- Future heavy sliders: update UI while dragging, render preview on release unless an optimized preview path exists.
 - Curve point movement: move curve UI while dragging, render preview on release.
-- Curve opacity or strength: render on release unless a later optimized path is introduced.
+- Curve opacity or strength: render with throttled live preview.
 - Mouse wheel should not adjust retouch sliders.
+- Photo-list arrow navigation should be contextual. It should only apply after clicking a photo item in the left list, and should stop after clicking preview, tools, empty space, or other controls.
+- Mouse helper gestures are separate from keyboard shortcuts and may include Space as well as Ctrl, Shift, and Alt.
 - Individual tool controls should remain independently adjustable. Shared/global application should be added later as explicit copy or batch workflow.
 
 ## Customization And Performance Policy

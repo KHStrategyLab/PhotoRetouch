@@ -33,14 +33,16 @@ This document tracks what exists now, what is partly implemented, and what still
 - Drag and drop to list or preview.
 - Work folder preload.
 - Manual refresh for new files.
-- Ctrl/Shift multi-select, configurable through shortcuts.
+- Mouse helper keys for add/range/group interactions, configurable in settings and allowed to include Ctrl, Shift, Alt, and Space.
 - Up to 8 selected images in split preview.
 - Split layouts: 2, 4, 5 as 3+2, up to 4 per row.
 - Selected list item uses a thin white border.
 - F2 rename, Enter confirm.
+- Previous/next photo navigation from bottom buttons.
+- Arrow-key photo list navigation only while the photo list item context is active after clicking a list item; it stops applying after clicking preview, tools, or other UI.
 - Preview zoom and pan.
 - Per-cell pan and zoom in split mode.
-- Ctrl+Shift modifier for group split interaction.
+- Configurable mouse helper gesture for group split interaction.
 - Fit-in reset on list selection change.
 - Maximum zoom calculated up to source 1:1.
 
@@ -66,7 +68,7 @@ This document tracks what exists now, what is partly implemented, and what still
   - Stable mode - CPU engine
   - Accelerated mode - GPU engine, implementation pending
 - Work folder selection.
-- Shortcut editing for current basic shortcuts and modifiers.
+- Shortcut editing for current basic keyboard shortcuts and mouse helper gestures.
 
 ### Needs Work
 
@@ -96,7 +98,7 @@ Engine behavior:
 - Runs on screen-sized effect preview source for interactive preview.
 - Single-photo preview applies current adjustment values.
 - Multi-select split preview is a lightweight choosing/comparison mode and does not apply retouch effects to all selected photos.
-- Most sliders render on mouse release.
+- Tone correction sliders render with throttled live preview while dragging.
 - Curve amount renders with throttled live preview.
 - Preview generation blocks conflicting inputs.
 

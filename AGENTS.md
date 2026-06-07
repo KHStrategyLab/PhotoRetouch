@@ -6,6 +6,16 @@ PhotoRetouch is a 64-bit Windows WPF portrait retouching application for daily p
 
 The application should feel stable, calm, and predictable. Avoid surprising UI movement, sudden list changes, or heavy live recalculation while the user is adjusting values.
 
+## Mouse-First Workflow
+
+The app is primarily operated by mouse. Keyboard shortcuts exist, but they should support mouse work rather than take over the workflow.
+
+- Favor mouse-visible controls, clear hover/click states, and predictable drag behavior.
+- Avoid global keyboard behavior that fires while the user's mouse focus is on the preview or tool panels.
+- Photo-list arrow navigation should work only after the user has clicked a photo item in the left photo list. Clicking the preview, tool panel, empty space, or another control should leave/clear that list-navigation context.
+- Mouse helper keys are separate from normal keyboard shortcuts. They can include Ctrl, Shift, Alt, Space, or combinations, and are configured in Settings.
+- Space is both the default original-compare keyboard shortcut and an allowed mouse helper key. Avoid changing one behavior in a way that unexpectedly breaks the other.
+
 ## Repository And Build
 
 - Main repository path: `C:\Users\beint\source\repos\PhotoRetouch`
@@ -69,7 +79,7 @@ Current preview engine is C# CPU-based.
 
 Key rules:
 
-- Most sliders update preview only on mouse release.
+- Tone correction sliders use throttled live preview while dragging. Future heavy tools may still render only on release if needed.
 - Mouse wheel must not adjust retouch sliders.
 - Curve point dragging should move only the curve UI while dragging.
 - Preview should be rendered when the point is released.
