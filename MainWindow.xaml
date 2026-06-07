@@ -10,6 +10,7 @@
         Background="#171819"
         WindowStartupLocation="Manual"
         Loaded="Window_Loaded"
+        PreviewMouseDown="Window_PreviewMouseDown"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewKeyUp="Window_PreviewKeyUp">
     <Window.Resources>
@@ -291,7 +292,8 @@
                 <ColumnDefinition Width="340"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0"
+            <Border x:Name="PhotoListPanel"
+                    Grid.Column="0"
                     Background="{StaticResource PanelBg}"
                     BorderBrush="{StaticResource Stroke}"
                     BorderThickness="0,0,1,0"

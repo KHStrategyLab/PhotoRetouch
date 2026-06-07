@@ -36,6 +36,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isWholeSplitPanning;
     private bool _isApplyingZoomSliderValue;
     private bool _isZoomSliderRenderApplyQueued;
+    private bool _isPhotoListNavigationActive;
     private readonly Dictionary<PhotoItem, (double X, double Y)> _previewPanStartByPhoto = new();
     private PhotoItem? _selectionAnchor;
     private System.Windows.Point _previewZoomOrigin = new(0.5, 0.5);
@@ -498,6 +499,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         e.Handled = true;
     }
 
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsPhotoListItemMouseSource(e.OriginalSource as DependencyObject))
+        {
+            _isPhotoListNavigationActive = false;
+        }
+    }
+
     private static bool IsTextEditingElementFocused()
     {
         return Keyboard.FocusedElement is System.Windows.Controls.TextBox;
@@ -505,7 +514,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private bool TryNavigatePhotoListByKey(System.Windows.Input.KeyEventArgs e)
     {
-        if (IsPreviewProcessing || Photos.Count == 0)
+        if (IsPreviewProcessing || Photos.Count == 0 || !_isPhotoListNavigationActive)
         {
             return false;
         }
@@ -525,6 +534,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         NavigatePhotoList(direction);
         return true;
+    }
+
+    private bool IsPhotoListItemMouseSource(DependencyObject? source)
+    {
+        bool hasPhotoItem = false;
+        bool isInsidePhotoListPanel = false;
+
+        while (source is not null)
+        {
+            if (source is FrameworkElement { DataContext: PhotoItem })
+            {
+                hasPhotoItem = true;
+            }
+
+            if (ReferenceEquals(source, PhotoListPanel))
+            {
+                isInsidePhotoListPanel = true;
+                break;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return hasPhotoItem && isInsidePhotoListPanel;
     }
 
     private bool TryNudgeSelectedCurvePoint(System.Windows.Input.KeyEventArgs e)
@@ -1234,6 +1267,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
 
             _selectionAnchor = photo;
+            _isPhotoListNavigationActive = true;
             e.Handled = true;
         }
     }
