@@ -34,6 +34,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private PhotoItem? _previewPanPhoto;
     private FrameworkElement? _previewPanElement;
     private bool _isWholeSplitPanning;
+    private bool _isApplyingZoomSliderValue;
+    private bool _isZoomSliderRenderApplyQueued;
     private readonly Dictionary<PhotoItem, (double X, double Y)> _previewPanStartByPhoto = new();
     private PhotoItem? _selectionAnchor;
     private System.Windows.Point _previewZoomOrigin = new(0.5, 0.5);
@@ -121,6 +123,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             ZoomPercent = 100;
             OnPropertyChanged();
             OnPropertyChanged(nameof(PhotoCountText));
+            OnPropertyChanged(nameof(PhotoSelectionText));
             OnPropertyChanged(nameof(PhotoPreviewVisibility));
             OnPropertyChanged(nameof(MockPreviewVisibility));
             OnPropertyChanged(nameof(PreviewRows));
@@ -129,7 +132,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    public string PhotoCountText => Photos.Count == 0 ? "0 photos selected" : $"{Photos.Count} photos selected";
+    public string PhotoCountText => $"{Photos.Count} open files";
+    public string PhotoSelectionText => $"{SelectedPhotos.Count} / {Photos.Count} selected";
     public Visibility EmptyPhotoListVisibility => Photos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility PhotoListVisibility => Photos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility PhotoPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -176,21 +180,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 return;
             }
 
-            _zoomPercent = value;
-            if (_zoomPercent <= 100)
+            _zoomPercent = Math.Clamp(value, 25, 200);
+            if (!_isApplyingZoomSliderValue)
             {
-                CenterZoomOrigin();
-                _isPreviewPanning = false;
-                if (Mouse.Captured is not null)
-                {
-                    Mouse.Capture(null);
-                }
-
-                ResetPreviewPan();
-            }
-            else
-            {
-                ClampPreviewPan();
+                QueueZoomSliderRenderApply();
             }
 
             OnPropertyChanged();
@@ -378,11 +371,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Photos.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(PhotoCountText));
+            OnPropertyChanged(nameof(PhotoSelectionText));
             OnPropertyChanged(nameof(EmptyPhotoListVisibility));
             OnPropertyChanged(nameof(PhotoListVisibility));
         };
         SelectedPhotos.CollectionChanged += (_, _) =>
         {
+            OnPropertyChanged(nameof(PhotoSelectionText));
             OnPropertyChanged(nameof(PhotoPreviewVisibility));
             OnPropertyChanged(nameof(MockPreviewVisibility));
             OnPropertyChanged(nameof(PreviewRows));
@@ -2213,6 +2208,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        if (IsSplitPreview && e.ClickCount >= 2)
+        {
+            PhotoItem? clickedPhoto = GetPreviewPhotoFromEvent(e.OriginalSource as DependencyObject, out _);
+            if (clickedPhoto is not null)
+            {
+                SelectOnly(clickedPhoto);
+                _selectionAnchor = clickedPhoto;
+                e.Handled = true;
+                return;
+            }
+        }
+
         bool useWholeSplit = IsSplitPreview && IsControlShiftPressed();
         PhotoItem? targetPhoto = useWholeSplit
             ? null
@@ -2321,6 +2328,75 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         PanX = 0;
         PanY = 0;
+    }
+
+    private void ApplyZoomSliderValueToSelectedPhotos(double zoomPercent)
+    {
+        if (SelectedPhotos.Count == 0)
+        {
+            return;
+        }
+
+        double cellWidth = IsSplitPreview ? GetPreviewCellWidth() : PreviewSurface.ActualWidth;
+        double cellHeight = IsSplitPreview ? GetPreviewCellHeight() : PreviewSurface.ActualHeight;
+        foreach (PhotoItem photo in SelectedPhotos)
+        {
+            double maxZoomPercent = GetOneToOneZoomPercent(photo, cellWidth, cellHeight);
+            double nextZoomPercent = Math.Clamp(zoomPercent, 25, maxZoomPercent);
+            photo.PreviewZoomOrigin = new System.Windows.Point(0.5, 0.5);
+            photo.PreviewZoomPercent = nextZoomPercent;
+            if (photo.PreviewZoomPercent <= 100)
+            {
+                photo.ResetPreviewPan();
+            }
+            else
+            {
+                ClampPhotoPreviewPanToPreviewCell(photo, photo.PreviewPanX, photo.PreviewPanY);
+            }
+        }
+    }
+
+    private void QueueZoomSliderRenderApply()
+    {
+        if (_isZoomSliderRenderApplyQueued)
+        {
+            return;
+        }
+
+        _isZoomSliderRenderApplyQueued = true;
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                _isZoomSliderRenderApplyQueued = false;
+                ApplyZoomSliderValueToSelectedPhotos(_zoomPercent);
+            },
+            System.Windows.Threading.DispatcherPriority.Render);
+    }
+
+    private void SyncZoomPercentFromSelectedPhoto()
+    {
+        PhotoItem? zoomSource = SelectedPhotos.Count == 1
+            ? SelectedPhotos[0]
+            : SelectedPhoto;
+        double nextZoomPercent = zoomSource?.PreviewZoomPercent ?? 100;
+        if (Math.Abs(_zoomPercent - nextZoomPercent) < 0.001)
+        {
+            return;
+        }
+
+        _isApplyingZoomSliderValue = true;
+        try
+        {
+            _zoomPercent = nextZoomPercent;
+        }
+        finally
+        {
+            _isApplyingZoomSliderValue = false;
+        }
+
+        OnPropertyChanged(nameof(ZoomPercent));
+        OnPropertyChanged(nameof(ZoomScale));
+        OnPreviewTransformPropertiesChanged();
     }
 
     private void ClampPreviewPan()

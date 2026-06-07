@@ -11,6 +11,10 @@
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <SolidColorBrush x:Key="PanelSoft" Color="#2D3033"/>
+        <SolidColorBrush x:Key="SettingsBg" Color="#171819"/>
+        <SolidColorBrush x:Key="TabBg" Color="#1F2225"/>
+        <SolidColorBrush x:Key="TabSelectedBg" Color="#262A2E"/>
+        <SolidColorBrush x:Key="TabHoverBg" Color="#2B2F33"/>
         <SolidColorBrush x:Key="Stroke" Color="#3F4448"/>
         <SolidColorBrush x:Key="TextMain" Color="#F1F3F4"/>
         <SolidColorBrush x:Key="TextSub" Color="#B9C0C5"/>
@@ -41,6 +45,88 @@
             <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
             <Setter Property="Background" Value="{StaticResource ControlBg}"/>
             <Setter Property="BorderBrush" Value="{StaticResource ControlStroke}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}">
+                                            <Grid>
+                                                <ContentPresenter Margin="10,0,28,0"
+                                                                  VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"
+                                                                  RecognizesAccessKey="True"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                                                <Path Data="M 0 0 L 4 4 L 8 0 Z"
+                                                      Fill="{StaticResource TextSub}"
+                                                      Width="8"
+                                                      Height="4"
+                                                      HorizontalAlignment="Right"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,10,0"/>
+                                            </Grid>
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Placement="Bottom"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border Background="{StaticResource ControlBg}"
+                                        BorderBrush="{StaticResource ControlStroke}"
+                                        BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer MaxHeight="220">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
+            <Setter Property="Background" Value="{StaticResource ControlBg}"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemRoot"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource TabHoverBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemRoot" Property="Background" Value="{StaticResource TabSelectedBg}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="Button">
@@ -73,12 +159,74 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="{StaticResource SettingsBg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel Grid.Row="0"
+                                      IsItemsHost="True"
+                                      Background="{StaticResource SettingsBg}"
+                                      Margin="0"/>
+                            <Border Grid.Row="1"
+                                    Background="{StaticResource TabBg}"
+                                    BorderThickness="0">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource TextSub}"/>
+            <Setter Property="Background" Value="{StaticResource TabBg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabRoot"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabRoot" Property="Background" Value="{StaticResource TabHoverBg}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabRoot" Property="Background" Value="{StaticResource TabSelectedBg}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="18">
+    <Grid Margin="0">
         <TabControl>
             <TabItem Header="색 관리">
-                <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="14">
+                <Border Background="{StaticResource TabBg}" BorderThickness="0" Padding="18">
                     <StackPanel>
                         <TextBlock Text="색 관리" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <RadioButton x:Name="AutomaticColorManagementRadioButton" Content="자동 색 관리" GroupName="ColorManagementMode" Checked="ColorManagementMode_Changed"/>
@@ -103,7 +251,7 @@
             </TabItem>
 
             <TabItem Header="프리뷰">
-                <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="14">
+                <Border Background="{StaticResource TabBg}" BorderThickness="0" Padding="18">
                     <StackPanel>
                         <TextBlock Text="프리뷰 성능" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <RadioButton x:Name="PreviewOriginalSizeRadioButton"
@@ -142,7 +290,7 @@
             </TabItem>
 
             <TabItem Header="성능">
-                <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="14">
+                <Border Background="{StaticResource TabBg}" BorderThickness="0" Padding="18">
                     <StackPanel>
                         <TextBlock Text="프리뷰 엔진" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <RadioButton x:Name="CpuPreviewEngineRadioButton"
@@ -167,7 +315,7 @@
             </TabItem>
 
             <TabItem Header="작업 폴더">
-                <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="14">
+                <Border Background="{StaticResource TabBg}" BorderThickness="0" Padding="18">
                     <StackPanel>
                         <TextBlock Text="작업 폴더" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <TextBlock Text="사진 불러오기 창이 처음 열릴 위치를 지정합니다."
@@ -196,7 +344,7 @@
             </TabItem>
 
             <TabItem Header="단축키">
-                <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="14">
+                <Border Background="{StaticResource TabBg}" BorderThickness="0" Padding="18">
                     <StackPanel>
                         <TextBlock Text="단축키" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <Grid Margin="0,0,0,10">
