@@ -6,17 +6,22 @@ namespace PhotoRetouch;
 public sealed class SnapshotMaskBuilder
 {
     private readonly IPortraitMaskEngine _maskEngine;
+    private readonly SnapshotMaskDiskCache _diskCache;
     private int _createdCount;
     private int _cacheHitCount;
+    private int _diskCacheHitCount;
 
-    public SnapshotMaskBuilder(IPortraitMaskEngine maskEngine)
+    public SnapshotMaskBuilder(IPortraitMaskEngine maskEngine, SnapshotMaskDiskCache? diskCache = null)
     {
         _maskEngine = maskEngine;
+        _diskCache = diskCache ?? SnapshotMaskDiskCache.Default;
     }
 
     public int CreatedCount => _createdCount;
 
     public int CacheHitCount => _cacheHitCount;
+
+    public int DiskCacheHitCount => _diskCacheHitCount;
 
     public FaceSnapshotMaskSet GetOrCreate(PhotoItem photo)
     {
@@ -26,6 +31,15 @@ public sealed class SnapshotMaskBuilder
         {
             Interlocked.Increment(ref _cacheHitCount);
             return photo.SnapshotMaskSet;
+        }
+
+        SnapshotMaskCacheLoadResult diskResult = _diskCache.TryLoad(photo, _maskEngine.MaskVersion);
+        if (diskResult.CacheHit && diskResult.Snapshot is not null)
+        {
+            photo.SnapshotMaskSet = diskResult.Snapshot;
+            Interlocked.Increment(ref _cacheHitCount);
+            Interlocked.Increment(ref _diskCacheHitCount);
+            return diskResult.Snapshot;
         }
 
         return Rebuild(photo);
@@ -41,6 +55,7 @@ public sealed class SnapshotMaskBuilder
             photo.BaseImage,
             photo.FaceWorkArea);
         photo.SnapshotMaskSet = snapshot;
+        _diskCache.Save(snapshot);
         Interlocked.Increment(ref _createdCount);
         return snapshot;
     }
@@ -117,7 +132,7 @@ public sealed class SnapshotMaskBuilder
             maskVersion);
     }
 
-    private static string CreateCropVersion(FaceWorkArea area)
+    public static string CreateCropVersion(FaceWorkArea area)
     {
         return string.Join(
             ",",

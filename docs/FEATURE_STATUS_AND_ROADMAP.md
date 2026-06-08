@@ -252,6 +252,7 @@ Required test image set:
 - `HardProtectTestSetRunner` is added for ORDER_21. It runs Stage `1`, `5`, and `10`, exports HardProtect/part masks, before/after HardProtect diff images, and JSON reports for preservation testing.
 - ORDER_22 adds a local-only portrait test asset layout, a `portrait_test_cases.json` manifest, `PortraitTestCaseCatalog`, and minimum test slots for nostrils, eyebrows, lips, glasses, beard, glabella wrinkles, nasolabial folds, blemishes, tone issues, and hair-on-face cases.
 - `StageCompareReportRunner` is added for ORDER_23. It runs Stage `1`, `5`, and `10` from one SnapshotMask, saves comparison sheets, HardProtect diff images, and JSON/Markdown reports.
+- `SnapshotMaskDiskCache` is added for ORDER_24. Snapshot masks are persisted under local AppData as JSON metadata plus grayscale mask PNGs, and `SnapshotMaskBuilder` now checks memory cache, disk cache, then rebuild.
 - `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-30` are accounted for.
 - `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
@@ -295,6 +296,8 @@ Required test image set:
 - ORDER_21 real-image run against the required HardProtect failure-case set.
 - Assign local original files to the ORDER_22 manifest without committing sensitive portraits.
 - Run ORDER_23 reports after local original files are assigned.
+- ORDER_24 real reload test to confirm disk cache hits after app restart.
+- Separate AnalysisCache persistence for Blemish, Wrinkle, ToneEven, and TextureRestore candidates.
 - Stage `1-10` preset mapping with hard protection always preserved.
 - Brush/manual target mode for precise blemish removal.
 - Texture-preserving smoothing.

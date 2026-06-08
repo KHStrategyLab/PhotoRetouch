@@ -128,7 +128,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             : $"Mask {SelectedDebugMaskOption.Name}"
         : "Mask off";
     public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "파이프라인 끄기" : "파이프라인 보정";
-    public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} {RetouchStageStatusText}";
+    public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} / disk {_snapshotMaskBuilder.DiskCacheHitCount} {RetouchStageStatusText}";
     public string RetouchBindingStatusText => _lastRetouchBindingReport.ToStatusText();
 
     public double DummyMaskStageValue

@@ -13,6 +13,10 @@ TestResults/
 
 *.log
 
+cache/
+*.maskcache
+*.analysiscache
+
 test_assets/portraits/original/*
 test_assets/portraits/stage_outputs/*
 test_assets/portraits/debug_outputs/*
