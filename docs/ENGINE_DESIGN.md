@@ -36,7 +36,7 @@ Current implemented adjustment order:
 8. Blemish removal
 9. Skin texture smoothing
 10. Pore cleanup
-11. Face-shape preview warp
+11. Face-shape preview warp and localized face-area refinement passes
 12. Blur or sharpen
 
 ## Preview Policy

@@ -55,6 +55,11 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
             pixels = ApplyBlemishRemoval(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.BlemishRemove);
         }
 
+        if (Math.Abs(adjustment.AcneRemove) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyAcneRemoval(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.AcneRemove);
+        }
+
         if (Math.Abs(adjustment.SkinSmooth) >= AdjustmentEpsilon)
         {
             pixels = ApplySkinTextureSmoothing(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.SkinSmooth);
@@ -95,6 +100,41 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
             pixels = ApplyChinWidthWarp(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.ChinWidth, adjustment.FaceWorkArea);
         }
 
+        if (Math.Abs(adjustment.FaceSymmetry) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyFaceSymmetryWarp(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.FaceSymmetry, adjustment.FaceWorkArea);
+        }
+
+        if (Math.Abs(adjustment.EyeHeightBalance) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyPairedFeatureHeightBalanceWarp(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.EyeHeightBalance, adjustment.FaceWorkArea, -0.42, -0.08, 0.045);
+        }
+
+        if (Math.Abs(adjustment.BrowHeightBalance) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyPairedFeatureHeightBalanceWarp(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.BrowHeightBalance, adjustment.FaceWorkArea, -0.68, -0.34, 0.038);
+        }
+
+        if (Math.Abs(adjustment.NoseCenterBalance) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyNoseCenterBalanceWarp(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.NoseCenterBalance, adjustment.FaceWorkArea);
+        }
+
+        if (Math.Abs(adjustment.DoubleChin) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyDoubleChinSoften(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.DoubleChin, adjustment.FaceWorkArea);
+        }
+
+        if (Math.Abs(adjustment.NeckJawEdge) >= AdjustmentEpsilon)
+        {
+            pixels = ApplyNeckJawEdgeRefine(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.NeckJawEdge, adjustment.FaceWorkArea);
+        }
+
+        if (Math.Abs(adjustment.BackgroundColorAmount) >= AdjustmentEpsilon)
+        {
+            pixels = ApplySolidBackgroundColorPreview(pixels, adjustment.BackgroundColor, adjustment.BackgroundColorAmount);
+        }
+
         if (Math.Abs(adjustment.BlurSharpen) >= AdjustmentEpsilon)
         {
             pixels = ApplyBlurSharpen(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.BlurSharpen);
@@ -121,6 +161,7 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
                Math.Abs(adjustment.WhiteBalance) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.BlurSharpen) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.BlemishRemove) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.AcneRemove) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.SkinSmooth) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.PoreClean) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.ToneEven) >= AdjustmentEpsilon ||
@@ -130,6 +171,13 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
                Math.Abs(adjustment.JawlineDefine) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.ChinLength) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.ChinWidth) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.FaceSymmetry) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.EyeHeightBalance) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.BrowHeightBalance) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.NoseCenterBalance) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.DoubleChin) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.NeckJawEdge) >= AdjustmentEpsilon ||
+               Math.Abs(adjustment.BackgroundColorAmount) >= AdjustmentEpsilon ||
                (Math.Abs(adjustment.CurveAmount) >= AdjustmentEpsilon && !IsIdentityLookupTable(adjustment.CurveLookup));
     }
 
@@ -256,14 +304,14 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
     {
         byte[] blurred = CreateSoftBlur(source, width, height, stride);
         byte[] result = new byte[source.Length];
-        double amount = Math.Clamp(skinSmooth, 0, 100) / 100 * 0.55;
+        double amount = Math.Clamp(skinSmooth, 0, 100) / 100 * 0.78;
 
         for (int index = 0; index < source.Length; index += 4)
         {
             double sourceLuminance = GetLuminance(source[index + 2], source[index + 1], source[index]);
             double blurLuminance = GetLuminance(blurred[index + 2], blurred[index + 1], blurred[index]);
             double detail = Math.Abs(sourceLuminance - blurLuminance);
-            double detailProtection = SmoothStep(6, 28, detail);
+            double detailProtection = SmoothStep(12, 44, detail);
             double localAmount = amount * (1 - detailProtection);
 
             result[index] = BlendChannel(source[index], blurred[index], localAmount);
@@ -279,14 +327,14 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
     {
         byte[] blurred = CreateRepeatedSoftBlur(source, width, height, stride, 3);
         byte[] result = new byte[source.Length];
-        double amount = Math.Clamp(toneEven, 0, 100) / 100 * 0.36;
+        double amount = Math.Clamp(toneEven, 0, 100) / 100 * 0.52;
 
         for (int index = 0; index < source.Length; index += 4)
         {
             double sourceLuminance = GetLuminance(source[index + 2], source[index + 1], source[index]);
             double blurLuminance = GetLuminance(blurred[index + 2], blurred[index + 1], blurred[index]);
             double detail = Math.Abs(sourceLuminance - blurLuminance);
-            double edgeProtection = SmoothStep(10, 34, detail);
+            double edgeProtection = SmoothStep(16, 50, detail);
             double localAmount = amount * (1 - edgeProtection);
 
             result[index] = BlendChannel(source[index], blurred[index], localAmount);
@@ -302,14 +350,22 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
     {
         byte[] localAverage = CreateRepeatedSoftBlur(source, width, height, stride, 2);
         byte[] result = new byte[source.Length];
-        double amount = Math.Clamp(blemishRemove, 0, 100) / 100 * 0.68;
+        double amount = Math.Clamp(blemishRemove, 0, 100) / 100 * 0.9;
 
         for (int index = 0; index < source.Length; index += 4)
         {
             double sourceLuminance = GetLuminance(source[index + 2], source[index + 1], source[index]);
             double averageLuminance = GetLuminance(localAverage[index + 2], localAverage[index + 1], localAverage[index]);
             double darkDetail = averageLuminance - sourceLuminance;
-            double blemishWeight = SmoothStep(5, 18, darkDetail) * (1 - SmoothStep(45, 85, darkDetail));
+            double redExcess = source[index + 2] - Math.Max(source[index + 1], source[index]);
+            double averageRedExcess = localAverage[index + 2] - Math.Max(localAverage[index + 1], localAverage[index]);
+            double redSpotDetail = Math.Max(0, redExcess - averageRedExcess * 0.35);
+            double darkWeight = SmoothStep(2, 14, darkDetail) * (1 - SmoothStep(58, 96, darkDetail));
+            double redWeight = SmoothStep(5, 24, redSpotDetail) * (1 - SmoothStep(70, 116, redSpotDetail));
+            double skinRangeWeight = SmoothStep(36, 78, sourceLuminance) * (1 - SmoothStep(226, 250, sourceLuminance));
+            double blemishWeight = Math.Max(darkWeight, redWeight * 0.8) * skinRangeWeight;
+            double baselineCleanup = 0.08 * skinRangeWeight;
+            blemishWeight = Math.Max(blemishWeight, baselineCleanup);
             double localAmount = amount * blemishWeight;
 
             result[index] = BlendChannel(source[index], localAverage[index], localAmount);
@@ -321,11 +377,44 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
         return result;
     }
 
+    private static byte[] ApplyAcneRemoval(byte[] source, int width, int height, int stride, double acneRemove)
+    {
+        byte[] localAverage = CreateRepeatedSoftBlur(source, width, height, stride, 2);
+        byte[] result = new byte[source.Length];
+        double amount = Math.Clamp(acneRemove, 0, 100) / 100 * 0.86;
+
+        for (int index = 0; index < source.Length; index += 4)
+        {
+            byte blue = source[index];
+            byte green = source[index + 1];
+            byte red = source[index + 2];
+            double sourceLuminance = GetLuminance(red, green, blue);
+            double averageLuminance = GetLuminance(localAverage[index + 2], localAverage[index + 1], localAverage[index]);
+            double redExcess = red - Math.Max(green, blue);
+            double averageRedExcess = localAverage[index + 2] - Math.Max(localAverage[index + 1], localAverage[index]);
+            double localRedness = Math.Max(0, redExcess - averageRedExcess * 0.45);
+            double darkDetail = Math.Max(0, averageLuminance - sourceLuminance);
+            double rednessWeight = SmoothStep(4, 22, localRedness) * (1 - SmoothStep(72, 118, localRedness));
+            double spotWeight = SmoothStep(2, 14, darkDetail) * (1 - SmoothStep(54, 92, darkDetail));
+            double skinRangeWeight = SmoothStep(34, 76, sourceLuminance) * (1 - SmoothStep(226, 250, sourceLuminance));
+            double acneWeight = Math.Max(rednessWeight, spotWeight * 0.8) * skinRangeWeight;
+            acneWeight = Math.Max(acneWeight, 0.05 * skinRangeWeight);
+            double localAmount = amount * acneWeight;
+
+            result[index] = BlendChannel(blue, localAverage[index], localAmount * 0.68);
+            result[index + 1] = BlendChannel(green, localAverage[index + 1], localAmount * 0.76);
+            result[index + 2] = BlendChannel(red, localAverage[index + 2], localAmount);
+            result[index + 3] = source[index + 3];
+        }
+
+        return result;
+    }
+
     private static byte[] ApplyPoreCleanup(byte[] source, int width, int height, int stride, double poreClean)
     {
         byte[] blurred = CreateSoftBlur(source, width, height, stride);
         byte[] result = new byte[source.Length];
-        double amount = Math.Clamp(poreClean, 0, 100) / 100 * 0.42;
+        double amount = Math.Clamp(poreClean, 0, 100) / 100 * 0.62;
 
         for (int index = 0; index < source.Length; index += 4)
         {
@@ -333,6 +422,7 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
             double blurLuminance = GetLuminance(blurred[index + 2], blurred[index + 1], blurred[index]);
             double detail = Math.Abs(sourceLuminance - blurLuminance);
             double smallTextureWeight = SmoothStep(2, 9, detail) * (1 - SmoothStep(18, 36, detail));
+            smallTextureWeight = Math.Max(smallTextureWeight, 0.04 * (1 - SmoothStep(30, 70, detail)));
             double localAmount = amount * smallTextureWeight;
 
             result[index] = BlendChannel(source[index], blurred[index], localAmount);
@@ -562,6 +652,235 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
                 double sourceX = centerX + (x - centerX) * (1 - localAmount);
                 SamplePixel(source, width, height, stride, sourceX, y, result, targetIndex);
             }
+        }
+
+        return result;
+    }
+
+    private static byte[] ApplyFaceSymmetryWarp(byte[] source, int width, int height, int stride, double faceSymmetry, FaceWorkArea faceWorkArea)
+    {
+        byte[] result = new byte[source.Length];
+        FaceWorkArea faceArea = faceWorkArea.Clamp();
+        double centerX = faceArea.CenterX * (width - 1);
+        double centerY = faceArea.CenterY * (height - 1);
+        double radiusX = Math.Max(1, faceArea.Width * width / 2);
+        double radiusY = Math.Max(1, faceArea.Height * height / 2);
+        double amount = Math.Clamp(faceSymmetry, -100, 100) / 100 * 0.075;
+
+        for (int y = 0; y < height; y++)
+        {
+            double normalizedY = (y - centerY) / radiusY;
+            for (int x = 0; x < width; x++)
+            {
+                int targetIndex = y * stride + x * 4;
+                double normalizedX = (x - centerX) / radiusX;
+                double distance = normalizedX * normalizedX + normalizedY * normalizedY;
+                if (distance >= 1)
+                {
+                    CopyPixel(source, result, targetIndex, targetIndex);
+                    continue;
+                }
+
+                double feather = 1 - SmoothStep(0.6, 1, distance);
+                double verticalWeight = SmoothStep(-0.35, 0.88, normalizedY);
+                double sideWeight = SmoothStep(0.18, 0.92, Math.Abs(normalizedX));
+                double sideDirection = normalizedX >= 0 ? 1 : -1;
+                double localAmount = amount * sideDirection * feather * verticalWeight * sideWeight;
+                double sourceX = centerX + (x - centerX) * (1 + localAmount);
+                SamplePixel(source, width, height, stride, sourceX, y, result, targetIndex);
+            }
+        }
+
+        return result;
+    }
+
+    private static byte[] ApplyPairedFeatureHeightBalanceWarp(
+        byte[] source,
+        int width,
+        int height,
+        int stride,
+        double balance,
+        FaceWorkArea faceWorkArea,
+        double bandTop,
+        double bandBottom,
+        double strength)
+    {
+        byte[] result = new byte[source.Length];
+        FaceWorkArea faceArea = faceWorkArea.Clamp();
+        double centerX = faceArea.CenterX * (width - 1);
+        double centerY = faceArea.CenterY * (height - 1);
+        double radiusX = Math.Max(1, faceArea.Width * width / 2);
+        double radiusY = Math.Max(1, faceArea.Height * height / 2);
+        double shiftPixels = Math.Clamp(balance, -100, 100) / 100 * radiusY * strength;
+
+        for (int y = 0; y < height; y++)
+        {
+            double normalizedY = (y - centerY) / radiusY;
+            double verticalWeight = SmoothStep(bandTop, (bandTop + bandBottom) / 2, normalizedY) *
+                (1 - SmoothStep((bandTop + bandBottom) / 2, bandBottom, normalizedY));
+            for (int x = 0; x < width; x++)
+            {
+                int targetIndex = y * stride + x * 4;
+                double normalizedX = (x - centerX) / radiusX;
+                double distance = normalizedX * normalizedX + normalizedY * normalizedY;
+                if (distance >= 1)
+                {
+                    CopyPixel(source, result, targetIndex, targetIndex);
+                    continue;
+                }
+
+                double feather = 1 - SmoothStep(0.62, 1, distance);
+                double pairWeight = SmoothStep(0.18, 0.42, Math.Abs(normalizedX)) *
+                    (1 - SmoothStep(0.68, 0.9, Math.Abs(normalizedX)));
+                double sideDirection = normalizedX >= 0 ? 1 : -1;
+                double localShift = shiftPixels * sideDirection * feather * verticalWeight * pairWeight;
+                SamplePixel(source, width, height, stride, x, y - localShift, result, targetIndex);
+            }
+        }
+
+        return result;
+    }
+
+    private static byte[] ApplyNoseCenterBalanceWarp(byte[] source, int width, int height, int stride, double noseCenterBalance, FaceWorkArea faceWorkArea)
+    {
+        byte[] result = new byte[source.Length];
+        FaceWorkArea faceArea = faceWorkArea.Clamp();
+        double centerX = faceArea.CenterX * (width - 1);
+        double centerY = faceArea.CenterY * (height - 1);
+        double radiusX = Math.Max(1, faceArea.Width * width / 2);
+        double radiusY = Math.Max(1, faceArea.Height * height / 2);
+        double shiftPixels = Math.Clamp(noseCenterBalance, -100, 100) / 100 * radiusX * 0.045;
+
+        for (int y = 0; y < height; y++)
+        {
+            double normalizedY = (y - centerY) / radiusY;
+            for (int x = 0; x < width; x++)
+            {
+                int targetIndex = y * stride + x * 4;
+                double normalizedX = (x - centerX) / radiusX;
+                double distance = normalizedX * normalizedX + normalizedY * normalizedY;
+                if (distance >= 1)
+                {
+                    CopyPixel(source, result, targetIndex, targetIndex);
+                    continue;
+                }
+
+                double feather = 1 - SmoothStep(0.62, 1, distance);
+                double verticalWeight = SmoothStep(-0.28, 0.06, normalizedY) *
+                    (1 - SmoothStep(0.42, 0.72, normalizedY));
+                double centerWeight = 1 - SmoothStep(0.04, 0.32, Math.Abs(normalizedX));
+                double localShift = shiftPixels * feather * verticalWeight * centerWeight;
+                SamplePixel(source, width, height, stride, x - localShift, y, result, targetIndex);
+            }
+        }
+
+        return result;
+    }
+
+    private static byte[] ApplyDoubleChinSoften(byte[] source, int width, int height, int stride, double doubleChin, FaceWorkArea faceWorkArea)
+    {
+        byte[] blurred = CreateRepeatedSoftBlur(source, width, height, stride, 2);
+        byte[] result = new byte[source.Length];
+        FaceWorkArea faceArea = faceWorkArea.Clamp();
+        double centerX = faceArea.CenterX * (width - 1);
+        double centerY = faceArea.CenterY * (height - 1);
+        double radiusX = Math.Max(1, faceArea.Width * width / 2);
+        double radiusY = Math.Max(1, faceArea.Height * height / 2);
+        double amount = Math.Clamp(doubleChin, 0, 100) / 100;
+
+        for (int y = 0; y < height; y++)
+        {
+            double normalizedY = (y - centerY) / radiusY;
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double normalizedX = (x - centerX) / radiusX;
+                double distance = normalizedX * normalizedX + normalizedY * normalizedY;
+                if (distance >= 1)
+                {
+                    CopyPixel(source, result, index, index);
+                    continue;
+                }
+
+                double feather = 1 - SmoothStep(0.66, 1, distance);
+                double lowerWeight = SmoothStep(0.58, 0.96, normalizedY);
+                double centerWeight = 1 - SmoothStep(0.18, 0.78, Math.Abs(normalizedX));
+                double sourceLuminance = GetLuminance(source[index + 2], source[index + 1], source[index]);
+                double blurLuminance = GetLuminance(blurred[index + 2], blurred[index + 1], blurred[index]);
+                double foldDetail = Math.Abs(sourceLuminance - blurLuminance);
+                double detailWeight = SmoothStep(4, 24, foldDetail) * (1 - SmoothStep(68, 106, foldDetail));
+                double shadowWeight = 1 - SmoothStep(110, 196, sourceLuminance);
+                double localAmount = amount * 0.42 * feather * lowerWeight * centerWeight * (0.45 + detailWeight * 0.55);
+                double shadowLift = amount * 12 * feather * lowerWeight * centerWeight * shadowWeight;
+
+                result[index] = ClampToByte(source[index] + (blurred[index] - source[index]) * localAmount + shadowLift);
+                result[index + 1] = ClampToByte(source[index + 1] + (blurred[index + 1] - source[index + 1]) * localAmount + shadowLift);
+                result[index + 2] = ClampToByte(source[index + 2] + (blurred[index + 2] - source[index + 2]) * localAmount + shadowLift);
+                result[index + 3] = source[index + 3];
+            }
+        }
+
+        return result;
+    }
+
+    private static byte[] ApplyNeckJawEdgeRefine(byte[] source, int width, int height, int stride, double neckJawEdge, FaceWorkArea faceWorkArea)
+    {
+        byte[] blurred = CreateSoftBlur(source, width, height, stride);
+        byte[] result = new byte[source.Length];
+        FaceWorkArea faceArea = faceWorkArea.Clamp();
+        double centerX = faceArea.CenterX * (width - 1);
+        double centerY = faceArea.CenterY * (height - 1);
+        double radiusX = Math.Max(1, faceArea.Width * width / 2);
+        double radiusY = Math.Max(1, faceArea.Height * height / 2);
+        double amount = Math.Clamp(neckJawEdge, 0, 100) / 100;
+
+        for (int y = 0; y < height; y++)
+        {
+            double normalizedY = (y - centerY) / radiusY;
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double normalizedX = (x - centerX) / radiusX;
+                double distance = normalizedX * normalizedX + normalizedY * normalizedY;
+                if (distance >= 1)
+                {
+                    CopyPixel(source, result, index, index);
+                    continue;
+                }
+
+                double feather = 1 - SmoothStep(0.64, 1, distance);
+                double bandWeight = SmoothStep(0.46, 0.68, normalizedY) *
+                    (1 - SmoothStep(0.78, 0.96, normalizedY));
+                double widthWeight = 1 - SmoothStep(0.38, 0.88, Math.Abs(normalizedX));
+                double sourceLuminance = GetLuminance(source[index + 2], source[index + 1], source[index]);
+                double blurLuminance = GetLuminance(blurred[index + 2], blurred[index + 1], blurred[index]);
+                double detail = Math.Abs(sourceLuminance - blurLuminance);
+                double edgeWeight = SmoothStep(3, 18, detail) * (1 - SmoothStep(86, 130, detail));
+                double localWeight = feather * bandWeight * widthWeight;
+                double sharpenAmount = amount * 0.9 * localWeight * edgeWeight;
+                double shadowLift = amount * 5 * localWeight * (1 - SmoothStep(96, 178, sourceLuminance));
+
+                result[index] = ClampToByte(source[index] + (source[index] - blurred[index]) * sharpenAmount + shadowLift);
+                result[index + 1] = ClampToByte(source[index + 1] + (source[index + 1] - blurred[index + 1]) * sharpenAmount + shadowLift);
+                result[index + 2] = ClampToByte(source[index + 2] + (source[index + 2] - blurred[index + 2]) * sharpenAmount + shadowLift);
+                result[index + 3] = source[index + 3];
+            }
+        }
+
+        return result;
+    }
+
+    private static byte[] ApplySolidBackgroundColorPreview(byte[] source, System.Windows.Media.Color color, double backgroundColorAmount)
+    {
+        byte[] result = new byte[source.Length];
+        double amount = Math.Clamp(backgroundColorAmount, 0, 100) / 100 * 0.35;
+
+        for (int index = 0; index < source.Length; index += 4)
+        {
+            result[index] = BlendChannel(source[index], color.B, amount);
+            result[index + 1] = BlendChannel(source[index + 1], color.G, amount);
+            result[index + 2] = BlendChannel(source[index + 2], color.R, amount);
+            result[index + 3] = source[index + 3];
         }
 
         return result;

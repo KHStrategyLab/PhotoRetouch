@@ -259,6 +259,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new RetouchControl[]
             {
                 new("blemish_remove", "\uC7A1\uD2F0 \uC81C\uAC70", 0, 100, 0),
+                new("acne_remove", "\uC5EC\uB4DC\uB984 \uC81C\uAC70", 0, 100, 0),
                 new("skin_smooth", "\uD53C\uBD80\uACB0 \uC815\uB9AC", 0, 100, 0),
                 new("pore_clean", "\uBAA8\uACF5 \uC815\uB9AC", 0, 100, 0),
                 new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0)
@@ -275,7 +276,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 new("jawline_define", "\uD131\uC120 \uC120\uBA85\uB3C4", 0, 100, 0),
                 new("chin_length", "\uD131\uB05D \uAE38\uC774", -100, 100, 0),
                 new("chin_width", "\uD131\uB05D \uD3ED", -100, 100, 0),
-                new("jaw_balance", "\uD131 \uC88C\uC6B0 \uADE0\uD615", -100, 100, 0),
+                new("jaw_balance", "\uC5BC\uAD74 \uC88C\uC6B0 \uADE0\uD615", -100, 100, 0),
+                new("eye_height_balance", "\uC591\uCABD \uB208 \uB192\uC774", -100, 100, 0),
+                new("brow_height_balance", "\uB208\uC379 \uB192\uC774", -100, 100, 0),
+                new("nose_center_balance", "\uCF54 \uD718\uC784 \uC911\uC2EC \uC7A1\uAE30", -100, 100, 0),
                 new("double_chin", "\uC774\uC911\uD131 \uC644\uD654", 0, 100, 0),
                 new("neck_jaw_edge", "\uBAA9\uACFC \uD131 \uACBD\uACC4", 0, 100, 0)
             }),
@@ -297,7 +301,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     }),
                 new("background_image_opacity", "\uBC30\uACBD \uD22C\uBA85\uB3C4", 0, 100, 100),
                 RetouchControl.CreateColor("background_color", "\uB2E8\uC77C \uC0C9\uC0C1 \uC120\uD0DD", "#4A5157"),
-                new("background_color_amount", "\uB2E8\uC77C \uC0C9\uC0C1 \uC801\uC6A9 \uB18D\uB3C4", 0, 100, 100),
+                new("background_color_amount", "\uB2E8\uC77C \uC0C9\uC0C1 \uC801\uC6A9 \uB18D\uB3C4", 0, 100, 0),
                 new("background_blend", "\uACBD\uACC4 \uBE14\uB80C\uB529", 0, 100, 20)
             }),
         new RetouchSection(
@@ -756,7 +760,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (e.PropertyName is not (nameof(RetouchControl.Value) or nameof(RetouchControl.CurveChannel)) ||
             sender is not RetouchControl control ||
-            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves" or "blemish_remove" or "skin_smooth" or "pore_clean" or "tone_even" or "oval_face" or "face_balance" or "cheekbone_soften" or "jawline_define" or "chin_length" or "chin_width"))
+            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves" or "blemish_remove" or "acne_remove" or "skin_smooth" or "pore_clean" or "tone_even" or "oval_face" or "face_balance" or "cheekbone_soften" or "jawline_define" or "chin_length" or "chin_width" or "jaw_balance" or "eye_height_balance" or "brow_height_balance" or "nose_center_balance" or "double_chin" or "neck_jaw_edge" or "background_color_amount"))
         {
             return;
         }
@@ -868,6 +872,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .FirstOrDefault(control => control.Id == id);
     }
 
+    private System.Windows.Media.Color GetRetouchControlColor(string id, System.Windows.Media.Color fallbackColor)
+    {
+        RetouchControl? control = FindRetouchControl(id);
+        return control?.ColorValue is not null &&
+            TryParsePreviewBackgroundColor(control.ColorValue, out System.Windows.Media.Color color)
+                ? color
+                : fallbackColor;
+    }
+
     private void LoadPhotosButton_Click(object sender, RoutedEventArgs e)
     {
         if (IsPreviewProcessing)
@@ -967,6 +980,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             FindRetouchControl("photo_white_balance")?.Value ?? 0,
             FindRetouchControl("photo_blur_sharpen")?.Value ?? 0,
             FindRetouchControl("blemish_remove")?.Value ?? 0,
+            FindRetouchControl("acne_remove")?.Value ?? 0,
             FindRetouchControl("skin_smooth")?.Value ?? 0,
             FindRetouchControl("pore_clean")?.Value ?? 0,
             FindRetouchControl("tone_even")?.Value ?? 0,
@@ -976,6 +990,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             FindRetouchControl("jawline_define")?.Value ?? 0,
             FindRetouchControl("chin_length")?.Value ?? 0,
             FindRetouchControl("chin_width")?.Value ?? 0,
+            FindRetouchControl("jaw_balance")?.Value ?? 0,
+            FindRetouchControl("eye_height_balance")?.Value ?? 0,
+            FindRetouchControl("brow_height_balance")?.Value ?? 0,
+            FindRetouchControl("nose_center_balance")?.Value ?? 0,
+            FindRetouchControl("double_chin")?.Value ?? 0,
+            FindRetouchControl("neck_jaw_edge")?.Value ?? 0,
+            GetRetouchControlColor("background_color", System.Windows.Media.Color.FromRgb(0x4A, 0x51, 0x57)),
+            FindRetouchControl("background_color_amount")?.Value ?? 0,
             SelectedPhoto?.FaceWorkArea ?? FaceWorkArea.Default,
             curveControl?.Value ?? 0,
             curveChannel,
@@ -1676,6 +1698,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "photo_blur_sharpen" or
             "photo_curves" or
             "blemish_remove" or
+            "acne_remove" or
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
@@ -1684,7 +1707,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "cheekbone_soften" or
             "jawline_define" or
             "chin_length" or
-            "chin_width";
+            "chin_width" or
+            "jaw_balance" or
+            "eye_height_balance" or
+            "brow_height_balance" or
+            "nose_center_balance" or
+            "double_chin" or
+            "neck_jaw_edge" or
+            "background_color_amount";
     }
 
     private static bool ShouldLivePreviewSlider(RetouchControl control)
@@ -2589,7 +2619,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                Math.Abs(FindRetouchControl("cheekbone_soften")?.Value ?? 0) >= 0.001 ||
                Math.Abs(FindRetouchControl("jawline_define")?.Value ?? 0) >= 0.001 ||
                Math.Abs(FindRetouchControl("chin_length")?.Value ?? 0) >= 0.001 ||
-               Math.Abs(FindRetouchControl("chin_width")?.Value ?? 0) >= 0.001;
+               Math.Abs(FindRetouchControl("chin_width")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("jaw_balance")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("eye_height_balance")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("brow_height_balance")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("nose_center_balance")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("double_chin")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("neck_jaw_edge")?.Value ?? 0) >= 0.001;
     }
 
     private void PreviewFrame_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)

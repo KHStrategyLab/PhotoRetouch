@@ -158,6 +158,7 @@ Engine behavior:
 ### Current Controls
 
 - Blemish removal - first preview pass connected for small dark spot softening
+- Acne removal - first preview pass connected for small red/dark spot softening
 - Skin texture cleanup - first preview pass connected with edge-protected smoothing
 - Pore cleanup - first preview pass connected for small texture cleanup
 - Skin tone correction - first preview pass connected for mild local tone evening
@@ -173,6 +174,8 @@ Engine behavior:
 - The C# preview engine applies a mild local tone evening pass with edge protection.
 - `blemish_remove` is captured in `PreviewAdjustment`.
 - The C# preview engine softens small dark spots toward the local surrounding tone.
+- `acne_remove` is captured in `PreviewAdjustment`.
+- The C# preview engine softens small red or dark acne-like spots toward the local surrounding tone.
 
 ### Needs Work
 
@@ -192,9 +195,12 @@ Engine behavior:
 - Jawline clarity - first localized edge-clarity pass connected to the editable face work area
 - Chin length - first vertical chin-tip warp pass connected to the editable face work area
 - Chin width - first horizontal chin-tip warp pass connected to the editable face work area
-- Jaw balance
-- Double chin soften
-- Neck and jaw boundary
+- Face left-right balance - first asymmetric side-width warp pass connected to the editable face work area
+- Eye height balance - first paired eye-band height warp under face left-right balance
+- Brow height balance - first paired brow-band height warp under face left-right balance
+- Nose bend center correction - first central nose-strip warp under face left-right balance
+- Double chin soften - first lower-center shadow/texture soften pass connected to the editable face work area
+- Neck and jaw boundary - first narrow jaw-neck edge refinement pass connected to the editable face work area
 
 ### Implemented
 
@@ -210,6 +216,12 @@ Engine behavior:
 - `jawline_define` applies a localized lower-side edge clarity pass inside the face work area.
 - `chin_length` uses a signed `-100` to `+100` range and applies a limited lower-center vertical warp inside the face work area.
 - `chin_width` uses a signed `-100` to `+100` range and applies a limited lower-center horizontal warp inside the face work area.
+- `jaw_balance` is labeled as face left-right balance and applies a signed asymmetric side-width warp inside the face work area.
+- `eye_height_balance` applies a signed paired eye-band vertical warp inside the face work area.
+- `brow_height_balance` applies a signed paired brow-band vertical warp inside the face work area.
+- `nose_center_balance` applies a signed central nose-strip horizontal warp inside the face work area.
+- `double_chin` applies a localized lower-center shadow and texture softening pass inside the face work area.
+- `neck_jaw_edge` applies a narrow jaw-neck edge clarity and mild shadow cleanup pass inside the face work area.
 
 ### Needs Work
 
@@ -227,8 +239,14 @@ Engine behavior:
 - Saved background library placeholder
 - Background image opacity
 - Solid color select
-- Solid color amount
+- Solid color amount - first full-preview tint pass connected, pending subject segmentation
 - Edge blending
+
+### Implemented
+
+- `background_color_amount` is captured in `PreviewAdjustment`.
+- The C# preview engine applies a low-strength full-preview solid color tint as a temporary judging aid.
+- The default solid color amount is `0` so normal photo judgment is not affected until the user raises the slider.
 
 ### Needs Work
 
@@ -236,7 +254,7 @@ Engine behavior:
 - Persist imported background thumbnails.
 - Horizontal no-scrollbar gallery.
 - Subject segmentation.
-- Solid color background renderer.
+- Replace the temporary full-preview tint with a subject-segmented solid color background renderer.
 - Edge blend/refine.
 
 ## Eyes
