@@ -47,7 +47,7 @@ Important caveat:
 | ORDER_17 | Toolset / Slider / StagePreset alignment | Implemented / Needs UI binding review. |
 | ORDER_18 | ViewModel / UI Binding review | Implemented / Needs visual review. |
 | ORDER_19 | Stage 1-10 preset real tuning | Implemented / Needs visual review. |
-| ORDER_20 | Before / After + Debug Mask Panel | Queued/Planned. |
+| ORDER_20 | Before / After + Debug Mask Panel | InProgress / First UI pass implemented. |
 | ORDER_21 | HardProtect test set | Queued/Planned. |
 | ORDER_22 | Full test image set | Queued/Planned. |
 | ORDER_23 | Stage 1/5/10 compare report | Queued/Planned. |

@@ -72,6 +72,26 @@ public static class DebugMaskExporter
         return CreateFinalOverlay(source, masks);
     }
 
+    public static BitmapSource CreateMaskOverlayPreview(BitmapSource source, MaskPlane mask, byte red, byte green, byte blue, double opacity)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        source.CopyPixels(pixels, stride, 0);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                ApplyOverlay(pixels, index, red, green, blue, mask[x, y] * opacity);
+            }
+        }
+
+        return CreateBitmap(width, height, pixels);
+    }
+
     private static void SaveMask(MaskPlane mask, string path)
     {
         SaveBitmap(CreateMaskPreview(mask), path);

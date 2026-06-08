@@ -58,6 +58,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isMaskDebugPreviewEnabled;
     private bool _isDummyMaskRetouchPreviewEnabled;
     private bool _isEnsuringSnapshotMask;
+    private PhotoItem? _maskDebugPhoto;
+    private BitmapSource? _maskDebugPreviousImage;
     private double _dummyMaskStageValue = 1;
     private RetouchProcessReport? _lastRetouchProcessReport;
     private RetouchBindingReport _lastRetouchBindingReport = RetouchBindingReport.Empty;
@@ -89,8 +91,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<PersonOption> People { get; } = CreatePeople();
     public ObservableCollection<PhotoItem> Photos { get; } = new();
     public ObservableCollection<PhotoItem> SelectedPhotos { get; } = new();
+    public ObservableCollection<DebugMaskOption> DebugMaskOptions { get; } = CreateDebugMaskOptions();
 
     private PhotoItem? _selectedPhoto;
+    private DebugMaskOption? _selectedDebugMaskOption;
     private SolidColorBrush _previewBackgroundBrush = CreatePreviewBackgroundBrush(PreviewBackgroundSettings.BackgroundColor);
     private double _zoomPercent = 100;
     private double _panX;
@@ -115,6 +119,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public Visibility PreviewProcessingVisibility => IsPreviewProcessing && _showPreviewProcessingOverlay ? Visibility.Visible : Visibility.Collapsed;
     public string MaskDebugButtonText => _isMaskDebugPreviewEnabled ? "마스크 끄기" : "마스크 보기";
+    public Visibility DebugMaskPanelVisibility => _isMaskDebugPreviewEnabled ? Visibility.Visible : Visibility.Collapsed;
+    public string DebugMaskStatusText => _isMaskDebugPreviewEnabled && SelectedDebugMaskOption is not null
+        ? $"Mask {SelectedDebugMaskOption.Name}"
+        : "Mask off";
     public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "파이프라인 끄기" : "파이프라인 보정";
     public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} {RetouchStageStatusText}";
     public string RetouchBindingStatusText => _lastRetouchBindingReport.ToStatusText();
@@ -142,6 +150,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public string DummyMaskStageText => $"Stage {_dummyMaskStageValue:0}";
+
+    public DebugMaskOption? SelectedDebugMaskOption
+    {
+        get => _selectedDebugMaskOption;
+        set
+        {
+            if (ReferenceEquals(_selectedDebugMaskOption, value))
+            {
+                return;
+            }
+
+            _selectedDebugMaskOption = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DebugMaskStatusText));
+            if (_isMaskDebugPreviewEnabled)
+            {
+                _ = RefreshMaskDebugPreviewAsync(saveDebugImages: false);
+            }
+        }
+    }
 
     private string RetouchStageStatusText => _lastRetouchProcessReport is null
         ? string.Empty
@@ -172,6 +200,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 return;
             }
 
+            RestoreMaskDebugPreviousPreview();
+            _isMaskDebugPreviewEnabled = false;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+            OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+            OnPropertyChanged(nameof(DebugMaskStatusText));
             _selectedPhoto = value;
             ResetPreviewPan();
             ZoomPercent = 100;
@@ -458,6 +491,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SubscribeRetouchControlChanges();
         InitializeComponent();
         DataContext = this;
+        SelectedDebugMaskOption = DebugMaskOptions.FirstOrDefault();
         Photos.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(PhotoCountText));
@@ -467,6 +501,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         };
         SelectedPhotos.CollectionChanged += (_, _) =>
         {
+            if (_isMaskDebugPreviewEnabled && SelectedPhotos.Count != 1)
+            {
+                RestoreMaskDebugPreviousPreview();
+                _isMaskDebugPreviewEnabled = false;
+                OnPropertyChanged(nameof(MaskDebugButtonText));
+                OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+                OnPropertyChanged(nameof(DebugMaskStatusText));
+            }
+
             OnPropertyChanged(nameof(PhotoSelectionText));
             OnPropertyChanged(nameof(PhotoPreviewVisibility));
             OnPropertyChanged(nameof(MockPreviewVisibility));
@@ -825,14 +868,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isMaskDebugPreviewEnabled = false;
             OnPropertyChanged(nameof(MaskDebugButtonText));
-            await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+            OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+            OnPropertyChanged(nameof(DebugMaskStatusText));
+            RestoreMaskDebugPreviousPreview();
             return;
-        }
-
-        if (_isDummyMaskRetouchPreviewEnabled)
-        {
-            _isDummyMaskRetouchPreviewEnabled = false;
-            OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
         }
 
         if (SelectedPhoto is null || SelectedPhotos.Count != 1)
@@ -846,22 +885,53 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        _isMaskDebugPreviewEnabled = true;
+        OnPropertyChanged(nameof(MaskDebugButtonText));
+        OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+        OnPropertyChanged(nameof(DebugMaskStatusText));
+        await RefreshMaskDebugPreviewAsync(saveDebugImages: true);
+    }
+
+    private async Task RefreshMaskDebugPreviewAsync(bool saveDebugImages)
+    {
+        if (!_isMaskDebugPreviewEnabled || IsPreviewProcessing)
+        {
+            return;
+        }
+
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            RestoreMaskDebugPreviousPreview();
+            _isMaskDebugPreviewEnabled = false;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+            OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+            OnPropertyChanged(nameof(DebugMaskStatusText));
+            return;
+        }
+
         PhotoItem photo = SelectedPhoto;
+        _maskDebugPhoto ??= photo;
+        _maskDebugPreviousImage ??= photo.Image;
         try
         {
             _showPreviewProcessingOverlay = false;
             IsPreviewProcessing = true;
             FaceSnapshotMaskSet snapshot = await Task.Run(() => _snapshotMaskBuilder.GetOrCreate(photo));
             OnPropertyChanged(nameof(SnapshotMaskStatusText));
-            BitmapSource overlay = await Dispatcher.InvokeAsync(() =>
-                DebugMaskExporter.CreateFinalOverlayPreview(photo.BaseImage, snapshot.Masks));
+            BitmapSource overlay = await Dispatcher.InvokeAsync(() => CreateSelectedDebugMaskPreview(photo.BaseImage, snapshot));
             photo.SetAdjustedImage(overlay);
-            SaveSnapshotDebugMasks(photo, snapshot);
-            _isMaskDebugPreviewEnabled = true;
-            OnPropertyChanged(nameof(MaskDebugButtonText));
+            if (saveDebugImages)
+            {
+                SaveSnapshotDebugMasks(photo, snapshot);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
         {
+            RestoreMaskDebugPreviousPreview();
+            _isMaskDebugPreviewEnabled = false;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+            OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+            OnPropertyChanged(nameof(DebugMaskStatusText));
             System.Windows.MessageBox.Show(
                 this,
                 ex.Message,
@@ -875,6 +945,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _showPreviewProcessingOverlay = false;
             OnPropertyChanged(nameof(PreviewProcessingVisibility));
         }
+    }
+
+    private BitmapSource CreateSelectedDebugMaskPreview(BitmapSource source, FaceSnapshotMaskSet snapshot)
+    {
+        string id = SelectedDebugMaskOption?.Id ?? "final";
+        FaceMaskSet masks = snapshot.Masks;
+        return id switch
+        {
+            "skin" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.SkinMask, 70, 220, 120, 0.60),
+            "hard_protect" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.HardProtectMask, 235, 60, 70, 0.72),
+            "soft_protect" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.SoftProtectMask, 255, 210, 50, 0.68),
+            "retouch_allow" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.RetouchAllowMask, 50, 210, 90, 0.60),
+            "eye" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.EyeMask, 90, 170, 255, 0.76),
+            "eyebrow" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.EyebrowMask, 180, 150, 80, 0.76),
+            "lip" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.LipMask, 230, 80, 120, 0.76),
+            "inner_mouth" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.InnerMouthMask, 130, 40, 70, 0.78),
+            "nostril" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.NostrilMask, 255, 120, 40, 0.82),
+            "hair" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.HairMask, 90, 105, 120, 0.76),
+            "beard" => DebugMaskExporter.CreateMaskOverlayPreview(source, MaskPlane.Union(masks.BeardMask, masks.MustacheMask), 80, 85, 95, 0.78),
+            "glasses" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.GlassesMask, 220, 220, 240, 0.78),
+            _ => DebugMaskExporter.CreateFinalOverlayPreview(source, masks)
+        };
+    }
+
+    private void RestoreMaskDebugPreviousPreview()
+    {
+        if (_maskDebugPhoto is not null && _maskDebugPreviousImage is not null)
+        {
+            _maskDebugPhoto.SetAdjustedImage(_maskDebugPreviousImage);
+        }
+
+        _maskDebugPhoto = null;
+        _maskDebugPreviousImage = null;
     }
 
     private async void DummyMaskRetouchButton_Click(object sender, RoutedEventArgs e)
@@ -906,7 +1009,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (_isMaskDebugPreviewEnabled)
         {
             _isMaskDebugPreviewEnabled = false;
+            RestoreMaskDebugPreviousPreview();
             OnPropertyChanged(nameof(MaskDebugButtonText));
+            OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+            OnPropertyChanged(nameof(DebugMaskStatusText));
         }
 
         _isDummyMaskRetouchPreviewEnabled = true;
@@ -1057,7 +1163,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 UpdateRetouchBindingReport("ReAnalyze", null, null, output, createdBefore, cacheBefore);
                 if (_isMaskDebugPreviewEnabled)
                 {
-                    BitmapSource overlay = DebugMaskExporter.CreateFinalOverlayPreview(photo.BaseImage, snapshot.Masks);
+                    BitmapSource overlay = CreateSelectedDebugMaskPreview(photo.BaseImage, snapshot);
                     photo.SetAdjustedImage(overlay);
                     SaveSnapshotDebugMasks(photo, snapshot);
                 }
@@ -4306,6 +4412,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         return people;
+    }
+
+    private static ObservableCollection<DebugMaskOption> CreateDebugMaskOptions()
+    {
+        return new ObservableCollection<DebugMaskOption>
+        {
+            new("final", "Final"),
+            new("skin", "Skin"),
+            new("hard_protect", "HardProtect"),
+            new("soft_protect", "SoftProtect"),
+            new("retouch_allow", "RetouchAllow"),
+            new("eye", "Eye"),
+            new("eyebrow", "Eyebrow"),
+            new("lip", "Lip"),
+            new("inner_mouth", "InnerMouth"),
+            new("nostril", "Nostril"),
+            new("hair", "Hair"),
+            new("beard", "Beard"),
+            new("glasses", "Glasses")
+        };
     }
 }
 
