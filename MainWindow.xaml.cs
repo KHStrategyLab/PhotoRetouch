@@ -308,6 +308,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 new("skin_texture_protect", "\uD53C\uBD80\uACB0 \uBCF4\uC874", 0, 100, 70)
             }),
         new RetouchSection(
+            "wrinkle",
+            "\uC8FC\uB984",
+            false,
+            new RetouchControl[]
+            {
+                new("wrinkle_global", "\uC804\uCCB4", 0, 100, 0),
+                new("wrinkle_under_eye", "\uB208\uBC11", 0, 100, 0),
+                new("wrinkle_glabella", "\uBBF8\uAC04", 0, 100, 0),
+                new("wrinkle_forehead", "\uC774\uB9C8", 0, 100, 0),
+                new("wrinkle_nasolabial", "\uD314\uC790", 0, 100, 0),
+                new("wrinkle_mouth_corner", "\uC785\uAC00", 0, 100, 0),
+                new("wrinkle_neck", "\uBAA9", 0, 100, 0),
+                new("wrinkle_nose_shadow", "\uCF54\uADF8\uB9BC\uC790", 0, 100, 0)
+            }),
+        new RetouchSection(
             "face_shape",
             "\uC5BC\uAD74\uD615",
             false,
@@ -917,7 +932,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 RetouchStageProcessorOutput result = _retouchStageProcessor.Process(
                     photo.BaseImage,
                     maskSnapshot,
-                    new RetouchOptions((int)Math.Round(stage)));
+                    CreateRetouchOptions((int)Math.Round(stage)));
                 return (maskSnapshot, result);
             });
 
@@ -1021,7 +1036,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void RetouchControl_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_isMaskDebugPreviewEnabled || _isDummyMaskRetouchPreviewEnabled)
+        if (_isMaskDebugPreviewEnabled)
         {
             return;
         }
@@ -1033,7 +1048,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (e.PropertyName is not (nameof(RetouchControl.Value) or nameof(RetouchControl.CurveChannel)) ||
             sender is not RetouchControl control ||
-            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves" or "blemish_remove" or "acne_remove" or "mole_age_spot_remove" or "skin_smooth" or "pore_clean" or "tone_even" or "skin_mask_range" or "skin_texture_protect" or "oval_face" or "face_balance" or "cheekbone_soften" or "jawline_define" or "chin_length" or "chin_width" or "jaw_balance" or "eye_height_balance" or "brow_height_balance" or "nose_center_balance" or "double_chin" or "neck_jaw_edge" or "background_color_amount"))
+            !IsPhotoAdjustmentControl(control))
         {
             return;
         }
@@ -1056,8 +1071,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async Task ApplyPhotoAdjustmentsAsync(bool showOverlay = true)
     {
-        if (_isMaskDebugPreviewEnabled || _isDummyMaskRetouchPreviewEnabled)
+        if (_isMaskDebugPreviewEnabled)
         {
+            return;
+        }
+
+        if (_isDummyMaskRetouchPreviewEnabled)
+        {
+            await ApplyDummyMaskRetouchAsync();
             return;
         }
 
@@ -1316,6 +1337,159 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             curveControl?.Value ?? 0,
             curveChannel,
             curveControl?.BuildCurveLookupTable(curveChannel) ?? CurveLookupTables.CreateIdentity());
+    }
+
+    private RetouchOptions CreateRetouchOptions(int requestedStage)
+    {
+        return new RetouchOptions(
+            requestedStage,
+            Toolset: CaptureRetouchToolset(requestedStage));
+    }
+
+    private RetouchToolset CaptureRetouchToolset(int requestedStage)
+    {
+        StagePreset stagePreset = StagePresetMapper.Map(requestedStage);
+        RetouchToolset defaults = RetouchToolset.FromStagePreset(stagePreset);
+        RetouchControl? skinSmooth = FindRetouchControl("skin_smooth");
+        RetouchControl? skinTextureProtect = FindRetouchControl("skin_texture_protect");
+        RetouchControl? poreClean = FindRetouchControl("pore_clean");
+        RetouchControl? blemishRemove = FindRetouchControl("blemish_remove");
+        RetouchControl? acneRemove = FindRetouchControl("acne_remove");
+        RetouchControl? moleAgeSpotRemove = FindRetouchControl("mole_age_spot_remove");
+        RetouchControl? toneEven = FindRetouchControl("tone_even");
+        RetouchControl? wrinkleGlobal = FindRetouchControl("wrinkle_global");
+        RetouchControl? wrinkleUnderEye = FindRetouchControl("wrinkle_under_eye");
+        RetouchControl? wrinkleGlabella = FindRetouchControl("wrinkle_glabella");
+        RetouchControl? wrinkleForehead = FindRetouchControl("wrinkle_forehead");
+        RetouchControl? wrinkleNasolabial = FindRetouchControl("wrinkle_nasolabial");
+        RetouchControl? wrinkleMouthCorner = FindRetouchControl("wrinkle_mouth_corner");
+        RetouchControl? wrinkleNeck = FindRetouchControl("wrinkle_neck");
+        RetouchControl? wrinkleNoseShadow = FindRetouchControl("wrinkle_nose_shadow");
+
+        bool skinOverride = HasUserOverride(skinSmooth) || HasUserOverride(skinTextureProtect);
+        bool blemishOverride = HasUserOverride(blemishRemove) || HasUserOverride(acneRemove) || HasUserOverride(moleAgeSpotRemove);
+        bool wrinkleOverride = HasUserOverride(wrinkleGlobal) ||
+            HasUserOverride(wrinkleUnderEye) ||
+            HasUserOverride(wrinkleGlabella) ||
+            HasUserOverride(wrinkleForehead) ||
+            HasUserOverride(wrinkleNasolabial) ||
+            HasUserOverride(wrinkleMouthCorner) ||
+            HasUserOverride(wrinkleNeck) ||
+            HasUserOverride(wrinkleNoseShadow);
+        bool toneOverride = HasUserOverride(toneEven);
+        bool textureOverride = HasUserOverride(poreClean) || HasUserOverride(skinTextureProtect);
+
+        SkinSmoothToolset skinSmoothToolset = defaults.SkinSmooth;
+        if (skinOverride)
+        {
+            skinSmoothToolset = skinSmoothToolset with
+            {
+                EnableSkinSmooth = NormalizeSlider(skinSmooth) > 0,
+                GlobalSmoothAmount = NormalizeSlider(skinSmooth),
+                DetailPreserveAmount = NormalizeSlider(skinTextureProtect, skinSmoothToolset.DetailPreserveAmount),
+                SoftProtectSmoothAmount = Math.Clamp(NormalizeSlider(skinSmooth) * 0.65, 0, 1)
+            };
+        }
+
+        BlemishToolset blemishToolset = defaults.Blemish;
+        if (blemishOverride)
+        {
+            double globalBlemish = Math.Max(
+                NormalizeSlider(blemishRemove),
+                Math.Max(NormalizeSlider(acneRemove), NormalizeSlider(moleAgeSpotRemove)));
+            blemishToolset = blemishToolset with
+            {
+                EnableBlemishReduce = globalBlemish > 0,
+                GlobalBlemishAmount = globalBlemish,
+                SmallSpotAmount = NormalizeSlider(blemishRemove, globalBlemish),
+                RedSpotAmount = NormalizeSlider(acneRemove, globalBlemish),
+                BrownSpotAmount = NormalizeSlider(moleAgeSpotRemove, globalBlemish),
+                PatchySpotAmount = NormalizeSlider(blemishRemove, globalBlemish)
+            };
+        }
+
+        WrinkleToolset wrinkleToolset = defaults.Wrinkle;
+        if (wrinkleOverride)
+        {
+            double globalWrinkle = NormalizeSlider(wrinkleGlobal);
+            wrinkleToolset = wrinkleToolset with
+            {
+                EnableWrinkleReduce = globalWrinkle > 0 || defaults.Wrinkle.EnableWrinkleReduce,
+                GlobalWrinkleAmount = globalWrinkle > 0 ? globalWrinkle : defaults.Wrinkle.GlobalWrinkleAmount,
+                UnderEyeWrinkleAmount = NormalizeSlider(wrinkleUnderEye, defaults.Wrinkle.UnderEyeWrinkleAmount),
+                GlabellaWrinkleAmount = NormalizeSlider(wrinkleGlabella, defaults.Wrinkle.GlabellaWrinkleAmount),
+                ForeheadWrinkleAmount = NormalizeSlider(wrinkleForehead, defaults.Wrinkle.ForeheadWrinkleAmount),
+                NasolabialFoldAmount = NormalizeSlider(wrinkleNasolabial, defaults.Wrinkle.NasolabialFoldAmount),
+                MouthCornerWrinkleAmount = NormalizeSlider(wrinkleMouthCorner, defaults.Wrinkle.MouthCornerWrinkleAmount),
+                NeckWrinkleAmount = NormalizeSlider(wrinkleNeck, defaults.Wrinkle.NeckWrinkleAmount),
+                NoseShadowWrinkleAmount = NormalizeSlider(wrinkleNoseShadow, defaults.Wrinkle.NoseShadowWrinkleAmount)
+            };
+        }
+
+        ToneEvenToolset toneToolset = defaults.ToneEven;
+        if (toneOverride)
+        {
+            double toneAmount = NormalizeSlider(toneEven);
+            toneToolset = toneToolset with
+            {
+                EnableToneEven = toneAmount > 0,
+                GlobalToneEvenAmount = toneAmount,
+                RednessReduceAmount = toneAmount,
+                YellowReduceAmount = toneAmount,
+                DullnessReduceAmount = toneAmount,
+                PatchyToneReduceAmount = toneAmount
+            };
+        }
+
+        TextureRestoreToolset textureToolset = defaults.TextureRestore;
+        if (textureOverride)
+        {
+            textureToolset = textureToolset with
+            {
+                EnableTextureRestore = true,
+                GlobalTextureAmount = NormalizeSlider(skinTextureProtect, defaults.TextureRestore.GlobalTextureAmount),
+                PoreTextureAmount = NormalizeSlider(poreClean, defaults.TextureRestore.PoreTextureAmount),
+                FineDetailAmount = NormalizeSlider(skinTextureProtect, defaults.TextureRestore.FineDetailAmount),
+                SkinGrainAmount = NormalizeSlider(skinTextureProtect, defaults.TextureRestore.SkinGrainAmount),
+                PlasticSkinGuardEnabled = true
+            };
+        }
+
+        return defaults with
+        {
+            SkinSmooth = skinSmoothToolset,
+            Blemish = blemishToolset,
+            Wrinkle = wrinkleToolset,
+            ToneEven = toneToolset,
+            TextureRestore = textureToolset,
+            UserOverrideFlags = new RetouchUserOverrideFlags(
+                skinOverride,
+                blemishOverride,
+                wrinkleOverride,
+                toneOverride,
+                textureOverride,
+                false)
+        };
+    }
+
+    private static bool HasUserOverride(RetouchControl? control)
+    {
+        return control is not null && Math.Abs(control.Value - control.DefaultValue) >= 0.001;
+    }
+
+    private static double NormalizeSlider(RetouchControl? control, double fallback = 0)
+    {
+        if (control is null)
+        {
+            return Math.Clamp(fallback, 0, 1);
+        }
+
+        if (Math.Abs(control.Maximum - control.Minimum) < 0.001)
+        {
+            return Math.Clamp(fallback, 0, 1);
+        }
+
+        return Math.Clamp((control.Value - control.Minimum) / (control.Maximum - control.Minimum), 0, 1);
     }
 
     private static string CreateNumberedSavePath(string sourcePath)
@@ -2019,6 +2193,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "tone_even" or
             "skin_mask_range" or
             "skin_texture_protect" or
+            "wrinkle_global" or
+            "wrinkle_under_eye" or
+            "wrinkle_glabella" or
+            "wrinkle_forehead" or
+            "wrinkle_nasolabial" or
+            "wrinkle_mouth_corner" or
+            "wrinkle_neck" or
+            "wrinkle_nose_shadow" or
             "oval_face" or
             "face_balance" or
             "cheekbone_soften" or

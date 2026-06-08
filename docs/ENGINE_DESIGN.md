@@ -191,6 +191,7 @@ Current first-pass retouch pipeline:
 - `TextureRestoreFilter` now provides the final skin texture restoration pass. It extracts a high-frequency detail preview from the original image, restores limited detail through RetouchAllow and weak SoftProtect masks, lowers restore strength over blemish and wrinkle repair masks, applies PlasticSkinGuard when texture loss is high, restores HardProtect from the original image, and caches analysis by Snapshot cache key so Stage/toolset changes only change strength.
 - `MaskQualityReport.MaxAllowedStage` gates the requested stage.
 - `RetouchStageProcessor` creates a mask-aware edge-preserving smooth base, applies local blemish and wrinkle passes, applies ToneEven, restores texture, and then runs `HardProtectFinalRestoreFilter`.
+- `RetouchToolset` and `AppliedRetouchOptions` now sit between UI slider values and `RetouchStageProcessor`. Stage presets provide defaults, while changed sliders are treated as user overrides without rebuilding SnapshotMask.
 - `RetouchStageProcessor` records `PipelineDebugReport` so Stage changes can be checked as filter-only passes over a reused SnapshotMask.
 - `RetouchDebugExporter` saves stage, smooth base, detail layer, tone-even image, texture restored image, retouch allow applied, soft protect applied, hard protect restored, final retouch mask, final outputs, pipeline debug images, and compare overlays.
 

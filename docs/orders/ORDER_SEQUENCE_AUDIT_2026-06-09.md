@@ -43,7 +43,7 @@ Important caveat:
 | ORDER_14 | TextureRestore | Implemented first-pass `TextureRestoreFilter`; needs visual review. |
 | ORDER_15 | HardProtect final verify | Implemented first-pass `HardProtectFinalRestoreFilter`; needs visual review. |
 | ORDER_16 | Pipeline Integration Review | Implemented report/debug additions; build verification pending in this backup run. |
-| ORDER_17 | Toolset / Slider / StagePreset alignment | Queued/Planned. Do after ORDER_16 build is clean. |
+| ORDER_17 | Toolset / Slider / StagePreset alignment | Implemented / Needs UI binding review. |
 | ORDER_18 | ViewModel / UI Binding review | Queued/Planned. |
 | ORDER_19 | Stage 1-10 preset real tuning | Queued/Planned. |
 | ORDER_20 | Before / After + Debug Mask Panel | Queued/Planned. |

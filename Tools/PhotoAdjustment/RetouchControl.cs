@@ -63,6 +63,7 @@ public sealed class RetouchControl : INotifyPropertyChanged
     public double TickFrequency { get; }
     public double SmallChange { get; }
     public double LargeChange { get; }
+    public double DefaultValue => _defaultValue;
     public bool IsSnapToTickEnabled { get; }
     public string ValueTextFormat { get; }
     public bool IsColorPicker { get; }

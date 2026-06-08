@@ -27,16 +27,18 @@ public sealed class RetouchStageProcessor
         FaceMaskSet masks = snapshot.Masks;
         ValidateMaskSize(masks, width, height);
 
-        int requestedStage = Math.Clamp(options.RequestedStage, 1, 10);
+        AppliedRetouchOptions appliedOptions = AppliedRetouchOptions.Create(snapshot.QualityReport, options);
+        int requestedStage = appliedOptions.RequestedStage;
         int maxAllowedStage = Math.Clamp(snapshot.QualityReport.MaxAllowedStage, 1, 10);
-        int appliedStage = Math.Min(requestedStage, maxAllowedStage);
-        StagePreset preset = ApplyFailSafeOpacity(StagePresetMapper.Map(appliedStage), snapshot.QualityReport);
+        int appliedStage = appliedOptions.AppliedStage;
+        StagePreset preset = ApplyFailSafeOpacity(appliedOptions.StagePreset, snapshot.QualityReport);
+        RetouchToolset toolset = appliedOptions.RetouchToolset;
 
         int stride = width * 4;
         byte[] originalPixels = new byte[stride * height];
         bitmap.CopyPixels(originalPixels, stride, 0);
 
-        byte[] smoothBasePixels = options.EnableSkinSmooth
+        byte[] smoothBasePixels = options.EnableSkinSmooth && toolset.SkinSmooth.EnableSkinSmooth
             ? CreateSmoothBase(originalPixels, masks, width, height, preset.SkinSmoothAmount)
             : (byte[])originalPixels.Clone();
 
@@ -72,13 +74,13 @@ public sealed class RetouchStageProcessor
             masks.HardProtectMask,
             appliedStage,
             preset,
-            options.WrinkleToolset,
+            options.WrinkleToolset ?? toolset.Wrinkle,
             snapshot.QualityReport,
             blemishResult.BlemishMask));
-        BitmapSource toneEvenImage = options.EnableToneEven
+        BitmapSource toneEvenImage = options.EnableToneEven && toolset.ToneEven.EnableToneEven
             ? ApplyToneEven(wrinkleResult.WrinkleReducedImage, originalPixels, masks, width, height, preset.ToneEvenAmount)
             : wrinkleResult.WrinkleReducedImage;
-        TextureRestoreResult textureResult = options.EnableTextureRestore
+        TextureRestoreResult textureResult = options.EnableTextureRestore && toolset.TextureRestore.EnableTextureRestore
             ? _textureRestoreFilter.Apply(new TextureRestoreInput(
                 bitmap,
                 toneEvenImage,
@@ -88,7 +90,7 @@ public sealed class RetouchStageProcessor
                 masks.HardProtectMask,
                 appliedStage,
                 preset,
-                options.TextureRestoreToolset,
+                options.TextureRestoreToolset ?? toolset.TextureRestore,
                 snapshot.QualityReport,
                 blemishResult.BlemishMask,
                 wrinkleResult.WrinkleAppliedMask))
@@ -115,11 +117,11 @@ public sealed class RetouchStageProcessor
         }
         List<string> filtersExecuted = new()
         {
-            options.EnableSkinSmooth ? "SkinSmoothFilter" : "SkinSmoothFilter(skipped)",
+            options.EnableSkinSmooth && toolset.SkinSmooth.EnableSkinSmooth ? "SkinSmoothFilter" : "SkinSmoothFilter(skipped)",
             "BlemishReduceFilter",
             "WrinkleSoftReduceFilter",
-            options.EnableToneEven ? "ToneEvenFilter" : "ToneEvenFilter(skipped)",
-            options.EnableTextureRestore ? "TextureRestoreFilter" : "TextureRestoreFilter(skipped)",
+            options.EnableToneEven && toolset.ToneEven.EnableToneEven ? "ToneEvenFilter" : "ToneEvenFilter(skipped)",
+            options.EnableTextureRestore && toolset.TextureRestore.EnableTextureRestore ? "TextureRestoreFilter" : "TextureRestoreFilter(skipped)",
             "HardProtectFinalRestoreFilter"
         };
 
@@ -193,6 +195,7 @@ public sealed class RetouchStageProcessor
             hardProtectResult.AfterRestoreDiffMask,
             hardProtectResult.Report,
             appliedStage,
+            appliedOptions,
             report,
             pipelineReport,
             warnings);

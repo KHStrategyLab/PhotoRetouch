@@ -77,6 +77,7 @@ public sealed record RetouchStageProcessorOutput(
     MaskPlane HardProtectAfterRestoreDiffMask,
     HardProtectRestoreReport HardProtectRestoreReport,
     int AppliedStage,
+    AppliedRetouchOptions AppliedOptions,
     RetouchProcessReport Report,
     PipelineDebugReport PipelineReport,
     IReadOnlyList<string> DebugWarnings);

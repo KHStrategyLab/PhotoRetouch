@@ -242,7 +242,9 @@ Required test image set:
 - Texture debug exports include `debug_texture_blur_original.png`, `debug_texture_detail_layer.png`, `debug_texture_restore_mask.png`, `debug_texture_restore_strength_map.png`, `debug_texture_restored_image.png`, `debug_texture_before_after.png`, `debug_plastic_skin_risk_map.png`, and `debug_final_after_texture_stage_*.png`.
 - `HardProtectFinalRestoreFilter` is added as the last retouch step so HardProtect pixels are restored from the original after all filter stages.
 - `PipelineDebugReport` and pipeline debug images are added for ORDER_16 integration review. The current filter order is SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, and HardProtectFinalRestore.
-- `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-29` are accounted for, while `ORDER_30` has only been referenced by title.
+- `RetouchToolset` and `AppliedRetouchOptions` are added for ORDER_17. The top Stage slider provides defaults, and existing skin/tone/texture sliders plus the new wrinkle section can override the stage defaults without rebuilding SnapshotMask.
+- The wrinkle section adds 전체, 눈밑, 미간, 이마, 팔자, 입가, 목, and 코그림자 controls for the first wrinkle toolset pass.
+- `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-30` are accounted for.
 - `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
 - Nostril debug exports include `debug_nose_lower_roi.png`, `debug_nostril_dark_candidates.png`, `debug_nostril_components.png`, `debug_warped_standard_nostril.png`, `debug_final_nostril_mask.png`, `debug_hard_protect_with_nostril.png`, and `debug_final_overlay_with_nostril.png`.
@@ -276,6 +278,7 @@ Required test image set:
 - Actual skin mask and facial part detection.
 - Debug mask export for every required mask.
 - Dedicated `ToneEvenFilter` with candidate masks, process report, and slider/toolset binding. The current code has only a simple mask-aware tone-even processor stage.
+- ORDER_18 ViewModel/UI binding review for the new Toolset and slider flow.
 - Nostril detector with fallback lower-nose protection.
 - HardProtect, SoftProtect, and RetouchAllow mask composition.
 - Mask quality validation and debug warnings.
