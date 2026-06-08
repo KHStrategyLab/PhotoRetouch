@@ -40,6 +40,7 @@ These items are not discarded, but they are outside the current V1 engine scope:
 - Advanced generative AI retouching.
 - Background replacement.
 - Clothing retouch.
+- Face left/right balance and symmetry correction as `ShapeBalance`.
 - Advanced manual editing tools.
 - Multi-person batch.
 - GPU optimization.
@@ -56,6 +57,21 @@ Rules:
 - `ORDER_01` to `ORDER_30`: V1 core engine development.
 - `ORDER_31` to `ORDER_35`: V1 stabilization / productization / distribution readiness.
 - Hold items: review after V1.
+
+## V2 ShapeBalance Hold Rule
+
+Left/right balance and symmetry correction must not be mixed directly into the V1 skin retouch engine.
+
+After V1, add it as a separate V2 `ShapeBalance` module.
+
+Principles:
+
+- Reuse the existing SnapshotMask, FaceLandmark, and HardProtect structure.
+- Treat ShapeBalance as Geometry Warp, not as a skin filter.
+- Transform the image and masks with the same `TransformMap`.
+- Use HardProtect to prevent excessive deformation of eyes, lips, nostrils, and hairline.
+- Keep Skin Stage and ShapeBalance Stage separate.
+- Start with weak/default-safe values.
 
 ## Codex Working Rules
 

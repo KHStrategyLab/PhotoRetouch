@@ -112,6 +112,7 @@ PhotoRetouch is a professional ID photo retouching tool for photo studio work. I
 - Preserve the subject's original identity and impression.
 - Do not alter eye, nose, mouth, eyebrow, jaw, or face shape from skin filters.
 - Geometry changes belong only in explicit face-shape/feature tools, not in skin cleanup filters.
+- Left/right balance and symmetry correction are not part of the V1 skin retouch engine. Keep them for a separate V2 `ShapeBalance` geometry-warp module that reuses SnapshotMask, FaceLandmark, and HardProtect.
 - Skin filters should remove or reduce only the intended flaw, such as blemishes, acne, moles, or age spots.
 - Skin texture must remain usable for ID photos. If a filter smears pores, wrinkles, or natural male skin texture, it is too broad.
 - Use narrow masks, skin-tone targeting, optional manual wide-average skin-tone sampling, local edge protection, and feathered protection around eyes, nose, and mouth.
