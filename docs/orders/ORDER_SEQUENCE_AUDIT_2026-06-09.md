@@ -46,7 +46,7 @@ Important caveat:
 | ORDER_16 | Pipeline Integration Review | Implemented report/debug additions; build verification pending in this backup run. |
 | ORDER_17 | Toolset / Slider / StagePreset alignment | Implemented / Needs UI binding review. |
 | ORDER_18 | ViewModel / UI Binding review | Implemented / Needs visual review. |
-| ORDER_19 | Stage 1-10 preset real tuning | Queued/Planned. |
+| ORDER_19 | Stage 1-10 preset real tuning | Implemented / Needs visual review. |
 | ORDER_20 | Before / After + Debug Mask Panel | Queued/Planned. |
 | ORDER_21 | HardProtect test set | Queued/Planned. |
 | ORDER_22 | Full test image set | Queued/Planned. |

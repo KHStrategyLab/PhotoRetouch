@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -79,6 +80,7 @@ public static class RetouchDebugExporter
         SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.FinalOverlayMask), Path.Combine(outputDirectory, "debug_final_retouch_mask.png"));
         SaveBitmap(output.FinalImage, Path.Combine(outputDirectory, $"debug_final_output_stage_{output.Report.AppliedStage}.png"));
 
+        Dictionary<int, RetouchStageProcessorOutput> stageOutputs = new();
         foreach (int stage in new[] { 1, 3, 5, 7, 10 })
         {
             RetouchStageProcessor stageProcessor = new();
@@ -86,6 +88,7 @@ public static class RetouchDebugExporter
                 original,
                 snapshot,
                 new RetouchOptions(stage));
+            stageOutputs[stage] = stageOutput;
             SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_output_stage_{stage}.png"));
             SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_stage_{stage}.png"));
             SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_after_blemish_stage_{stage}.png"));
@@ -95,7 +98,16 @@ public static class RetouchDebugExporter
             {
                 SaveBitmap(stageOutput.HardProtectFinalImage, Path.Combine(outputDirectory, $"debug_final_stage_{stage}_hardprotect_check.png"));
                 SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_pipeline_stage_{stage}_final.png"));
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(stageOutput.HardProtectAfterRestoreDiffMask), Path.Combine(outputDirectory, $"debug_stage_hardprotect_diff_{stage}.png"));
             }
+        }
+
+        if (stageOutputs.TryGetValue(1, out RetouchStageProcessorOutput? stage1) &&
+            stageOutputs.TryGetValue(5, out RetouchStageProcessorOutput? stage5) &&
+            stageOutputs.TryGetValue(10, out RetouchStageProcessorOutput? stage10))
+        {
+            SaveBitmap(CreateStageCompareSheet(original, stage1.FinalImage, stage5.FinalImage, stage10.FinalImage), Path.Combine(outputDirectory, "debug_stage_1_5_10_compare.png"));
+            SaveStageGateReport(output.Report, stage1, stage5, stage10, Path.Combine(outputDirectory, "debug_stage_gate_report.json"));
         }
 
         SaveBitmap(CreateCompareOverlay(original, output.FinalImage, snapshot.Masks.HardProtectMask), Path.Combine(outputDirectory, "debug_hard_protect_compare.png"));
@@ -103,6 +115,7 @@ public static class RetouchDebugExporter
         SaveBitmap(CreateCompareOverlay(original, output.FinalImage, snapshot.Masks.RetouchAllowMask), Path.Combine(outputDirectory, "debug_retouch_allow_compare.png"));
         SaveReport(output.Report, Path.Combine(outputDirectory, "debug_retouch_report.txt"));
         SavePipelineReport(output.PipelineReport, Path.Combine(outputDirectory, "debug_pipeline_report.txt"));
+        SaveStagePresetValues(Path.Combine(outputDirectory, "debug_stage_preset_values.json"));
     }
 
     private static BitmapSource CreateStageInfoImage(int stage, int limit)
@@ -207,6 +220,51 @@ public static class RetouchDebugExporter
         File.WriteAllLines(path, lines, System.Text.Encoding.UTF8);
     }
 
+    private static void SaveStagePresetValues(string path)
+    {
+        JsonSerializerOptions options = new() { WriteIndented = true };
+        File.WriteAllText(path, JsonSerializer.Serialize(StagePresetMapper.GetAll(), options), System.Text.Encoding.UTF8);
+    }
+
+    private static void SaveStageGateReport(
+        RetouchProcessReport currentReport,
+        RetouchStageProcessorOutput stage1,
+        RetouchStageProcessorOutput stage5,
+        RetouchStageProcessorOutput stage10,
+        string path)
+    {
+        var report = new
+        {
+            Current = CreateStageReport(currentReport),
+            Stage1 = CreateStageReport(stage1.Report),
+            Stage5 = CreateStageReport(stage5.Report),
+            Stage10 = CreateStageReport(stage10.Report),
+            SnapshotMaskReused = true
+        };
+        JsonSerializerOptions options = new() { WriteIndented = true };
+        File.WriteAllText(path, JsonSerializer.Serialize(report, options), System.Text.Encoding.UTF8);
+    }
+
+    private static object CreateStageReport(RetouchProcessReport report)
+    {
+        return new
+        {
+            report.RequestedStage,
+            report.AppliedStage,
+            report.MaxAllowedStage,
+            StageLimited = report.IsStageLimited,
+            report.MaskQualityScore,
+            report.SkinSmoothAmount,
+            report.BlemishReduceAmount,
+            report.WrinkleReduceAmount,
+            report.ToneEvenAmount,
+            report.TextureRestoreAmount,
+            report.PlasticSkinRiskScore,
+            HardProtectDiff = report.HardProtectChangedAfterRestoreCount,
+            report.IsHardProtectClean
+        };
+    }
+
     private static void SavePipelineReport(PipelineDebugReport report, string path)
     {
         string[] lines =
@@ -298,6 +356,79 @@ public static class RetouchDebugExporter
         }
 
         return CreateBitmap(width, height, outputPixels);
+    }
+
+    private static BitmapSource CreateStageCompareSheet(
+        BitmapSource original,
+        BitmapSource stage1,
+        BitmapSource stage5,
+        BitmapSource stage10)
+    {
+        BitmapSource[] sources =
+        {
+            ToBgra32(original),
+            ToBgra32(stage1),
+            ToBgra32(stage5),
+            ToBgra32(stage10)
+        };
+
+        int width = sources[0].PixelWidth;
+        int height = sources[0].PixelHeight;
+        int outputWidth = width * sources.Length;
+        int sourceStride = width * 4;
+        int outputStride = outputWidth * 4;
+        byte[] outputPixels = new byte[outputStride * height];
+
+        for (int sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
+        {
+            byte[] sourcePixels = new byte[sourceStride * height];
+            sources[sourceIndex].CopyPixels(sourcePixels, sourceStride, 0);
+
+            for (int y = 0; y < height; y++)
+            {
+                int sourceOffset = y * sourceStride;
+                int outputOffset = y * outputStride + sourceIndex * sourceStride;
+                Buffer.BlockCopy(sourcePixels, sourceOffset, outputPixels, outputOffset, sourceStride);
+            }
+
+            if (sourceIndex > 0)
+            {
+                DrawVerticalDivider(outputPixels, outputWidth, height, sourceIndex * width);
+            }
+        }
+
+        return CreateBitmap(outputWidth, height, outputPixels);
+    }
+
+    private static BitmapSource ToBgra32(BitmapSource source)
+    {
+        BitmapSource bgra = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        bgra.Freeze();
+        return bgra;
+    }
+
+    private static void DrawVerticalDivider(byte[] pixels, int width, int height, int x)
+    {
+        int stride = width * 4;
+        for (int y = 0; y < height; y++)
+        {
+            for (int offset = -1; offset <= 1; offset++)
+            {
+                int dividerX = x + offset;
+                if (dividerX < 0 || dividerX >= width)
+                {
+                    continue;
+                }
+
+                int index = y * stride + dividerX * 4;
+                pixels[index] = 255;
+                pixels[index + 1] = 255;
+                pixels[index + 2] = 255;
+                pixels[index + 3] = 255;
+            }
+        }
     }
 
     private static BitmapSource CreatePartRestoreCheck(BitmapSource original, BitmapSource finalImage, MaskPlane partMask)

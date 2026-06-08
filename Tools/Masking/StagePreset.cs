@@ -54,6 +54,139 @@ public static class StagePresetMapper
     public static StagePreset Map(int stage)
     {
         int clampedStage = Math.Clamp(stage, 1, 10);
-        return Presets[clampedStage - 1];
+        return ApplyOrder19Tuning(Presets[clampedStage - 1]);
+    }
+
+    public static IReadOnlyList<StagePreset> GetAll()
+    {
+        return Enumerable.Range(1, 10)
+            .Select(Map)
+            .ToArray();
+    }
+
+    private static StagePreset ApplyOrder19Tuning(StagePreset preset)
+    {
+        return preset.Stage switch
+        {
+            1 => preset with
+            {
+                SkinSmoothAmount = 0.06,
+                BlemishReduceAmount = 0.03,
+                WrinkleReduceAmount = 0.02,
+                ToneEvenAmount = 0.03,
+                TextureRestoreAmount = 0.98,
+                PlasticSkinGuardAmount = 0.34,
+                SoftProtectOpacity = 0.10,
+                RetouchAllowOpacity = 0.12,
+                DetailRestoreAmount = 0.96
+            },
+            2 => preset with
+            {
+                SkinSmoothAmount = 0.12,
+                BlemishReduceAmount = 0.07,
+                WrinkleReduceAmount = 0.05,
+                ToneEvenAmount = 0.07,
+                TextureRestoreAmount = 0.92,
+                PlasticSkinGuardAmount = 0.36,
+                RetouchAllowOpacity = 0.24,
+                DetailRestoreAmount = 0.88
+            },
+            3 => preset with
+            {
+                SkinSmoothAmount = 0.20,
+                BlemishReduceAmount = 0.13,
+                WrinkleReduceAmount = 0.09,
+                ToneEvenAmount = 0.12,
+                TextureRestoreAmount = 0.86,
+                PlasticSkinGuardAmount = 0.40,
+                RetouchAllowOpacity = 0.36,
+                DetailRestoreAmount = 0.80
+            },
+            4 => preset with
+            {
+                SkinSmoothAmount = 0.30,
+                BlemishReduceAmount = 0.21,
+                WrinkleReduceAmount = 0.15,
+                ToneEvenAmount = 0.20,
+                TextureRestoreAmount = 0.78,
+                PlasticSkinGuardAmount = 0.45,
+                RetouchAllowOpacity = 0.48,
+                DetailRestoreAmount = 0.70
+            },
+            5 => preset with
+            {
+                SkinSmoothAmount = 0.40,
+                BlemishReduceAmount = 0.30,
+                WrinkleReduceAmount = 0.21,
+                ToneEvenAmount = 0.30,
+                TextureRestoreAmount = 0.72,
+                PlasticSkinGuardAmount = 0.50,
+                RetouchAllowOpacity = 0.60,
+                DetailRestoreAmount = 0.62
+            },
+            6 => preset with
+            {
+                SkinSmoothAmount = 0.50,
+                BlemishReduceAmount = 0.39,
+                WrinkleReduceAmount = 0.28,
+                ToneEvenAmount = 0.39,
+                TextureRestoreAmount = 0.66,
+                PlasticSkinGuardAmount = 0.56,
+                RetouchAllowOpacity = 0.68,
+                DetailRestoreAmount = 0.54
+            },
+            7 => preset with
+            {
+                SkinSmoothAmount = 0.60,
+                BlemishReduceAmount = 0.48,
+                WrinkleReduceAmount = 0.36,
+                ToneEvenAmount = 0.48,
+                TextureRestoreAmount = 0.60,
+                PlasticSkinGuardAmount = 0.62,
+                RetouchAllowOpacity = 0.76,
+                DetailRestoreAmount = 0.47
+            },
+            8 => preset with
+            {
+                SkinSmoothAmount = 0.68,
+                BlemishReduceAmount = 0.56,
+                WrinkleReduceAmount = 0.44,
+                ToneEvenAmount = 0.56,
+                TextureRestoreAmount = 0.54,
+                PlasticSkinGuardAmount = 0.68,
+                RetouchAllowOpacity = 0.84,
+                DetailRestoreAmount = 0.41
+            },
+            9 => preset with
+            {
+                SkinSmoothAmount = 0.75,
+                BlemishReduceAmount = 0.64,
+                WrinkleReduceAmount = 0.52,
+                ToneEvenAmount = 0.62,
+                TextureRestoreAmount = 0.50,
+                PoreTextureAmount = 0.42,
+                FineDetailAmount = 0.46,
+                SkinGrainAmount = 0.38,
+                PlasticSkinGuardAmount = 0.74,
+                RetouchAllowOpacity = 0.90,
+                DetailRestoreAmount = 0.38
+            },
+            10 => preset with
+            {
+                SkinSmoothAmount = 0.82,
+                BlemishReduceAmount = 0.70,
+                WrinkleReduceAmount = 0.58,
+                ToneEvenAmount = 0.66,
+                TextureRestoreAmount = 0.48,
+                PoreTextureAmount = 0.48,
+                FineDetailAmount = 0.52,
+                SkinGrainAmount = 0.44,
+                PlasticSkinGuardAmount = 0.80,
+                SoftProtectOpacity = 0.46,
+                RetouchAllowOpacity = 0.94,
+                DetailRestoreAmount = 0.36
+            },
+            _ => preset
+        };
     }
 }

@@ -246,6 +246,8 @@ Required test image set:
 - The wrinkle section adds 전체, 눈밑, 미간, 이마, 팔자, 입가, 목, and 코그림자 controls for the first wrinkle toolset pass.
 - `RetouchBindingReport` is added for ORDER_18. Stage and slider changes now expose whether the pipeline used cache or rebuilt the snapshot, and the top toolbar shows the last binding event.
 - A minimal `재분석` action rebuilds SnapshotMask explicitly; Stage and Slider changes continue to use `GetOrCreate`.
+- Stage `1-10` is tuned for ORDER_19. Stage `1-3` keeps a natural look, Stage `4-6` targets studio/profile cleanup, Stage `7-8` is stronger beauty retouch, and Stage `9-10` is strong test/sample retouch with HardProtect still restored.
+- Retouch debug export now writes `debug_stage_1_5_10_compare.png`, `debug_stage_preset_values.json`, `debug_stage_gate_report.json`, and Stage `1/5/10` HardProtect diff previews.
 - `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-30` are accounted for.
 - `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
@@ -280,7 +282,7 @@ Required test image set:
 - Actual skin mask and facial part detection.
 - Debug mask export for every required mask.
 - Dedicated `ToneEvenFilter` with candidate masks, process report, and slider/toolset binding. The current code has only a simple mask-aware tone-even processor stage.
-- ORDER_19 real Stage 1-10 tuning after visual review of the new binding flow.
+- ORDER_19 visual review on real portrait test images.
 - Nostril detector with fallback lower-nose protection.
 - HardProtect, SoftProtect, and RetouchAllow mask composition.
 - Mask quality validation and debug warnings.
