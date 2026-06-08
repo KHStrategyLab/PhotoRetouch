@@ -6,5 +6,6 @@ public sealed record RetouchOptions(
     bool EnableToneEven = false,
     bool EnableTextureRestore = true,
     WrinkleToolset? WrinkleToolset = null,
+    TextureRestoreToolset? TextureRestoreToolset = null,
     bool ShowDebugOverlay = true,
     bool SaveDebugImages = true);

@@ -493,3 +493,21 @@ Hold 처리된 오더:
 빌드 실행 여부:
 
 * 없음. 백업 작업 지시에 따라 빌드는 실행하지 않음.
+
+## 2026-06-09 Order Sequence Audit Update
+
+추가 확인:
+
+* `ORDER_00`부터 `ORDER_29`까지의 오더 흐름을 다시 대조함.
+* `ORDER_13_TONE_EVEN`은 늦게 도착했지만 `ORDER_14_TEXTURE_RESTORE` 앞에 위치해야 하는 실제 오더로 확인됨.
+* `ORDER_17`부터 `ORDER_29`까지는 `Queued / Planned` 상태로 보관함.
+* `ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION`은 `ORDER_29`의 후속 오더로 언급되었지만, 전문은 아직 도착하지 않음.
+
+추가 문서:
+
+* `docs/orders/ORDER_SEQUENCE_AUDIT_2026-06-09.md`
+
+현재 주의:
+
+* `ToneEven`은 현재 단순 처리 단계만 연결되어 있고, 전용 `ToneEvenFilter` / Toolset / Slider 정렬은 아직 완료되지 않았다.
+* 다음 실제 진행은 `ORDER_16` 빌드 검증 후 `ORDER_17_PROJECT_STRUCTURE_TOOLSET_SLIDER`가 맞다.

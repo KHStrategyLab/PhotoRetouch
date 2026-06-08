@@ -238,6 +238,12 @@ Required test image set:
 - Blemish debug exports include `debug_blemish_search_mask.png`, `debug_blemish_candidates.png`, `debug_blemish_components.png`, `debug_blemish_mask.png`, `debug_blemish_corrected.png`, `debug_blemish_before_after.png`, and `debug_final_after_blemish_stage_*.png`.
 - `WrinkleSoftReduceFilter` is added as the first mask-based wrinkle-softening pass. It finds linear dark candidates through `SoftProtectMask` plus weak `RetouchAllowMask`, separates under-eye, glabella, forehead, nasolabial, mouth-corner, neck, and nose-shadow masks, clips against `HardProtectMask`, preserves facial structure, and reuses wrinkle analysis by Snapshot cache key while Stage and toolset values adjust strength.
 - Wrinkle debug exports include `debug_wrinkle_search_mask.png`, `debug_wrinkle_candidates.png`, `debug_wrinkle_components.png`, `debug_wrinkle_under_eye_mask.png`, `debug_wrinkle_glabella_mask.png`, `debug_wrinkle_forehead_mask.png`, `debug_wrinkle_nasolabial_mask.png`, `debug_wrinkle_mouth_corner_mask.png`, `debug_wrinkle_neck_mask.png`, `debug_wrinkle_nose_shadow_mask.png`, `debug_wrinkle_combined_mask.png`, `debug_wrinkle_applied_mask.png`, `debug_wrinkle_corrected.png`, `debug_wrinkle_before_after.png`, and `debug_final_after_wrinkle_stage_*.png`.
+- `TextureRestoreFilter` is upgraded as the final texture restoration pass. It extracts original detail, builds a texture restore mask, reduces restoration over blemish and wrinkle repair masks, applies weak SoftProtect restoration, guards against plastic-looking skin, and reuses texture analysis by Snapshot cache key while Stage/toolset values adjust strength.
+- Texture debug exports include `debug_texture_blur_original.png`, `debug_texture_detail_layer.png`, `debug_texture_restore_mask.png`, `debug_texture_restore_strength_map.png`, `debug_texture_restored_image.png`, `debug_texture_before_after.png`, `debug_plastic_skin_risk_map.png`, and `debug_final_after_texture_stage_*.png`.
+- `HardProtectFinalRestoreFilter` is added as the last retouch step so HardProtect pixels are restored from the original after all filter stages.
+- `PipelineDebugReport` and pipeline debug images are added for ORDER_16 integration review. The current filter order is SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, and HardProtectFinalRestore.
+- `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-29` are accounted for, while `ORDER_30` has only been referenced by title.
+- `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
 - Nostril debug exports include `debug_nose_lower_roi.png`, `debug_nostril_dark_candidates.png`, `debug_nostril_components.png`, `debug_warped_standard_nostril.png`, `debug_final_nostril_mask.png`, `debug_hard_protect_with_nostril.png`, and `debug_final_overlay_with_nostril.png`.
 - The top toolbar Stage `1-10` slider now drives the first-pass retouch pipeline. Snapshot masks are reused; only `RetouchStageProcessor` reruns when Stage changes.
@@ -269,6 +275,7 @@ Required test image set:
 - MaskEngine scaffolding.
 - Actual skin mask and facial part detection.
 - Debug mask export for every required mask.
+- Dedicated `ToneEvenFilter` with candidate masks, process report, and slider/toolset binding. The current code has only a simple mask-aware tone-even processor stage.
 - Nostril detector with fallback lower-nose protection.
 - HardProtect, SoftProtect, and RetouchAllow mask composition.
 - Mask quality validation and debug warnings.

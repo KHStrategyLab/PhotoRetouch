@@ -19,9 +19,32 @@ public sealed record RetouchProcessReport(
     double BlemishAverageCorrectionStrength,
     int WrinkleAppliedCount,
     double WrinkleAverageCorrectionStrength,
+    double TextureRetouchAllowAmount,
+    double TextureSoftProtectAmount,
+    double PlasticSkinRiskScore,
+    int HardProtectChangedBeforeRestoreCount,
+    int HardProtectChangedAfterRestoreCount,
+    bool IsHardProtectClean,
     IReadOnlyList<string> DebugWarnings)
 {
     public bool IsStageLimited => AppliedStage < RequestedStage;
+}
+
+public sealed record PipelineDebugReport(
+    string ImageId,
+    string SnapshotMaskCacheKey,
+    int RequestedStage,
+    int AppliedStage,
+    DateTime PipelineStartedAtUtc,
+    DateTime PipelineFinishedAtUtc,
+    bool AnalysisExecuted,
+    bool SnapshotMaskReused,
+    bool QualityReportReused,
+    IReadOnlyList<string> FiltersExecuted,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<string> Errors)
+{
+    public double DurationMilliseconds => (PipelineFinishedAtUtc - PipelineStartedAtUtc).TotalMilliseconds;
 }
 
 public sealed record RetouchStageProcessorOutput(
@@ -41,6 +64,19 @@ public sealed record RetouchStageProcessorOutput(
     MaskPlane WrinkleCandidateMask,
     MaskPlane WrinkleAppliedMask,
     WrinkleProcessReport WrinkleReport,
+    System.Windows.Media.Imaging.BitmapSource ToneEvenImage,
+    System.Windows.Media.Imaging.BitmapSource FinalTextureRestoredImage,
+    System.Windows.Media.Imaging.BitmapSource FinalTextureBlurOriginalImage,
+    System.Windows.Media.Imaging.BitmapSource FinalTextureDetailLayerImage,
+    MaskPlane TextureRestoreMask,
+    MaskPlane TextureRestoreStrengthMap,
+    MaskPlane PlasticSkinRiskMap,
+    TextureRestoreProcessReport TextureRestoreReport,
+    System.Windows.Media.Imaging.BitmapSource HardProtectFinalImage,
+    MaskPlane HardProtectBeforeRestoreDiffMask,
+    MaskPlane HardProtectAfterRestoreDiffMask,
+    HardProtectRestoreReport HardProtectRestoreReport,
     int AppliedStage,
     RetouchProcessReport Report,
+    PipelineDebugReport PipelineReport,
     IReadOnlyList<string> DebugWarnings);

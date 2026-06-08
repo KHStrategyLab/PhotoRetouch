@@ -7,12 +7,15 @@ public sealed class RetouchStageProcessor
 {
     private readonly IBlemishReduceFilter _blemishReduceFilter = new BlemishReduceFilter();
     private readonly IWrinkleSoftReduceFilter _wrinkleSoftReduceFilter = new WrinkleSoftReduceFilter();
+    private readonly ITextureRestoreFilter _textureRestoreFilter = new TextureRestoreFilter();
+    private readonly IHardProtectFinalRestoreFilter _hardProtectFinalRestoreFilter = new HardProtectFinalRestoreFilter();
 
     public RetouchStageProcessorOutput Process(BitmapSource originalImage, FaceSnapshotMaskSet snapshot, RetouchOptions options)
     {
         ArgumentNullException.ThrowIfNull(originalImage);
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(options);
+        DateTime pipelineStartedAtUtc = DateTime.UtcNow;
 
         BitmapSource bitmap = originalImage.Format == PixelFormats.Bgra32
             ? originalImage
@@ -36,10 +39,6 @@ public sealed class RetouchStageProcessor
         byte[] smoothBasePixels = options.EnableSkinSmooth
             ? CreateSmoothBase(originalPixels, masks, width, height, preset.SkinSmoothAmount)
             : (byte[])originalPixels.Clone();
-        if (options.EnableToneEven)
-        {
-            ApplyToneEven(smoothBasePixels, originalPixels, width, height, preset.ToneEvenAmount);
-        }
 
         byte[] detailLayerPixels = CreateDetailLayer(originalPixels, width, height);
         byte[] textureRestoredPixels = options.EnableTextureRestore
@@ -76,15 +75,53 @@ public sealed class RetouchStageProcessor
             options.WrinkleToolset,
             snapshot.QualityReport,
             blemishResult.BlemishMask));
-        BitmapSource finalImage = wrinkleResult.WrinkleReducedImage;
+        BitmapSource toneEvenImage = options.EnableToneEven
+            ? ApplyToneEven(wrinkleResult.WrinkleReducedImage, originalPixels, masks, width, height, preset.ToneEvenAmount)
+            : wrinkleResult.WrinkleReducedImage;
+        TextureRestoreResult textureResult = options.EnableTextureRestore
+            ? _textureRestoreFilter.Apply(new TextureRestoreInput(
+                bitmap,
+                toneEvenImage,
+                snapshot,
+                masks.RetouchAllowMask,
+                masks.SoftProtectMask,
+                masks.HardProtectMask,
+                appliedStage,
+                preset,
+                options.TextureRestoreToolset,
+                snapshot.QualityReport,
+                blemishResult.BlemishMask,
+                wrinkleResult.WrinkleAppliedMask))
+            : CreateDisabledTextureRestoreResult(wrinkleResult.WrinkleReducedImage, width, height, appliedStage);
+        HardProtectFinalRestoreResult hardProtectResult = _hardProtectFinalRestoreFilter.Apply(new HardProtectFinalRestoreInput(
+            bitmap,
+            textureResult.TextureRestoredImage,
+            snapshot,
+            masks.HardProtectMask,
+            masks.SoftProtectMask,
+            masks.RetouchAllowMask,
+            appliedStage,
+            snapshot.QualityReport));
+        BitmapSource finalImage = hardProtectResult.FinalProtectedImage;
         List<string> warnings = new(snapshot.QualityReport.Warnings);
         warnings.AddRange(snapshot.QualityReport.FatalErrors.Select(error => "fatal_" + error));
         warnings.AddRange(blemishResult.DebugWarnings.Select(warning => "blemish_" + warning));
         warnings.AddRange(wrinkleResult.DebugWarnings.Select(warning => "wrinkle_" + warning));
+        warnings.AddRange(textureResult.DebugWarnings.Select(warning => "texture_" + warning));
+        warnings.AddRange(hardProtectResult.DebugWarnings.Select(warning => "hardprotect_" + warning));
         if (appliedStage < requestedStage)
         {
             warnings.Add("strong_retouch_limited_by_mask_quality");
         }
+        List<string> filtersExecuted = new()
+        {
+            options.EnableSkinSmooth ? "SkinSmoothFilter" : "SkinSmoothFilter(skipped)",
+            "BlemishReduceFilter",
+            "WrinkleSoftReduceFilter",
+            options.EnableToneEven ? "ToneEvenFilter" : "ToneEvenFilter(skipped)",
+            options.EnableTextureRestore ? "TextureRestoreFilter" : "TextureRestoreFilter(skipped)",
+            "HardProtectFinalRestoreFilter"
+        };
 
         RetouchProcessReport report = new(
             requestedStage,
@@ -105,7 +142,27 @@ public sealed class RetouchStageProcessor
             blemishResult.Report.AverageCorrectionStrength,
             wrinkleResult.Report.AppliedCount,
             wrinkleResult.Report.AverageCorrectionStrength,
+            textureResult.Report.RetouchAllowTextureAmount,
+            textureResult.Report.SoftProtectTextureAmount,
+            textureResult.Report.PlasticSkinRiskScore,
+            hardProtectResult.Report.ChangedPixelBeforeRestoreCount,
+            hardProtectResult.Report.ChangedPixelAfterRestoreCount,
+            hardProtectResult.Report.IsHardProtectClean,
             warnings);
+        DateTime pipelineFinishedAtUtc = DateTime.UtcNow;
+        PipelineDebugReport pipelineReport = new(
+            snapshot.ImageId,
+            snapshot.CacheKey.StableId,
+            requestedStage,
+            appliedStage,
+            pipelineStartedAtUtc,
+            pipelineFinishedAtUtc,
+            false,
+            true,
+            true,
+            filtersExecuted,
+            warnings,
+            Array.Empty<string>());
         return new RetouchStageProcessorOutput(
             finalImage,
             smoothBaseImage,
@@ -123,8 +180,21 @@ public sealed class RetouchStageProcessor
             wrinkleResult.WrinkleCandidateMask,
             wrinkleResult.WrinkleAppliedMask,
             wrinkleResult.Report,
+            toneEvenImage,
+            textureResult.TextureRestoredImage,
+            textureResult.BlurOriginalImage,
+            textureResult.DetailLayerImage,
+            textureResult.TextureRestoreMask,
+            textureResult.TextureRestoreStrengthMap,
+            textureResult.PlasticSkinRiskMap,
+            textureResult.Report,
+            hardProtectResult.FinalProtectedImage,
+            hardProtectResult.BeforeRestoreDiffMask,
+            hardProtectResult.AfterRestoreDiffMask,
+            hardProtectResult.Report,
             appliedStage,
             report,
+            pipelineReport,
             warnings);
     }
 
@@ -177,8 +247,39 @@ public sealed class RetouchStageProcessor
             RetouchAllowOpacity = Math.Clamp(retouchAllowOpacity, 0, preset.RetouchAllowOpacity),
             SoftProtectOpacity = Math.Clamp(softProtectOpacity, 0, preset.SoftProtectOpacity),
             BlemishReduceAmount = Math.Clamp(preset.BlemishReduceAmount * GetBlemishQualityScale(qualityReport), 0, preset.BlemishReduceAmount),
-            WrinkleReduceAmount = Math.Clamp(preset.WrinkleReduceAmount * GetWrinkleQualityScale(qualityReport), 0, preset.WrinkleReduceAmount)
+            WrinkleReduceAmount = Math.Clamp(preset.WrinkleReduceAmount * GetWrinkleQualityScale(qualityReport), 0, preset.WrinkleReduceAmount),
+            TextureRestoreAmount = Math.Clamp(preset.TextureRestoreAmount * GetTextureQualityScale(qualityReport), 0.12, preset.TextureRestoreAmount)
         };
+    }
+
+    private static TextureRestoreResult CreateDisabledTextureRestoreResult(BitmapSource currentImage, int width, int height, int appliedStage)
+    {
+        MaskPlane empty = MaskPlane.Empty(width, height);
+        TextureRestoreProcessReport report = new(appliedStage, 0, 0, 0, 0, 0, new[] { "texture_restore_disabled" });
+        return new TextureRestoreResult(currentImage, currentImage, currentImage, empty, empty, empty, report, report.DebugWarnings);
+    }
+
+    private static double GetTextureQualityScale(MaskQualityReport qualityReport)
+    {
+        double scale = 1;
+        if (!qualityReport.IsUsable)
+        {
+            scale *= 0.72;
+        }
+
+        if (qualityReport.SkinMaskQualityScore < 0.55 ||
+            qualityReport.RetouchAllowQualityScore < 0.55)
+        {
+            scale *= 0.78;
+        }
+
+        if (qualityReport.NostrilMaskQualityScore < 0.55 ||
+            qualityReport.HairMaskQualityScore < 0.50)
+        {
+            scale *= 0.86;
+        }
+
+        return Math.Clamp(scale, 0.35, 1);
     }
 
     private static double GetWrinkleQualityScale(MaskQualityReport qualityReport)
@@ -325,21 +426,50 @@ public sealed class RetouchStageProcessor
         return output;
     }
 
-    private static void ApplyToneEven(byte[] smoothPixels, byte[] originalPixels, int width, int height, double amount)
+    private static BitmapSource ApplyToneEven(BitmapSource currentImage, byte[] originalPixels, FaceMaskSet masks, int width, int height, double amount)
     {
         if (amount <= 0)
         {
-            return;
+            return currentImage;
         }
 
+        BitmapSource currentBgra = currentImage.Format == PixelFormats.Bgra32
+            ? currentImage
+            : new FormatConvertedBitmap(currentImage, PixelFormats.Bgra32, null, 0);
+        currentBgra.Freeze();
         int stride = width * 4;
-        for (int index = 0; index < smoothPixels.Length; index += 4)
+        byte[] currentPixels = new byte[stride * height];
+        currentBgra.CopyPixels(currentPixels, stride, 0);
+        for (int y = 0; y < height; y++)
         {
-            double average = (originalPixels[index] + originalPixels[index + 1] + originalPixels[index + 2]) / 3d;
-            smoothPixels[index] = BlendChannel(smoothPixels[index], average, amount * 0.35);
-            smoothPixels[index + 1] = BlendChannel(smoothPixels[index + 1], average, amount * 0.35);
-            smoothPixels[index + 2] = BlendChannel(smoothPixels[index + 2], average, amount * 0.35);
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double hardProtect = Math.Clamp(masks.HardProtectMask[x, y], 0, 1);
+                if (hardProtect >= 0.98)
+                {
+                    CopyPixel(originalPixels, currentPixels, index);
+                    continue;
+                }
+
+                double retouchAllow = Math.Clamp(masks.RetouchAllowMask[x, y], 0, 1);
+                double softProtect = Math.Clamp(masks.SoftProtectMask[x, y], 0, 1);
+                double maskWeight = Math.Clamp(retouchAllow * 0.48 + softProtect * 0.16, 0, 1);
+                double blend = Math.Clamp(amount * maskWeight * (1 - hardProtect), 0, 1);
+                if (blend <= 0)
+                {
+                    continue;
+                }
+
+                double average = (originalPixels[index] + originalPixels[index + 1] + originalPixels[index + 2]) / 3d;
+                currentPixels[index] = BlendChannel(currentPixels[index], average, blend);
+                currentPixels[index + 1] = BlendChannel(currentPixels[index + 1], average, blend);
+                currentPixels[index + 2] = BlendChannel(currentPixels[index + 2], average, blend);
+                currentPixels[index + 3] = originalPixels[index + 3];
+            }
         }
+
+        return CreateBitmap(width, height, currentPixels);
     }
 
     private static byte[] CreateDetailLayer(byte[] originalPixels, int width, int height)

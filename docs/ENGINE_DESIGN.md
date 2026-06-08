@@ -187,10 +187,12 @@ Current first-pass retouch pipeline:
 - `StagePresetMapper` maps Stage `1-10` to skin smooth, blemish reduce, tone even, texture restore, soft protect opacity, and retouch allow opacity.
 - `BlemishReduceFilter` now provides the first local mask-based blemish pass. It detects small candidates inside `RetouchAllowMask`, avoids `HardProtectMask`, applies weaker handling in `SoftProtectMask`, samples a surrounding skin ring, and caches candidate analysis by Snapshot cache key so Stage changes only change strength.
 - `WrinkleSoftReduceFilter` now provides the first line-based wrinkle softening pass. It detects dark linear candidates from `SoftProtectMask` plus weak `RetouchAllowMask`, separates under-eye, glabella, forehead, nasolabial, mouth-corner, neck, and nose-shadow masks, samples surrounding skin, preserves facial structure with low correction caps, and caches candidate analysis by Snapshot cache key so Stage/toolset changes only change strength.
+- `ToneEven` currently runs as a simple mask-aware processor stage after wrinkle reduction and before texture restoration. The full `ORDER_13_TONE_EVEN` dedicated filter, candidate masks, reports, and slider/toolset binding still need follow-up.
+- `TextureRestoreFilter` now provides the final skin texture restoration pass. It extracts a high-frequency detail preview from the original image, restores limited detail through RetouchAllow and weak SoftProtect masks, lowers restore strength over blemish and wrinkle repair masks, applies PlasticSkinGuard when texture loss is high, restores HardProtect from the original image, and caches analysis by Snapshot cache key so Stage/toolset changes only change strength.
 - `MaskQualityReport.MaxAllowedStage` gates the requested stage.
-- `RetouchStageProcessor` creates a mask-aware edge-preserving smooth base, extracts a detail layer, restores part of the original texture, and composites through masks.
-- The final composition applies RetouchAllow, then SoftProtect at lower opacity, then restores HardProtect pixels from the original image.
-- `RetouchDebugExporter` saves stage, smooth base, detail layer, texture restored image, retouch allow applied, soft protect applied, hard protect restored, final retouch mask, final outputs, and compare overlays.
+- `RetouchStageProcessor` creates a mask-aware edge-preserving smooth base, applies local blemish and wrinkle passes, applies ToneEven, restores texture, and then runs `HardProtectFinalRestoreFilter`.
+- `RetouchStageProcessor` records `PipelineDebugReport` so Stage changes can be checked as filter-only passes over a reused SnapshotMask.
+- `RetouchDebugExporter` saves stage, smooth base, detail layer, tone-even image, texture restored image, retouch allow applied, soft protect applied, hard protect restored, final retouch mask, final outputs, pipeline debug images, and compare overlays.
 
 HardProtect remains original at every stage. SoftProtect receives only low-opacity retouch. RetouchAllow receives the main skin retouch blend.
 

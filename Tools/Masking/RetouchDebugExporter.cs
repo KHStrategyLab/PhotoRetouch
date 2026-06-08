@@ -18,12 +18,24 @@ public static class RetouchDebugExporter
 
         Directory.CreateDirectory(outputDirectory);
 
+        SaveBitmap(original, Path.Combine(outputDirectory, "debug_pipeline_original.png"));
+        SaveBitmap(DebugMaskExporter.CreateFinalOverlayPreview(original, snapshot.Masks), Path.Combine(outputDirectory, "debug_pipeline_snapshot_mask_overlay.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.HardProtectMask), Path.Combine(outputDirectory, "debug_pipeline_hard_protect.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.SoftProtectMask), Path.Combine(outputDirectory, "debug_pipeline_soft_protect.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.RetouchAllowMask), Path.Combine(outputDirectory, "debug_pipeline_retouch_allow.png"));
+        SaveBitmap(output.SmoothBaseImage, Path.Combine(outputDirectory, "debug_pipeline_after_skin_smooth.png"));
+        SaveBitmap(output.BlemishReducedImage, Path.Combine(outputDirectory, "debug_pipeline_after_blemish.png"));
+        SaveBitmap(output.WrinkleReducedImage, Path.Combine(outputDirectory, "debug_pipeline_after_wrinkle.png"));
+        SaveBitmap(output.ToneEvenImage, Path.Combine(outputDirectory, "debug_pipeline_after_tone_even.png"));
+        SaveBitmap(output.FinalTextureRestoredImage, Path.Combine(outputDirectory, "debug_pipeline_after_texture_restore.png"));
+        SaveBitmap(output.HardProtectFinalImage, Path.Combine(outputDirectory, "debug_pipeline_final_after_hardprotect_restore.png"));
+
         SaveBitmap(CreateStageInfoImage(output.Report.RequestedStage, 10), Path.Combine(outputDirectory, "debug_stage_requested.png"));
         SaveBitmap(CreateStageInfoImage(output.Report.AppliedStage, output.Report.MaxAllowedStage), Path.Combine(outputDirectory, "debug_stage_applied.png"));
         SaveBitmap(output.SmoothBaseImage, Path.Combine(outputDirectory, "debug_smooth_image.png"));
         SaveBitmap(output.SmoothBaseImage, Path.Combine(outputDirectory, "debug_smooth_base.png"));
         SaveBitmap(output.DetailLayerImage, Path.Combine(outputDirectory, "debug_detail_layer.png"));
-        SaveBitmap(output.TextureRestoredImage, Path.Combine(outputDirectory, "debug_texture_restored_image.png"));
+        SaveBitmap(output.TextureRestoredImage, Path.Combine(outputDirectory, "debug_texture_restored_initial.png"));
         SaveBitmap(output.TextureRestoredImage, Path.Combine(outputDirectory, "debug_texture_restored.png"));
         SaveBitmap(output.RetouchAllowAppliedImage, Path.Combine(outputDirectory, "debug_retouch_allow_applied.png"));
         SaveBitmap(output.SoftProtectAppliedImage, Path.Combine(outputDirectory, "debug_soft_protect_applied.png"));
@@ -48,6 +60,22 @@ public static class RetouchDebugExporter
         SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.WrinkleAppliedMask), Path.Combine(outputDirectory, "debug_wrinkle_applied_mask.png"));
         SaveBitmap(output.WrinkleReducedImage, Path.Combine(outputDirectory, "debug_wrinkle_corrected.png"));
         SaveBitmap(CreateBeforeAfterSplit(output.BlemishReducedImage, output.WrinkleReducedImage), Path.Combine(outputDirectory, "debug_wrinkle_before_after.png"));
+        SaveBitmap(output.FinalTextureBlurOriginalImage, Path.Combine(outputDirectory, "debug_texture_blur_original.png"));
+        SaveBitmap(output.FinalTextureDetailLayerImage, Path.Combine(outputDirectory, "debug_texture_detail_layer.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.TextureRestoreMask), Path.Combine(outputDirectory, "debug_texture_restore_mask.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.TextureRestoreStrengthMap), Path.Combine(outputDirectory, "debug_texture_restore_strength_map.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.PlasticSkinRiskMap), Path.Combine(outputDirectory, "debug_plastic_skin_risk_map.png"));
+        SaveBitmap(output.FinalTextureRestoredImage, Path.Combine(outputDirectory, "debug_texture_restored_image.png"));
+        SaveBitmap(CreateBeforeAfterSplit(output.ToneEvenImage, output.FinalTextureRestoredImage), Path.Combine(outputDirectory, "debug_texture_before_after.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.HardProtectMask), Path.Combine(outputDirectory, "debug_hardprotect_mask.png"));
+        SaveBitmap(output.FinalTextureRestoredImage, Path.Combine(outputDirectory, "debug_before_hardprotect_restore.png"));
+        SaveBitmap(output.HardProtectFinalImage, Path.Combine(outputDirectory, "debug_after_hardprotect_restore.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.HardProtectBeforeRestoreDiffMask), Path.Combine(outputDirectory, "debug_hardprotect_diff_before.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.HardProtectAfterRestoreDiffMask), Path.Combine(outputDirectory, "debug_hardprotect_diff_after.png"));
+        SaveBitmap(CreatePartRestoreCheck(original, output.HardProtectFinalImage, snapshot.Masks.EyeMask), Path.Combine(outputDirectory, "debug_eye_restore_check.png"));
+        SaveBitmap(CreatePartRestoreCheck(original, output.HardProtectFinalImage, snapshot.Masks.LipMask), Path.Combine(outputDirectory, "debug_lip_restore_check.png"));
+        SaveBitmap(CreatePartRestoreCheck(original, output.HardProtectFinalImage, snapshot.Masks.NostrilMask), Path.Combine(outputDirectory, "debug_nostril_restore_check.png"));
+        SaveBitmap(CreatePartRestoreCheck(original, output.HardProtectFinalImage, snapshot.Masks.HairMask), Path.Combine(outputDirectory, "debug_hair_restore_check.png"));
         SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.FinalOverlayMask), Path.Combine(outputDirectory, "debug_final_retouch_mask.png"));
         SaveBitmap(output.FinalImage, Path.Combine(outputDirectory, $"debug_final_output_stage_{output.Report.AppliedStage}.png"));
 
@@ -62,12 +90,19 @@ public static class RetouchDebugExporter
             SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_stage_{stage}.png"));
             SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_after_blemish_stage_{stage}.png"));
             SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_after_wrinkle_stage_{stage}.png"));
+            SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_final_after_texture_stage_{stage}.png"));
+            if (stage is 1 or 5 or 10)
+            {
+                SaveBitmap(stageOutput.HardProtectFinalImage, Path.Combine(outputDirectory, $"debug_final_stage_{stage}_hardprotect_check.png"));
+                SaveBitmap(stageOutput.FinalImage, Path.Combine(outputDirectory, $"debug_pipeline_stage_{stage}_final.png"));
+            }
         }
 
         SaveBitmap(CreateCompareOverlay(original, output.FinalImage, snapshot.Masks.HardProtectMask), Path.Combine(outputDirectory, "debug_hard_protect_compare.png"));
         SaveBitmap(CreateCompareOverlay(original, output.FinalImage, snapshot.Masks.SoftProtectMask), Path.Combine(outputDirectory, "debug_soft_protect_compare.png"));
         SaveBitmap(CreateCompareOverlay(original, output.FinalImage, snapshot.Masks.RetouchAllowMask), Path.Combine(outputDirectory, "debug_retouch_allow_compare.png"));
         SaveReport(output.Report, Path.Combine(outputDirectory, "debug_retouch_report.txt"));
+        SavePipelineReport(output.PipelineReport, Path.Combine(outputDirectory, "debug_pipeline_report.txt"));
     }
 
     private static BitmapSource CreateStageInfoImage(int stage, int limit)
@@ -159,9 +194,40 @@ public static class RetouchDebugExporter
             "BlemishAverageCorrectionStrength: " + report.BlemishAverageCorrectionStrength.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
             "WrinkleAppliedCount: " + report.WrinkleAppliedCount,
             "WrinkleAverageCorrectionStrength: " + report.WrinkleAverageCorrectionStrength.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "TextureRetouchAllowAmount: " + report.TextureRetouchAllowAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "TextureSoftProtectAmount: " + report.TextureSoftProtectAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "PlasticSkinRiskScore: " + report.PlasticSkinRiskScore.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "HardProtectChangedBeforeRestoreCount: " + report.HardProtectChangedBeforeRestoreCount,
+            "HardProtectChangedAfterRestoreCount: " + report.HardProtectChangedAfterRestoreCount,
+            "IsHardProtectClean: " + report.IsHardProtectClean,
             "StageLimited: " + report.IsStageLimited,
             "Warnings:",
             string.Join(Environment.NewLine, report.DebugWarnings.Select(warning => "- " + warning))
+        };
+        File.WriteAllLines(path, lines, System.Text.Encoding.UTF8);
+    }
+
+    private static void SavePipelineReport(PipelineDebugReport report, string path)
+    {
+        string[] lines =
+        {
+            "PipelineDebugReport",
+            "ImageId: " + report.ImageId,
+            "SnapshotMaskCacheKey: " + report.SnapshotMaskCacheKey,
+            "RequestedStage: " + report.RequestedStage,
+            "AppliedStage: " + report.AppliedStage,
+            "PipelineStartedAtUtc: " + report.PipelineStartedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            "PipelineFinishedAtUtc: " + report.PipelineFinishedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            "DurationMilliseconds: " + report.DurationMilliseconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "AnalysisExecuted: " + report.AnalysisExecuted,
+            "SnapshotMaskReused: " + report.SnapshotMaskReused,
+            "QualityReportReused: " + report.QualityReportReused,
+            "FiltersExecuted:",
+            string.Join(Environment.NewLine, report.FiltersExecuted.Select(filter => "- " + filter)),
+            "Warnings:",
+            string.Join(Environment.NewLine, report.Warnings.Select(warning => "- " + warning)),
+            "Errors:",
+            string.Join(Environment.NewLine, report.Errors.Select(error => "- " + error))
         };
         File.WriteAllLines(path, lines, System.Text.Encoding.UTF8);
     }
@@ -228,6 +294,53 @@ public static class RetouchDebugExporter
                     outputPixels[index + 2] = 255;
                     outputPixels[index + 3] = 255;
                 }
+            }
+        }
+
+        return CreateBitmap(width, height, outputPixels);
+    }
+
+    private static BitmapSource CreatePartRestoreCheck(BitmapSource original, BitmapSource finalImage, MaskPlane partMask)
+    {
+        BitmapSource originalBgra = original.Format == PixelFormats.Bgra32
+            ? original
+            : new FormatConvertedBitmap(original, PixelFormats.Bgra32, null, 0);
+        BitmapSource finalBgra = finalImage.Format == PixelFormats.Bgra32
+            ? finalImage
+            : new FormatConvertedBitmap(finalImage, PixelFormats.Bgra32, null, 0);
+        originalBgra.Freeze();
+        finalBgra.Freeze();
+
+        int width = originalBgra.PixelWidth;
+        int height = originalBgra.PixelHeight;
+        int stride = width * 4;
+        byte[] originalPixels = new byte[stride * height];
+        byte[] finalPixels = new byte[stride * height];
+        byte[] outputPixels = new byte[stride * height];
+        originalBgra.CopyPixels(originalPixels, stride, 0);
+        finalBgra.CopyPixels(finalPixels, stride, 0);
+        Buffer.BlockCopy(finalPixels, 0, outputPixels, 0, finalPixels.Length);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                double mask = partMask[x, y];
+                if (mask <= 0)
+                {
+                    continue;
+                }
+
+                int index = y * stride + x * 4;
+                double difference =
+                    Math.Abs(originalPixels[index] - finalPixels[index]) +
+                    Math.Abs(originalPixels[index + 1] - finalPixels[index + 1]) +
+                    Math.Abs(originalPixels[index + 2] - finalPixels[index + 2]);
+                double amount = Math.Clamp(mask * 0.35 + difference / 255d, 0, 1);
+                outputPixels[index] = Blend(outputPixels[index], (byte)(difference > 7.5 ? 20 : 50), amount);
+                outputPixels[index + 1] = Blend(outputPixels[index + 1], (byte)(difference > 7.5 ? 40 : 210), amount);
+                outputPixels[index + 2] = Blend(outputPixels[index + 2], (byte)(difference > 7.5 ? 255 : 70), amount);
+                outputPixels[index + 3] = 255;
             }
         }
 
