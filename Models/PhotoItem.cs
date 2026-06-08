@@ -72,6 +72,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public string DisplayInfo { get; }
     public BitmapSource BaseImage => _baseImage;
     public RetouchAdjustmentState? RetouchState { get; set; }
+    public FaceSnapshotMaskSet? SnapshotMaskSet { get; set; }
     public FaceWorkArea FaceWorkArea
     {
         get => _faceWorkArea;
@@ -84,6 +85,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
             }
 
             _faceWorkArea = clampedValue;
+            SnapshotMaskSet = null;
             OnPropertyChanged();
         }
     }
@@ -203,6 +205,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         _baseImage = LoadBitmap(Path, null);
         _effectPreviewCache.Clear();
         _neutralPreviewImage = null;
+        SnapshotMaskSet = null;
         Image = _baseImage;
         Thumbnail = LoadBitmap(Path, 96);
         UpdateFileVersion(Path);
@@ -289,6 +292,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         Path = newPath;
         FileName = System.IO.Path.GetFileName(newPath);
         UpdateFileVersion(newPath);
+        SnapshotMaskSet = null;
     }
 
     public void ResetPreviewPan()
@@ -305,6 +309,11 @@ public sealed class PhotoItem : INotifyPropertyChanged
     private void UpdateFileVersion(string path)
     {
         (_sourceLastWriteTimeUtc, _sourceLength) = GetFileVersion(path);
+    }
+
+    public (DateTime LastWriteTimeUtc, long Length) GetSourceVersion()
+    {
+        return (_sourceLastWriteTimeUtc, _sourceLength);
     }
 
     private static (DateTime LastWriteTimeUtc, long Length) GetFileVersion(string path)

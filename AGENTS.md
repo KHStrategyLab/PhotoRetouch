@@ -105,6 +105,51 @@ Key rules:
 - Final export/save must stay conceptually separate and should render from the original source, not from the reduced screen preview.
 - Original comparison should continue to use the original source image.
 
+## ID Photo Retouch Policy
+
+PhotoRetouch is a professional ID photo retouching tool for photo studio work. It is not a beauty-filter, face-changing, or cosmetic surgery app.
+
+- Preserve the subject's original identity and impression.
+- Do not alter eye, nose, mouth, eyebrow, jaw, or face shape from skin filters.
+- Geometry changes belong only in explicit face-shape/feature tools, not in skin cleanup filters.
+- Skin filters should remove or reduce only the intended flaw, such as blemishes, acne, moles, or age spots.
+- Skin texture must remain usable for ID photos. If a filter smears pores, wrinkles, or natural male skin texture, it is too broad.
+- Use narrow masks, skin-tone targeting, optional manual wide-average skin-tone sampling, local edge protection, and feathered protection around eyes, nose, and mouth.
+- Prefer a conservative result that preserves the original photo over an aggressive result that looks synthetic.
+
+## Portrait Mask Engine Direction
+
+Skin retouching is now mask-first.
+
+- Do not keep increasing skin filter strength before mask debug output works.
+- Use a Snapshot Mask model: analyze one photo once, save a `FaceSnapshotMaskSet`, and reuse it while retouch strengths or Stage presets change.
+- Current verification stage uses `StandardMaskWarpEngine`: load or generate `StandardMaskSet`, run `IFaceAnalyzer`, affine-warp it to `MaskWarpInput`, run `IFaceParsingDetector`, then merge warped standard masks with parsing masks before building the snapshot.
+- The current default `IFaceAnalyzer` implementation is `OpenCvFaceAnalyzer`; it uses OpenCV YuNet (`Assets/AiModels/face_detection_yunet_2023mar.onnx`) to detect a real FaceBox plus eye, nose, and mouth anchors. `ChinPoint` is still estimated from the detected FaceBox.
+- The current `IFaceParsingDetector` implementation is `TemporaryFaceParsingDetector`; it is a fallback scaffold, not a real AI model. `NostrilDetector` is now implemented as an image-analysis module, but real FaceParsing and triangle mesh model connections remain deferred until debug masks prove stable.
+- `SnapshotMaskCacheKey` includes image id, image size, face box, face angle, crop version, and mask version. Stage values are never part of the mask cache key.
+- `RetouchStageProcessor` is the current first-pass retouch pipeline. It maps requested Stage `1-10` through `StagePresetMapper`, gates it by `MaskQualityReport.MaxAllowedStage`, and applies retouch only through masks.
+- `MaskQualityValidator` now calculates overall, face, landmark, parsing, skin, eye, eyebrow, lip, nostril, hair, hard-protect, and retouch-allow quality scores, plus warnings, fatal errors, strong-retouch safety, and max allowed stage.
+- Fail-safe opacity rules lower retouch strength when mask quality is weak, while HardProtect remains dominant over RetouchAllow.
+- Current SkinSmooth quality pass creates a mask-aware edge-preserving smooth base, extracts a detail layer, restores texture by stage, applies RetouchAllow/SoftProtect blends separately, and finally restores HardProtect pixels from the original.
+- Current BlemishReduce pass detects small local blemish candidates only through RetouchAllow/weak SoftProtect masks, samples nearby skin color, clips out HardProtect, caches candidate analysis by Snapshot key, and changes only correction strength when Stage changes.
+- Current WrinkleSoftReduce pass detects linear dark wrinkle candidates through SoftProtect plus weak RetouchAllow masks, splits them into under-eye, glabella, forehead, nasolabial, mouth-corner, neck, and nose-shadow masks, clips out HardProtect, caches candidate analysis by Snapshot key, and changes only correction strength when Stage or toolset values change.
+- HardProtect always keeps the original pixels. SoftProtect is blended at low opacity. RetouchAllow receives the main skin smoothing blend.
+- Never rerun face analysis only because Stage `1-10`, `SkinSmooth`, `BlemishReduce`, `ToneEven`, `TextureRestore`, or before/after view changed.
+- Rebuild Snapshot Mask only for new image load, explicit face re-analysis, crop or rotation changes, manual mask edits, source file changes, or major face position changes.
+- Treat retouch failures as mask failures first and filter failures second.
+- Build detection, landmark, parsing, part-mask building, validation, debug export, retouch filters, and texture restore as separate modules.
+- Landmark output provides position anchors. Face parsing provides pixel boundaries. Final masks should combine both.
+- Required final masks include `SkinMask`, `EyeMask`, `EyebrowMask`, `LipMask`, `InnerMouthMask`, `TeethMask`, `NoseMask`, `NoseSkinMask`, `NostrilMask`, `NoseShadowMask`, `HairMask`, `BeardMask`, `MustacheMask`, `GlassesMask`, `HardProtectMask`, `SoftProtectMask`, and `RetouchAllowMask`.
+- `HardProtectMask` must include eyes, eyebrows, lips, inner mouth, teeth, nostrils, hair, beard, mustache, and glasses. These areas stay at 0% retouch opacity even at the strongest retouch stage.
+- `SoftProtectMask` should include under-eye skin, nasolabial folds, nose tip, nose wings, forehead wrinkles, and neck wrinkles.
+- `RetouchAllowMask` should be skin, nose skin, and optional neck skin minus hard protection.
+- Nostrils are protected detail, not skin. Implement `NostrilDetector` separately and put nostrils into `HardProtectMask`.
+- Current `NostrilDetector` builds a lower-nose ROI, extracts dark candidates, runs connected components, combines selected components with warped standard nostril fallback, and forces the final nostril mask into HardProtect.
+- If detection is uncertain, protect wider and retouch weaker.
+- Required debug mask images must exist before skin filters are considered reliable: original, face box, landmarks, parsing, skin, eye, eyebrow, lip, inner mouth, nose, nose skin, nostril, hair, beard, glasses, hard protect, soft protect, retouch allow, and final overlay.
+- Prepare a real test image set before judging mask quality: age/gender coverage, acne, blemishes, freckles, redness, wrinkles, pores, beard shadow, large nostrils, strong under-nose shadow, thick eyebrows, clear eyelashes, strong lip edge, glasses, beard, hair touching the face, smiling/open-mouth images, near-side faces, strong lighting, and strong shadows.
+- The first UI surface for this work should include mask debug viewing before stronger retouch controls.
+
 ## Engine Roadmap
 
 Already completed before adding C++:
@@ -209,9 +254,10 @@ Known files:
 
 ## Suggested Next Engineering Step
 
-After stabilizing the current curve editor behavior, continue engine separation:
+The next engineering step is the mask engine, not stronger skin filtering:
 
-1. Keep `PreviewEngineFactory` as the single engine selection point.
-2. Consider extracting preview render orchestration from `MainWindow.xaml.cs`.
-3. Add `NativeCpuPreviewEngine` interface scaffolding only when the managed engine path is stable.
-4. Only after that, plan `PhotoRetouch.Native` for C++.
+1. Add `FaceAnalysisResult` and `FaceMaskSet` models.
+2. Add mask builder module folders for skin, eyes, eyebrows, mouth, nose, nostrils, hair, beard, glasses, hard protect, soft protect, and final retouch allow masks.
+3. Add `DebugMaskExporter.SaveAll(...)` for required mask PNGs.
+4. Add a first safe heuristic mask implementation if AI model integration is not ready yet.
+5. Only after debug masks are inspectable, reconnect weak `SkinSmooth`, `BlemishReduce`, `ToneEven`, and `TextureRestore` through `RetouchAllowMask`.

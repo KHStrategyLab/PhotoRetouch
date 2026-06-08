@@ -276,6 +276,17 @@
                     <Button Content="&#xC0AC;&#xC9C4; &#xBD88;&#xB7EC;&#xC624;&#xAE30;" Click="LoadPhotosButton_Click"/>
                     <Button Content="&#xC800;&#xC7A5;" Click="SavePhotoButton_Click"/>
                     <Button x:Name="CompareButton" Content="&#xC6D0;&#xBCF8; &#xBE44;&#xAD50;" PreviewMouseDown="CompareButton_PreviewMouseDown" PreviewMouseUp="CompareButton_PreviewMouseUp" MouseLeave="CompareButton_MouseLeave"/>
+                    <Button Content="{Binding MaskDebugButtonText}" Click="MaskDebugButton_Click"/>
+                    <Button Content="{Binding DummyMaskRetouchButtonText}" Click="DummyMaskRetouchButton_Click"/>
+                    <TextBlock Text="{Binding DummyMaskStageText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                    <Slider Width="110"
+                            Minimum="1"
+                            Maximum="10"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            Value="{Binding DummyMaskStageValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding SnapshotMaskStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                     <Button Content="&#xCD08;&#xAE30;&#xD654;"/>
                 </StackPanel>
 
@@ -728,7 +739,12 @@
                                                                     <ColumnDefinition Width="Auto"/>
                                                                 </Grid.ColumnDefinitions>
                                                                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
-                                                                <Button Grid.Column="1" Content="{Binding ActionText}" Height="30" Padding="12,0" Margin="10,0,0,0"/>
+                                                                <Button Grid.Column="1"
+                                                                        Content="{Binding ActionText}"
+                                                                        Height="30"
+                                                                        Padding="12,0"
+                                                                        Margin="10,0,0,0"
+                                                                        Click="RetouchActionButton_Click"/>
                                                             </Grid>
                                                             <StackPanel x:Name="CurveEditor" Visibility="Collapsed" Margin="0,0,0,16">
                                                                 <TextBlock Text="{Binding Label}" Margin="0,0,0,8"/>

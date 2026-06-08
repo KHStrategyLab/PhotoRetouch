@@ -54,6 +54,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isUpdatingRetouchSliderFromSlider;
     private bool _pendingRetouchSliderLivePreview;
     private bool _isResettingRetouchControlsForPhotoChange;
+    private bool _isSkinToneSamplingMode;
+    private bool _isMaskDebugPreviewEnabled;
+    private bool _isDummyMaskRetouchPreviewEnabled;
+    private bool _isEnsuringSnapshotMask;
+    private double _dummyMaskStageValue = 1;
+    private RetouchProcessReport? _lastRetouchProcessReport;
+    private System.Windows.Media.Color? _manualSkinReferenceColor;
     private bool _isDraggingFaceWorkArea;
     private FaceWorkAreaDragMode _faceWorkAreaDragMode;
     private System.Windows.Point _faceWorkAreaDragStart;
@@ -72,6 +79,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly List<RetouchHistoryEntry> _undoHistory = new();
     private readonly List<RetouchHistoryEntry> _redoHistory = new();
     private IPreviewEngine _previewEngine = PreviewEngineFactory.Create();
+    private readonly SnapshotMaskBuilder _snapshotMaskBuilder = new(new StandardMaskWarpEngine());
+    private readonly RetouchStageProcessor _retouchStageProcessor = new();
 
     public ObservableCollection<PersonOption> People { get; } = CreatePeople();
     public ObservableCollection<PhotoItem> Photos { get; } = new();
@@ -101,6 +110,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public Visibility PreviewProcessingVisibility => IsPreviewProcessing && _showPreviewProcessingOverlay ? Visibility.Visible : Visibility.Collapsed;
+    public string MaskDebugButtonText => _isMaskDebugPreviewEnabled ? "마스크 끄기" : "마스크 보기";
+    public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "파이프라인 끄기" : "파이프라인 보정";
+    public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} {RetouchStageStatusText}";
+
+    public double DummyMaskStageValue
+    {
+        get => _dummyMaskStageValue;
+        set
+        {
+            double nextValue = Math.Clamp(Math.Round(value), 1, 10);
+            if (Math.Abs(_dummyMaskStageValue - nextValue) < 0.001)
+            {
+                return;
+            }
+
+            _dummyMaskStageValue = nextValue;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DummyMaskStageText));
+            if (_isDummyMaskRetouchPreviewEnabled)
+            {
+                _ = ApplyDummyMaskRetouchAsync();
+            }
+        }
+    }
+
+    public string DummyMaskStageText => $"Stage {_dummyMaskStageValue:0}";
+
+    private string RetouchStageStatusText => _lastRetouchProcessReport is null
+        ? string.Empty
+        : $"req {_lastRetouchProcessReport.RequestedStage} / app {_lastRetouchProcessReport.AppliedStage} / max {_lastRetouchProcessReport.MaxAllowedStage}";
 
     public bool IsSectionOrderEditMode
     {
@@ -260,9 +299,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 new("blemish_remove", "\uC7A1\uD2F0 \uC81C\uAC70", 0, 100, 0),
                 new("acne_remove", "\uC5EC\uB4DC\uB984 \uC81C\uAC70", 0, 100, 0),
+                new("mole_age_spot_remove", "\uC810/\uAC80\uBC84\uC12F \uC81C\uAC70", 0, 100, 0),
                 new("skin_smooth", "\uD53C\uBD80\uACB0 \uC815\uB9AC", 0, 100, 0),
                 new("pore_clean", "\uBAA8\uACF5 \uC815\uB9AC", 0, 100, 0),
-                new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0)
+                new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0),
+                RetouchControl.CreateAction("skin_sample_tone", "\uD53C\uBD80\uD1A4 \uAE30\uC900", "\uB113\uC740 \uC2A4\uD3EC\uC774\uB4DC"),
+                new("skin_mask_range", "\uD53C\uBD80 \uBCF4\uC815 \uBC94\uC704", 0, 100, 45),
+                new("skin_texture_protect", "\uD53C\uBD80\uACB0 \uBCF4\uC874", 0, 100, 70)
             }),
         new RetouchSection(
             "face_shape",
@@ -467,6 +510,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (_isSkinToneSamplingMode && e.Key == Key.Escape)
+        {
+            SetSkinToneSamplingMode(false);
+            e.Handled = true;
+            return;
+        }
+
         if (!IsTextEditingElementFocused() &&
             (e.Key == Key.Delete || e.Key == Key.Back) &&
             TryDeleteSelectedCurvePoint())
@@ -743,6 +793,224 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private async void MaskDebugButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsPreviewProcessing)
+        {
+            return;
+        }
+
+        if (_isMaskDebugPreviewEnabled)
+        {
+            _isMaskDebugPreviewEnabled = false;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+            await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+            return;
+        }
+
+        if (_isDummyMaskRetouchPreviewEnabled)
+        {
+            _isDummyMaskRetouchPreviewEnabled = false;
+            OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+        }
+
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                "마스크 디버그는 사진 한 장을 선택했을 때 볼 수 있어.",
+                "마스크 보기",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        PhotoItem photo = SelectedPhoto;
+        try
+        {
+            _showPreviewProcessingOverlay = false;
+            IsPreviewProcessing = true;
+            FaceSnapshotMaskSet snapshot = await Task.Run(() => _snapshotMaskBuilder.GetOrCreate(photo));
+            OnPropertyChanged(nameof(SnapshotMaskStatusText));
+            BitmapSource overlay = await Dispatcher.InvokeAsync(() =>
+                DebugMaskExporter.CreateFinalOverlayPreview(photo.BaseImage, snapshot.Masks));
+            photo.SetAdjustedImage(overlay);
+            SaveSnapshotDebugMasks(photo, snapshot);
+            _isMaskDebugPreviewEnabled = true;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                ex.Message,
+                "마스크 보기",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            IsPreviewProcessing = false;
+            _showPreviewProcessingOverlay = false;
+            OnPropertyChanged(nameof(PreviewProcessingVisibility));
+        }
+    }
+
+    private async void DummyMaskRetouchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsPreviewProcessing)
+        {
+            return;
+        }
+
+        if (_isDummyMaskRetouchPreviewEnabled)
+        {
+            _isDummyMaskRetouchPreviewEnabled = false;
+            OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+            return;
+        }
+
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                "더미 마스크 보정은 사진 한 장을 선택했을 때 확인할 수 있어.",
+                "더미 보정",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        if (_isMaskDebugPreviewEnabled)
+        {
+            _isMaskDebugPreviewEnabled = false;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+        }
+
+        _isDummyMaskRetouchPreviewEnabled = true;
+        OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+        await ApplyDummyMaskRetouchAsync();
+    }
+
+    private async Task ApplyDummyMaskRetouchAsync()
+    {
+        if (!_isDummyMaskRetouchPreviewEnabled || SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            return;
+        }
+
+        if (IsPreviewProcessing)
+        {
+            return;
+        }
+
+        PhotoItem photo = SelectedPhoto;
+        double stage = DummyMaskStageValue;
+        try
+        {
+            _showPreviewProcessingOverlay = false;
+            IsPreviewProcessing = true;
+            (FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output) = await Task.Run(() =>
+            {
+                FaceSnapshotMaskSet maskSnapshot = _snapshotMaskBuilder.GetOrCreate(photo);
+                RetouchStageProcessorOutput result = _retouchStageProcessor.Process(
+                    photo.BaseImage,
+                    maskSnapshot,
+                    new RetouchOptions((int)Math.Round(stage)));
+                return (maskSnapshot, result);
+            });
+
+            if (ReferenceEquals(SelectedPhoto, photo) && _isDummyMaskRetouchPreviewEnabled)
+            {
+                photo.SetAdjustedImage(output.FinalImage);
+                _lastRetouchProcessReport = output.Report;
+                SaveRetouchDebugImages(photo, snapshot, output);
+            }
+
+            OnPropertyChanged(nameof(SnapshotMaskStatusText));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
+        {
+            _isDummyMaskRetouchPreviewEnabled = false;
+            OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            System.Windows.MessageBox.Show(
+                this,
+                ex.Message,
+                "더미 보정",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            IsPreviewProcessing = false;
+            _showPreviewProcessingOverlay = false;
+            OnPropertyChanged(nameof(PreviewProcessingVisibility));
+        }
+    }
+
+    private async Task EnsureSnapshotMaskForSelectedPhotoAsync(PhotoItem photo)
+    {
+        if (_isEnsuringSnapshotMask)
+        {
+            return;
+        }
+
+        try
+        {
+            _isEnsuringSnapshotMask = true;
+            await Task.Run(() => _snapshotMaskBuilder.GetOrCreate(photo));
+            OnPropertyChanged(nameof(SnapshotMaskStatusText));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+        finally
+        {
+            _isEnsuringSnapshotMask = false;
+        }
+    }
+
+    private static void SaveSnapshotDebugMasks(PhotoItem photo, FaceSnapshotMaskSet snapshot)
+    {
+        string? outputDirectory = GetSnapshotDebugDirectory(photo);
+        if (outputDirectory is null)
+        {
+            return;
+        }
+
+        DebugMaskExporter.SaveAll(
+            photo.BaseImage,
+            new PortraitMaskResult(
+                snapshot.Analysis,
+                snapshot.Masks,
+                snapshot.QualityReport,
+                snapshot.ParsingMasks,
+                snapshot.WarpedStandardMasks,
+                snapshot.NostrilDetection),
+            outputDirectory);
+    }
+
+    private static void SaveRetouchDebugImages(PhotoItem photo, FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output)
+    {
+        string? outputDirectory = GetSnapshotDebugDirectory(photo);
+        if (outputDirectory is null)
+        {
+            return;
+        }
+
+        RetouchDebugExporter.SaveAll(photo.BaseImage, snapshot, output, outputDirectory);
+    }
+
+    private static string? GetSnapshotDebugDirectory(PhotoItem photo)
+    {
+        string? directory = Path.GetDirectoryName(photo.Path);
+        return string.IsNullOrWhiteSpace(directory)
+            ? null
+            : Path.Combine(directory, "_mask_debug", Path.GetFileNameWithoutExtension(photo.FileName));
+    }
+
     private void SubscribeRetouchControlChanges()
     {
         foreach (RetouchControl control in RetouchSections.SelectMany(section => section.Controls))
@@ -753,6 +1021,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void RetouchControl_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_isMaskDebugPreviewEnabled || _isDummyMaskRetouchPreviewEnabled)
+        {
+            return;
+        }
+
         if (_isResettingRetouchControlsForPhotoChange)
         {
             return;
@@ -760,7 +1033,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (e.PropertyName is not (nameof(RetouchControl.Value) or nameof(RetouchControl.CurveChannel)) ||
             sender is not RetouchControl control ||
-            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves" or "blemish_remove" or "acne_remove" or "skin_smooth" or "pore_clean" or "tone_even" or "oval_face" or "face_balance" or "cheekbone_soften" or "jawline_define" or "chin_length" or "chin_width" or "jaw_balance" or "eye_height_balance" or "brow_height_balance" or "nose_center_balance" or "double_chin" or "neck_jaw_edge" or "background_color_amount"))
+            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves" or "blemish_remove" or "acne_remove" or "mole_age_spot_remove" or "skin_smooth" or "pore_clean" or "tone_even" or "skin_mask_range" or "skin_texture_protect" or "oval_face" or "face_balance" or "cheekbone_soften" or "jawline_define" or "chin_length" or "chin_width" or "jaw_balance" or "eye_height_balance" or "brow_height_balance" or "nose_center_balance" or "double_chin" or "neck_jaw_edge" or "background_color_amount"))
         {
             return;
         }
@@ -783,6 +1056,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async Task ApplyPhotoAdjustmentsAsync(bool showOverlay = true)
     {
+        if (_isMaskDebugPreviewEnabled || _isDummyMaskRetouchPreviewEnabled)
+        {
+            return;
+        }
+
         if (IsPreviewProcessing)
         {
             _pendingPreviewAdjustment = true;
@@ -879,6 +1157,37 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             TryParsePreviewBackgroundColor(control.ColorValue, out System.Windows.Media.Color color)
                 ? color
                 : fallbackColor;
+    }
+
+    private void RetouchActionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not RetouchControl control)
+        {
+            return;
+        }
+
+        if (control.Id == "skin_sample_tone")
+        {
+            if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+            {
+                System.Windows.MessageBox.Show(
+                    this,
+                    "\uD53C\uBD80\uD1A4 \uAE30\uC900\uC744 \uC7A1\uC744 \uC0AC\uC9C4 1\uC7A5\uC744 \uC120\uD0DD\uD574\uC918.",
+                    "\uD53C\uBD80\uD1A4 \uAE30\uC900",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            SetSkinToneSamplingMode(true);
+            e.Handled = true;
+        }
+    }
+
+    private void SetSkinToneSamplingMode(bool isEnabled)
+    {
+        _isSkinToneSamplingMode = isEnabled;
+        PreviewSurface.Cursor = isEnabled ? System.Windows.Input.Cursors.Cross : null;
     }
 
     private void LoadPhotosButton_Click(object sender, RoutedEventArgs e)
@@ -981,9 +1290,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             FindRetouchControl("photo_blur_sharpen")?.Value ?? 0,
             FindRetouchControl("blemish_remove")?.Value ?? 0,
             FindRetouchControl("acne_remove")?.Value ?? 0,
+            FindRetouchControl("mole_age_spot_remove")?.Value ?? 0,
             FindRetouchControl("skin_smooth")?.Value ?? 0,
             FindRetouchControl("pore_clean")?.Value ?? 0,
             FindRetouchControl("tone_even")?.Value ?? 0,
+            FindRetouchControl("skin_mask_range")?.Value ?? 45,
+            FindRetouchControl("skin_texture_protect")?.Value ?? 70,
+            _manualSkinReferenceColor.HasValue,
+            _manualSkinReferenceColor ?? System.Windows.Media.Colors.Transparent,
             FindRetouchControl("oval_face")?.Value ?? 0,
             FindRetouchControl("face_balance")?.Value ?? 0,
             FindRetouchControl("cheekbone_soften")?.Value ?? 0,
@@ -1699,9 +2013,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "photo_curves" or
             "blemish_remove" or
             "acne_remove" or
+            "mole_age_spot_remove" or
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
+            "skin_mask_range" or
+            "skin_texture_protect" or
             "oval_face" or
             "face_balance" or
             "cheekbone_soften" or
@@ -2026,6 +2343,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         PhotoItem[] previousSelection = SelectedPhotos.ToArray();
         PhotoItem? previousSelectedPhoto = SelectedPhoto;
+        if (_isMaskDebugPreviewEnabled)
+        {
+            _isMaskDebugPreviewEnabled = false;
+            OnPropertyChanged(nameof(MaskDebugButtonText));
+            previousSelectedPhoto?.ResetAdjustedImage();
+        }
+
+        if (_isDummyMaskRetouchPreviewEnabled)
+        {
+            _isDummyMaskRetouchPreviewEnabled = false;
+            OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            previousSelectedPhoto?.ResetAdjustedImage();
+        }
+
         PhotoItem[] selected = photos
             .Where(photo => Photos.Contains(photo))
             .Distinct()
@@ -2060,6 +2391,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (selectedPhotoChanged && SelectedPhoto is not null && selected.Length == 1)
         {
             RestoreRetouchControlsForPhotoSelection(SelectedPhoto);
+            _ = EnsureSnapshotMaskForSelectedPhotoAsync(SelectedPhoto);
         }
 
         UpdateCurveHistogram();
@@ -2103,7 +2435,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             controlValues,
             curveChannel,
             curveControl?.ExportCurvePointsByChannel() ?? RetouchControl.CreateDefaultCurvePointsByChannel(),
-            SelectedPhoto?.FaceWorkArea ?? FaceWorkArea.Default);
+            SelectedPhoto?.FaceWorkArea ?? FaceWorkArea.Default,
+            _manualSkinReferenceColor.HasValue,
+            _manualSkinReferenceColor ?? System.Windows.Media.Colors.Transparent);
     }
 
     private void RestoreRetouchControlsForPhotoSelection(PhotoItem photo)
@@ -2187,7 +2521,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (SelectedPhoto is not null)
             {
                 SelectedPhoto.FaceWorkArea = state.FaceWorkArea;
+                _manualSkinReferenceColor = state.HasManualSkinReference
+                    ? state.ManualSkinReferenceColor
+                    : null;
                 OnFaceWorkAreaOverlayPropertiesChanged();
+            }
+            else
+            {
+                _manualSkinReferenceColor = null;
             }
         }
         finally
@@ -2243,6 +2584,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         if (!AreFaceWorkAreasEquivalent(left.FaceWorkArea, right.FaceWorkArea))
+        {
+            return false;
+        }
+
+        if (left.HasManualSkinReference != right.HasManualSkinReference)
+        {
+            return false;
+        }
+
+        if (left.HasManualSkinReference && left.ManualSkinReferenceColor != right.ManualSkinReferenceColor)
         {
             return false;
         }
@@ -2304,6 +2655,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 control.ResetToDefault();
             }
+
+            _manualSkinReferenceColor = null;
         }
         finally
         {
@@ -2455,7 +2808,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         OnFaceWorkAreaOverlayPropertiesChanged();
     }
 
-    private void PreviewFrame_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private async void PreviewFrame_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (IsFaceWorkAreaOverlayMouseSource(e.OriginalSource as DependencyObject))
         {
@@ -2476,6 +2829,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (SelectedPhotos.Count == 0)
         {
+            return;
+        }
+
+        if (_isSkinToneSamplingMode)
+        {
+            await TrySampleManualSkinToneAsync(e);
+            e.Handled = true;
             return;
         }
 
@@ -2530,6 +2890,191 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         e.Handled = true;
+    }
+
+    private async Task<bool> TrySampleManualSkinToneAsync(MouseButtonEventArgs e)
+    {
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            SetSkinToneSamplingMode(false);
+            return false;
+        }
+
+        PhotoItem photo = SelectedPhoto;
+        FrameworkElement previewElement = GetPreviewPhotoFromEvent(e.OriginalSource as DependencyObject, out FrameworkElement? targetElement) == photo && targetElement is not null
+            ? targetElement
+            : PreviewSurface;
+        System.Windows.Point pointer = e.GetPosition(previewElement);
+        if (!TryMapPreviewPointToImagePixel(photo, previewElement, pointer, out int pixelX, out int pixelY))
+        {
+            return false;
+        }
+
+        RetouchAdjustmentState before = CaptureRetouchState();
+        _manualSkinReferenceColor = SampleWideAverageSkinColor(photo.BaseImage, pixelX, pixelY);
+        SetSkinToneSamplingMode(false);
+        RetouchAdjustmentState after = CaptureRetouchState();
+        PushRetouchHistory(before, after);
+        photo.RetouchState = after;
+        await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+        return true;
+    }
+
+    private static bool TryMapPreviewPointToImagePixel(
+        PhotoItem photo,
+        FrameworkElement previewElement,
+        System.Windows.Point pointer,
+        out int pixelX,
+        out int pixelY)
+    {
+        pixelX = 0;
+        pixelY = 0;
+
+        double viewportWidth = previewElement.ActualWidth;
+        double viewportHeight = previewElement.ActualHeight;
+        if (viewportWidth <= 0 || viewportHeight <= 0 || photo.BaseImage.PixelWidth <= 0 || photo.BaseImage.PixelHeight <= 0)
+        {
+            return false;
+        }
+
+        double zoomScale = Math.Max(0.001, photo.PreviewZoomScale);
+        System.Windows.Point zoomOrigin = photo.PreviewZoomOrigin;
+        double originX = zoomOrigin.X * viewportWidth;
+        double originY = zoomOrigin.Y * viewportHeight;
+        double untransformedX = originX + (pointer.X - photo.PreviewPanX - originX) / zoomScale;
+        double untransformedY = originY + (pointer.Y - photo.PreviewPanY - originY) / zoomScale;
+
+        double dpiX = photo.BaseImage.DpiX > 0 ? photo.BaseImage.DpiX : 96;
+        double dpiY = photo.BaseImage.DpiY > 0 ? photo.BaseImage.DpiY : 96;
+        double imageWidth = photo.BaseImage.PixelWidth * 96 / dpiX;
+        double imageHeight = photo.BaseImage.PixelHeight * 96 / dpiY;
+        double fitScale = Math.Min(viewportWidth / imageWidth, viewportHeight / imageHeight);
+        if (fitScale <= 0)
+        {
+            return false;
+        }
+
+        double drawnWidth = imageWidth * fitScale;
+        double drawnHeight = imageHeight * fitScale;
+        double offsetX = (viewportWidth - drawnWidth) / 2;
+        double offsetY = (viewportHeight - drawnHeight) / 2;
+        if (untransformedX < offsetX ||
+            untransformedX > offsetX + drawnWidth ||
+            untransformedY < offsetY ||
+            untransformedY > offsetY + drawnHeight)
+        {
+            return false;
+        }
+
+        double normalizedX = (untransformedX - offsetX) / drawnWidth;
+        double normalizedY = (untransformedY - offsetY) / drawnHeight;
+        pixelX = Math.Clamp((int)Math.Round(normalizedX * (photo.BaseImage.PixelWidth - 1)), 0, photo.BaseImage.PixelWidth - 1);
+        pixelY = Math.Clamp((int)Math.Round(normalizedY * (photo.BaseImage.PixelHeight - 1)), 0, photo.BaseImage.PixelHeight - 1);
+        return true;
+    }
+
+    private static System.Windows.Media.Color SampleWideAverageSkinColor(BitmapSource source, int centerX, int centerY)
+    {
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+
+        int radius = Math.Clamp(Math.Min(width, height) / 42, 24, 90);
+        int minX = Math.Max(0, centerX - radius);
+        int maxX = Math.Min(width - 1, centerX + radius);
+        int minY = Math.Max(0, centerY - radius);
+        int maxY = Math.Min(height - 1, centerY + radius);
+        double redSum = 0;
+        double greenSum = 0;
+        double blueSum = 0;
+        double weightSum = 0;
+
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                double dx = x - centerX;
+                double dy = y - centerY;
+                double distance = Math.Sqrt(dx * dx + dy * dy) / radius;
+                if (distance > 1)
+                {
+                    continue;
+                }
+
+                int index = y * stride + x * 4;
+                byte alpha = pixels[index + 3];
+                if (alpha < 16)
+                {
+                    continue;
+                }
+
+                byte blue = pixels[index];
+                byte green = pixels[index + 1];
+                byte red = pixels[index + 2];
+                double luminance = GetSampleLuminance(red, green, blue);
+                double distanceWeight = 1 - SmoothStep(0.74, 1, distance);
+                double luminanceWeight = SmoothStep(22, 70, luminance) * (1 - SmoothStep(235, 254, luminance));
+                double skinWeight = GetWideSkinSampleWeight(red, green, blue, luminance);
+                double weight = distanceWeight * luminanceWeight * (0.35 + skinWeight * 0.65);
+                if (weight <= 0)
+                {
+                    continue;
+                }
+
+                redSum += red * weight;
+                greenSum += green * weight;
+                blueSum += blue * weight;
+                weightSum += weight;
+            }
+        }
+
+        if (weightSum <= 0.001)
+        {
+            int index = Math.Clamp(centerY, 0, height - 1) * stride + Math.Clamp(centerX, 0, width - 1) * 4;
+            return System.Windows.Media.Color.FromRgb(pixels[index + 2], pixels[index + 1], pixels[index]);
+        }
+
+        return System.Windows.Media.Color.FromRgb(
+            (byte)Math.Clamp((int)Math.Round(redSum / weightSum), 0, 255),
+            (byte)Math.Clamp((int)Math.Round(greenSum / weightSum), 0, 255),
+            (byte)Math.Clamp((int)Math.Round(blueSum / weightSum), 0, 255));
+    }
+
+    private static double GetWideSkinSampleWeight(byte red, byte green, byte blue, double luminance)
+    {
+        double max = Math.Max(red, Math.Max(green, blue));
+        double min = Math.Min(red, Math.Min(green, blue));
+        double chroma = max - min;
+        double redDominance = red - Math.Max(green, blue);
+        double warmBalance = red - blue;
+        double greenBalance = green - blue;
+        double skinBase = SmoothStep(8, 46, warmBalance) *
+            SmoothStep(-28, 18, redDominance) *
+            (1 - SmoothStep(86, 156, chroma)) *
+            SmoothStep(-18, 38, greenBalance);
+        double lumaWeight = SmoothStep(42, 96, luminance) * (1 - SmoothStep(220, 248, luminance));
+        return Math.Clamp(Math.Max(0.12, skinBase) * lumaWeight, 0, 1);
+    }
+
+    private static double GetSampleLuminance(byte red, byte green, byte blue)
+    {
+        return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+    }
+
+    private static double SmoothStep(double edge0, double edge1, double value)
+    {
+        if (Math.Abs(edge1 - edge0) < 0.001)
+        {
+            return value < edge0 ? 0 : 1;
+        }
+
+        double t = Math.Clamp((value - edge0) / (edge1 - edge0), 0, 1);
+        return t * t * (3 - 2 * t);
     }
 
     private static bool IsFaceWorkAreaOverlayMouseSource(DependencyObject? source)

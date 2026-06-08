@@ -11,7 +11,9 @@ public sealed record RetouchAdjustmentState(
     Dictionary<string, double> ControlValues,
     CurveChannel CurveChannel,
     Dictionary<CurveChannel, CurvePointState[]> CurvePointsByChannel,
-    FaceWorkArea FaceWorkArea);
+    FaceWorkArea FaceWorkArea,
+    bool HasManualSkinReference,
+    System.Windows.Media.Color ManualSkinReferenceColor);
 
 public sealed record RetouchHistoryEntry(RetouchAdjustmentState Before, RetouchAdjustmentState After);
 
