@@ -49,7 +49,7 @@ Important caveat:
 | ORDER_19 | Stage 1-10 preset real tuning | Implemented / Needs visual review. |
 | ORDER_20 | Before / After + Debug Mask Panel | Implemented / Needs visual review. |
 | ORDER_21 | HardProtect test set | Implemented / Needs real image run. |
-| ORDER_22 | Full test image set | Queued/Planned. |
+| ORDER_22 | Full test image set | Implemented / Needs local image assignment. |
 | ORDER_23 | Stage 1/5/10 compare report | Queued/Planned. |
 | ORDER_24 | SnapshotMask cache persistence | Queued/Planned. |
 | ORDER_25 | Manual Mask Brush | Queued/Planned. |

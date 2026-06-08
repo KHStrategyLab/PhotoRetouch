@@ -12,3 +12,12 @@ TestResults/
 *.snupkg
 
 *.log
+
+test_assets/portraits/original/*
+test_assets/portraits/stage_outputs/*
+test_assets/portraits/debug_outputs/*
+test_assets/portraits/reports/*
+!test_assets/portraits/original/.gitkeep
+!test_assets/portraits/stage_outputs/.gitkeep
+!test_assets/portraits/debug_outputs/.gitkeep
+!test_assets/portraits/reports/.gitkeep
