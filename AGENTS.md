@@ -140,7 +140,7 @@ This may later be renamed or expanded when native CPU engine is added.
 
 - Work folder is configured in settings.
 - App preloads the work folder on startup.
-- `작업 폴더 새로고침` manually loads newly added files.
+- `새로고침` manually loads newly added files.
 - Do not auto-sync the work folder yet.
 - Prevent duplicate photo paths.
 - Multi-select is limited to 8 images.

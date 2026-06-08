@@ -304,7 +304,7 @@
                     Drop="PhotoDropTarget_Drop">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top">
-                        <Button Content="작업 폴더 새로고침"
+                        <Button Content="새로고침"
                                 Height="36"
                                 Margin="0,0,0,10"
                                 HorizontalContentAlignment="Center"
