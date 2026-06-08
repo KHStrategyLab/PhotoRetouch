@@ -62,6 +62,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private BitmapSource? _maskDebugPreviousImage;
     private double _dummyMaskStageValue = 1;
     private RetouchProcessReport? _lastRetouchProcessReport;
+    private PhotoItem? _lastRetouchOutputPhoto;
+    private RetouchStageProcessorOutput? _lastRetouchStageOutput;
     private RetouchBindingReport _lastRetouchBindingReport = RetouchBindingReport.Empty;
     private string _pendingRetouchBindingEventName = "Retouch";
     private string? _pendingRetouchBindingControlId;
@@ -121,7 +123,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string MaskDebugButtonText => _isMaskDebugPreviewEnabled ? "마스크 끄기" : "마스크 보기";
     public Visibility DebugMaskPanelVisibility => _isMaskDebugPreviewEnabled ? Visibility.Visible : Visibility.Collapsed;
     public string DebugMaskStatusText => _isMaskDebugPreviewEnabled && SelectedDebugMaskOption is not null
-        ? $"Mask {SelectedDebugMaskOption.Name}"
+        ? IsRetouchOutputDebugMask(SelectedDebugMaskOption.Id) && !ReferenceEquals(_lastRetouchOutputPhoto, SelectedPhoto)
+            ? $"Mask {SelectedDebugMaskOption.Name} / pipeline first"
+            : $"Mask {SelectedDebugMaskOption.Name}"
         : "Mask off";
     public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "파이프라인 끄기" : "파이프라인 보정";
     public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} {RetouchStageStatusText}";
@@ -951,6 +955,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         string id = SelectedDebugMaskOption?.Id ?? "final";
         FaceMaskSet masks = snapshot.Masks;
+        RetouchStageProcessorOutput? output = ReferenceEquals(_lastRetouchOutputPhoto, SelectedPhoto)
+            ? _lastRetouchStageOutput
+            : null;
+
+        if (output is not null)
+        {
+            BitmapSource? filterOverlay = id switch
+            {
+                "blemish_candidate" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.BlemishCandidateMask, 255, 120, 70, 0.72),
+                "blemish_applied" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.BlemishMask, 255, 80, 80, 0.72),
+                "wrinkle_candidate" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.WrinkleCandidateMask, 150, 120, 255, 0.70),
+                "wrinkle_applied" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.WrinkleAppliedMask, 125, 95, 235, 0.74),
+                "wrinkle_combined" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.WrinkleMaskSet.CombinedWrinkleMask, 145, 115, 245, 0.70),
+                "glabella_wrinkle" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.WrinkleMaskSet.GlabellaWrinkleMask, 190, 110, 255, 0.76),
+                "under_eye_wrinkle" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.WrinkleMaskSet.UnderEyeWrinkleMask, 105, 150, 255, 0.74),
+                "texture_restore" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.TextureRestoreMask, 90, 220, 210, 0.68),
+                "texture_strength" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.TextureRestoreStrengthMap, 70, 210, 230, 0.72),
+                "plastic_risk" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.PlasticSkinRiskMap, 255, 180, 40, 0.74),
+                "hardprotect_diff" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.HardProtectAfterRestoreDiffMask, 255, 40, 40, 0.88),
+                _ => null
+            };
+
+            if (filterOverlay is not null)
+            {
+                return filterOverlay;
+            }
+        }
+
         return id switch
         {
             "skin" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.SkinMask, 70, 220, 120, 0.60),
@@ -967,6 +999,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "glasses" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.GlassesMask, 220, 220, 240, 0.78),
             _ => DebugMaskExporter.CreateFinalOverlayPreview(source, masks)
         };
+    }
+
+    private static bool IsRetouchOutputDebugMask(string id)
+    {
+        return id is "blemish_candidate" or "blemish_applied" or
+            "wrinkle_candidate" or "wrinkle_applied" or "wrinkle_combined" or
+            "glabella_wrinkle" or "under_eye_wrinkle" or
+            "texture_restore" or "texture_strength" or "plastic_risk" or "hardprotect_diff";
     }
 
     private void RestoreMaskDebugPreviousPreview()
@@ -1059,12 +1099,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 photo.SetAdjustedImage(output.FinalImage);
                 _lastRetouchProcessReport = output.Report;
+                _lastRetouchOutputPhoto = photo;
+                _lastRetouchStageOutput = output;
                 UpdateRetouchBindingReport(eventName, changedControlId, changedControlValue, output, createdBefore, cacheBefore);
                 SaveRetouchDebugImages(photo, snapshot, output);
             }
 
             OnPropertyChanged(nameof(SnapshotMaskStatusText));
             OnPropertyChanged(nameof(RetouchBindingStatusText));
+            OnPropertyChanged(nameof(DebugMaskStatusText));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
         {
@@ -1160,6 +1203,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (ReferenceEquals(SelectedPhoto, photo))
             {
                 _lastRetouchProcessReport = output.Report;
+                _lastRetouchOutputPhoto = photo;
+                _lastRetouchStageOutput = output;
                 UpdateRetouchBindingReport("ReAnalyze", null, null, output, createdBefore, cacheBefore);
                 if (_isMaskDebugPreviewEnabled)
                 {
@@ -1177,6 +1222,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
                 OnPropertyChanged(nameof(SnapshotMaskStatusText));
                 OnPropertyChanged(nameof(RetouchBindingStatusText));
+                OnPropertyChanged(nameof(DebugMaskStatusText));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
@@ -4430,7 +4476,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new("nostril", "Nostril"),
             new("hair", "Hair"),
             new("beard", "Beard"),
-            new("glasses", "Glasses")
+            new("glasses", "Glasses"),
+            new("blemish_candidate", "BlemishCandidate"),
+            new("blemish_applied", "BlemishApplied"),
+            new("wrinkle_candidate", "WrinkleCandidate"),
+            new("wrinkle_applied", "WrinkleApplied"),
+            new("wrinkle_combined", "WrinkleCombined"),
+            new("under_eye_wrinkle", "UnderEyeWrinkle"),
+            new("glabella_wrinkle", "GlabellaWrinkle"),
+            new("texture_restore", "TextureRestore"),
+            new("texture_strength", "TextureStrength"),
+            new("plastic_risk", "PlasticRisk"),
+            new("hardprotect_diff", "HardProtectDiff")
         };
     }
 }
