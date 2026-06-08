@@ -60,6 +60,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isEnsuringSnapshotMask;
     private double _dummyMaskStageValue = 1;
     private RetouchProcessReport? _lastRetouchProcessReport;
+    private RetouchBindingReport _lastRetouchBindingReport = RetouchBindingReport.Empty;
+    private string _pendingRetouchBindingEventName = "Retouch";
+    private string? _pendingRetouchBindingControlId;
+    private double? _pendingRetouchBindingControlValue;
     private System.Windows.Media.Color? _manualSkinReferenceColor;
     private bool _isDraggingFaceWorkArea;
     private FaceWorkAreaDragMode _faceWorkAreaDragMode;
@@ -113,6 +117,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public string MaskDebugButtonText => _isMaskDebugPreviewEnabled ? "마스크 끄기" : "마스크 보기";
     public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "파이프라인 끄기" : "파이프라인 보정";
     public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} {RetouchStageStatusText}";
+    public string RetouchBindingStatusText => _lastRetouchBindingReport.ToStatusText();
 
     public double DummyMaskStageValue
     {
@@ -130,6 +135,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(DummyMaskStageText));
             if (_isDummyMaskRetouchPreviewEnabled)
             {
+                SetPendingRetouchBindingEvent("StageChanged", "stage", nextValue);
                 _ = ApplyDummyMaskRetouchAsync();
             }
         }
@@ -905,6 +911,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         _isDummyMaskRetouchPreviewEnabled = true;
         OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+        SetPendingRetouchBindingEvent("PipelineEnabled", null, null);
         await ApplyDummyMaskRetouchAsync();
     }
 
@@ -922,6 +929,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         PhotoItem photo = SelectedPhoto;
         double stage = DummyMaskStageValue;
+        int createdBefore = _snapshotMaskBuilder.CreatedCount;
+        int cacheBefore = _snapshotMaskBuilder.CacheHitCount;
+        string eventName = _pendingRetouchBindingEventName;
+        string? changedControlId = _pendingRetouchBindingControlId;
+        double? changedControlValue = _pendingRetouchBindingControlValue;
+        ClearPendingRetouchBindingEvent();
         try
         {
             _showPreviewProcessingOverlay = false;
@@ -940,10 +953,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 photo.SetAdjustedImage(output.FinalImage);
                 _lastRetouchProcessReport = output.Report;
+                UpdateRetouchBindingReport(eventName, changedControlId, changedControlValue, output, createdBefore, cacheBefore);
                 SaveRetouchDebugImages(photo, snapshot, output);
             }
 
             OnPropertyChanged(nameof(SnapshotMaskStatusText));
+            OnPropertyChanged(nameof(RetouchBindingStatusText));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
         {
@@ -953,6 +968,117 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 this,
                 ex.Message,
                 "더미 보정",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            IsPreviewProcessing = false;
+            _showPreviewProcessingOverlay = false;
+            OnPropertyChanged(nameof(PreviewProcessingVisibility));
+        }
+    }
+
+    private void SetPendingRetouchBindingEvent(string eventName, string? controlId, double? value)
+    {
+        _pendingRetouchBindingEventName = eventName;
+        _pendingRetouchBindingControlId = controlId;
+        _pendingRetouchBindingControlValue = value;
+    }
+
+    private void ClearPendingRetouchBindingEvent()
+    {
+        _pendingRetouchBindingEventName = "Retouch";
+        _pendingRetouchBindingControlId = null;
+        _pendingRetouchBindingControlValue = null;
+    }
+
+    private void UpdateRetouchBindingReport(
+        string eventName,
+        string? changedControlId,
+        double? changedValue,
+        RetouchStageProcessorOutput output,
+        int createdBefore,
+        int cacheBefore)
+    {
+        bool analysisReexecuted = _snapshotMaskBuilder.CreatedCount > createdBefore;
+        bool cacheReused = _snapshotMaskBuilder.CacheHitCount > cacheBefore || !analysisReexecuted;
+        _lastRetouchBindingReport = new RetouchBindingReport(
+            eventName,
+            changedControlId,
+            changedValue,
+            output.Report.RequestedStage,
+            output.Report.AppliedStage,
+            cacheReused,
+            analysisReexecuted,
+            true,
+            output.Report.IsStageLimited);
+        System.Diagnostics.Debug.WriteLine(_lastRetouchBindingReport.ToStatusText());
+    }
+
+    private async void ReAnalyzeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsPreviewProcessing)
+        {
+            return;
+        }
+
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                "재분석할 사진 1장을 선택해줘.",
+                "재분석",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        PhotoItem photo = SelectedPhoto;
+        int createdBefore = _snapshotMaskBuilder.CreatedCount;
+        int cacheBefore = _snapshotMaskBuilder.CacheHitCount;
+        try
+        {
+            _showPreviewProcessingOverlay = false;
+            IsPreviewProcessing = true;
+            (FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output) = await Task.Run(() =>
+            {
+                FaceSnapshotMaskSet rebuiltSnapshot = _snapshotMaskBuilder.Rebuild(photo);
+                RetouchStageProcessorOutput result = _retouchStageProcessor.Process(
+                    photo.BaseImage,
+                    rebuiltSnapshot,
+                    CreateRetouchOptions((int)Math.Round(DummyMaskStageValue)));
+                return (rebuiltSnapshot, result);
+            });
+
+            if (ReferenceEquals(SelectedPhoto, photo))
+            {
+                _lastRetouchProcessReport = output.Report;
+                UpdateRetouchBindingReport("ReAnalyze", null, null, output, createdBefore, cacheBefore);
+                if (_isMaskDebugPreviewEnabled)
+                {
+                    BitmapSource overlay = DebugMaskExporter.CreateFinalOverlayPreview(photo.BaseImage, snapshot.Masks);
+                    photo.SetAdjustedImage(overlay);
+                    SaveSnapshotDebugMasks(photo, snapshot);
+                }
+                else
+                {
+                    _isDummyMaskRetouchPreviewEnabled = true;
+                    OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+                    photo.SetAdjustedImage(output.FinalImage);
+                    SaveRetouchDebugImages(photo, snapshot, output);
+                }
+
+                OnPropertyChanged(nameof(SnapshotMaskStatusText));
+                OnPropertyChanged(nameof(RetouchBindingStatusText));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                ex.Message,
+                "재분석",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
@@ -1064,6 +1190,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             e.PropertyName == nameof(RetouchControl.Value))
         {
             return;
+        }
+
+        if (_isDummyMaskRetouchPreviewEnabled &&
+            e.PropertyName == nameof(RetouchControl.Value))
+        {
+            SetPendingRetouchBindingEvent("SliderChanged", control.Id, control.Value);
         }
 
         await ApplyPhotoAdjustmentsAsync(showOverlay: control.Id != "photo_curves");

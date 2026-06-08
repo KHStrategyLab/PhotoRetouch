@@ -287,6 +287,8 @@
                             Value="{Binding DummyMaskStageValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                             VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding SnapshotMaskStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    <TextBlock Text="{Binding RetouchBindingStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    <Button Content="재분석" Click="ReAnalyzeButton_Click"/>
                     <Button Content="&#xCD08;&#xAE30;&#xD654;"/>
                 </StackPanel>
 

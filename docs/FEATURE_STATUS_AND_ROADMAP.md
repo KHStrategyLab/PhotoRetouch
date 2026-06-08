@@ -244,6 +244,8 @@ Required test image set:
 - `PipelineDebugReport` and pipeline debug images are added for ORDER_16 integration review. The current filter order is SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, and HardProtectFinalRestore.
 - `RetouchToolset` and `AppliedRetouchOptions` are added for ORDER_17. The top Stage slider provides defaults, and existing skin/tone/texture sliders plus the new wrinkle section can override the stage defaults without rebuilding SnapshotMask.
 - The wrinkle section adds 전체, 눈밑, 미간, 이마, 팔자, 입가, 목, and 코그림자 controls for the first wrinkle toolset pass.
+- `RetouchBindingReport` is added for ORDER_18. Stage and slider changes now expose whether the pipeline used cache or rebuilt the snapshot, and the top toolbar shows the last binding event.
+- A minimal `재분석` action rebuilds SnapshotMask explicitly; Stage and Slider changes continue to use `GetOrCreate`.
 - `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-30` are accounted for.
 - `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
@@ -278,7 +280,7 @@ Required test image set:
 - Actual skin mask and facial part detection.
 - Debug mask export for every required mask.
 - Dedicated `ToneEvenFilter` with candidate masks, process report, and slider/toolset binding. The current code has only a simple mask-aware tone-even processor stage.
-- ORDER_18 ViewModel/UI binding review for the new Toolset and slider flow.
+- ORDER_19 real Stage 1-10 tuning after visual review of the new binding flow.
 - Nostril detector with fallback lower-nose protection.
 - HardProtect, SoftProtect, and RetouchAllow mask composition.
 - Mask quality validation and debug warnings.
