@@ -15,6 +15,7 @@ Sources checked:
 ## Result
 
 No numbered order from `ORDER_00` through `ORDER_30` is missing from the conversation/context after the latest pasted orders are included.
+The post-`ORDER_30` V1 stabilization keys for `ORDER_31` through `ORDER_35` are also recorded as the productization boundary.
 
 Important caveat:
 
@@ -57,6 +58,11 @@ Important caveat:
 | ORDER_28 | Preset save/load | Queued/Planned. Existing doc created. |
 | ORDER_29 | Batch processing | Queued/Planned. |
 | ORDER_30 | High-res performance optimization | Queued/Planned. Full order stored. |
+| ORDER_31 | Cache / memory cleanup | Queued/Planned as V1 stabilization key. |
+| ORDER_32 | UI product polish | Queued/Planned as V1 stabilization key. |
+| ORDER_33 | User settings persistence | Queued/Planned as V1 stabilization key. |
+| ORDER_34 | Installer / package | Queued/Planned as V1 stabilization key. |
+| ORDER_35 | V1 final review | Queued/Planned as V1 stabilization key. |
 
 ## Out-Of-Order Arrivals
 
