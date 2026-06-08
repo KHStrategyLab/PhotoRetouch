@@ -23,6 +23,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     private double _previewPanX;
     private double _previewPanY;
     private System.Windows.Point _previewZoomOrigin = new(0.5, 0.5);
+    private FaceWorkArea _faceWorkArea = FaceWorkArea.Default;
 
     private PhotoItem(string path, BitmapSource image, BitmapSource thumbnail, DateTime sourceLastWriteTimeUtc, long sourceLength)
     {
@@ -71,6 +72,22 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public string DisplayInfo { get; }
     public BitmapSource BaseImage => _baseImage;
     public RetouchAdjustmentState? RetouchState { get; set; }
+    public FaceWorkArea FaceWorkArea
+    {
+        get => _faceWorkArea;
+        set
+        {
+            FaceWorkArea clampedValue = value.Clamp();
+            if (_faceWorkArea == clampedValue)
+            {
+                return;
+            }
+
+            _faceWorkArea = clampedValue;
+            OnPropertyChanged();
+        }
+    }
+
     public double PreviewZoomPercent
     {
         get => _previewZoomPercent;
@@ -196,7 +213,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         int cacheKey = CreateEffectPreviewCacheKey(visibleMaxLongSide);
         if (!_effectPreviewCache.TryGetValue(cacheKey, out BitmapSource? previewSource))
         {
-            previewSource = PhotoAdjustmentEngine.CreateEffectPreviewSource(BaseImage, visibleMaxLongSide);
+            previewSource = PreviewSourceFactory.CreateEffectPreviewSource(BaseImage, visibleMaxLongSide);
             _effectPreviewCache[cacheKey] = previewSource;
         }
 

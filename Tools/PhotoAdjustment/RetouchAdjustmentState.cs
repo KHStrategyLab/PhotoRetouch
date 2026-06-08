@@ -10,7 +10,8 @@ namespace PhotoRetouch;
 public sealed record RetouchAdjustmentState(
     Dictionary<string, double> ControlValues,
     CurveChannel CurveChannel,
-    Dictionary<CurveChannel, CurvePointState[]> CurvePointsByChannel);
+    Dictionary<CurveChannel, CurvePointState[]> CurvePointsByChannel,
+    FaceWorkArea FaceWorkArea);
 
 public sealed record RetouchHistoryEntry(RetouchAdjustmentState Before, RetouchAdjustmentState After);
 

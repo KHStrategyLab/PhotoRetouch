@@ -10,9 +10,14 @@ Customization is a product requirement. Do not remove or merge useful photograph
 
 ## Current Engine
 
-The current preview engine is a C# CPU engine.
+The current preview engine is a C# CPU engine behind `IPreviewEngine`.
 
 - WPF handles the UI and image display.
+- `PreviewAdjustment` carries tone and curve parameters.
+- `PreviewEngineFactory` chooses the active preview engine.
+- `CSharpPreviewEngine` contains the current managed pixel loop.
+- `PreviewSourceFactory` creates screen-sized effect preview sources.
+- App settings state lives in `Settings/` classes, separate from `SettingsWindow.xaml.cs`.
 - Pixel adjustments are calculated on a background thread.
 - Input is blocked while a preview render is running.
 - Tone correction sliders use throttled live preview while dragging; heavier future tools may still commit on mouse release.
@@ -22,12 +27,17 @@ The current preview engine is a C# CPU engine.
 Current implemented adjustment order:
 
 1. Preview source sizing
-2. Exposure
-3. Contrast
+2. Exposure (`-15` to `+15`, with one-decimal display for smoother adjustment; negative exposure protects near-white highlights)
+3. Contrast (`-25` to `+25`)
 4. Saturation
 5. White balance
 6. Curve LUT
-7. Blur or sharpen
+7. Skin tone evening
+8. Blemish removal
+9. Skin texture smoothing
+10. Pore cleanup
+11. Face-shape preview warp
+12. Blur or sharpen
 
 ## Preview Policy
 
@@ -56,6 +66,16 @@ Heavy work should not run continuously while the user is dragging unless it is t
 - Mouse helper gestures are separate from keyboard shortcuts and may include Space as well as Ctrl, Shift, and Alt.
 - Individual tool controls should remain independently adjustable. Shared/global application should be added later as explicit copy or batch workflow.
 
+## Geometry Tool Policy
+
+Face shape, eyes, nose, mouth, hair volume, clothing shape, and other geometry tools should not be approximated by global image transforms.
+
+- Each photo can carry a normalized face work area as the first geometry target model.
+- The current UI can show and edit a face work area guide when the Face Shape section is active.
+- The first oval-face pass uses the editable face work area as its explicit target region.
+- Jawline clarity currently uses the editable face work area for a localized lower-side edge pass.
+- Broader geometry rendering should move behind a dedicated warp engine as controls grow.
+
 ## Customization And Performance Policy
 
 The app should keep photographer-facing controls flexible even if the source code becomes larger.
@@ -73,7 +93,7 @@ The app should keep photographer-facing controls flexible even if the source cod
 
 Keep the current engine but improve structure.
 
-- Separate UI controls from preview engine logic.
+- UI controls are separated from preview engine rendering through `PreviewAdjustment` and `IPreviewEngine`.
 - Build one adjustment request object from the current UI state.
 - Avoid repeated full-image recalculation.
 - Keep reduced preview size support.
@@ -83,7 +103,7 @@ Keep the current engine but improve structure.
 
 ### Stage 2: Add Engine Interface
 
-Introduce a common engine contract so the UI does not care which engine is used.
+Completed. The UI now talks to a common engine contract so it does not care which engine is used.
 
 Suggested shape:
 
@@ -96,7 +116,7 @@ public interface IPreviewEngine
 
 Suggested implementations:
 
-- `CSharpPreviewEngine`
+- `CSharpPreviewEngine` - current implementation
 - `NativeCpuPreviewEngine` later
 - `GpuPreviewEngine` later
 

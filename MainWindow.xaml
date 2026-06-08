@@ -40,6 +40,7 @@
         <SolidColorBrush x:Key="SliderFillHover" Color="#4A5963"/>
         <SolidColorBrush x:Key="SliderThumb" Color="#718391"/>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <local:RetouchValueTextConverter x:Key="RetouchValueTextConverter"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextMain}"/>
@@ -394,7 +395,8 @@
                               PreviewMouseLeftButtonDown="PreviewFrame_PreviewMouseLeftButtonDown"
                               PreviewMouseLeftButtonUp="PreviewFrame_PreviewMouseLeftButtonUp"
                               PreviewMouseMove="PreviewFrame_PreviewMouseMove"
-                              PreviewMouseWheel="PreviewFrame_PreviewMouseWheel">
+                              PreviewMouseWheel="PreviewFrame_PreviewMouseWheel"
+                              SizeChanged="PreviewSurface_SizeChanged">
                             <Grid.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="Black" Click="PreviewBackgroundBlack_Click"/>
@@ -497,6 +499,55 @@
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"/>
+                                    <Canvas Visibility="{Binding FaceWorkAreaOverlayVisibility}">
+                                        <Border Canvas.Left="{Binding FaceWorkAreaOverlayLeft}"
+                                                Canvas.Top="{Binding FaceWorkAreaOverlayTop}"
+                                                Width="{Binding FaceWorkAreaOverlayWidth}"
+                                                Height="{Binding FaceWorkAreaOverlayHeight}"
+                                                Tag="FaceWorkAreaOverlay"
+                                                Background="#01000000"
+                                                Cursor="SizeAll"
+                                                MouseLeftButtonDown="FaceWorkAreaOverlay_MouseLeftButtonDown"
+                                                MouseMove="FaceWorkAreaOverlay_MouseMove"
+                                                MouseLeftButtonUp="FaceWorkAreaOverlay_MouseLeftButtonUp">
+                                            <Grid Opacity="0.88">
+                                                <Ellipse Fill="#0CA8B3BB"
+                                                         Stroke="#A8B3BB"
+                                                         StrokeThickness="1.4"
+                                                         StrokeDashArray="6 5"/>
+                                                <Rectangle Width="1"
+                                                           Fill="#66A8B3BB"
+                                                           HorizontalAlignment="Center"/>
+                                                <Rectangle Height="1"
+                                                           Fill="#66A8B3BB"
+                                                           VerticalAlignment="Center"/>
+                                                <Rectangle Width="10"
+                                                           Height="10"
+                                                           Fill="#D9A8B3BB"
+                                                           Stroke="#303438"
+                                                           HorizontalAlignment="Left"
+                                                           VerticalAlignment="Top"/>
+                                                <Rectangle Width="10"
+                                                           Height="10"
+                                                           Fill="#D9A8B3BB"
+                                                           Stroke="#303438"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Top"/>
+                                                <Rectangle Width="10"
+                                                           Height="10"
+                                                           Fill="#D9A8B3BB"
+                                                           Stroke="#303438"
+                                                           HorizontalAlignment="Left"
+                                                           VerticalAlignment="Bottom"/>
+                                                <Rectangle Width="10"
+                                                           Height="10"
+                                                           Fill="#D9A8B3BB"
+                                                           Stroke="#303438"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Bottom"/>
+                                            </Grid>
+                                        </Border>
+                                    </Canvas>
                                 </Grid>
                             </Border>
                         </Grid>
@@ -639,13 +690,23 @@
                                                         <StackPanel>
                                                             <Grid x:Name="SliderEditor">
                                                                 <TextBlock Text="{Binding Label}"/>
-                                                                <TextBlock Text="{Binding Value, ElementName=ValueSlider, StringFormat={}{0:0}}" HorizontalAlignment="Right" Foreground="{StaticResource TextSub}"/>
+                                                                <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource TextSub}">
+                                                                    <TextBlock.Text>
+                                                                        <MultiBinding Converter="{StaticResource RetouchValueTextConverter}">
+                                                                            <Binding ElementName="ValueSlider" Path="Value"/>
+                                                                            <Binding/>
+                                                                        </MultiBinding>
+                                                                    </TextBlock.Text>
+                                                                </TextBlock>
                                                             </Grid>
                                                             <Slider x:Name="ValueSlider"
                                                                     Minimum="{Binding Minimum}"
                                                                     Maximum="{Binding Maximum}"
                                                                     Value="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
-                                                                    IsSnapToTickEnabled="False"
+                                                                    TickFrequency="{Binding TickFrequency}"
+                                                                    SmallChange="{Binding SmallChange}"
+                                                                    LargeChange="{Binding LargeChange}"
+                                                                    IsSnapToTickEnabled="{Binding IsSnapToTickEnabled}"
                                                                     PreviewMouseWheel="ValueSlider_PreviewMouseWheel"
                                                                     ValueChanged="ValueSlider_ValueChanged"
                                                                     PreviewMouseLeftButtonUp="ValueSlider_CommitValue"

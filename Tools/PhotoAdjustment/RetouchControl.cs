@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -26,13 +27,31 @@ public sealed class RetouchControl : INotifyPropertyChanged
     private readonly Dictionary<CurveChannel, ObservableCollection<CurvePoint>> _curvePointsByChannel = new();
 
     public RetouchControl(string id, string label, double minimum, double maximum, double value)
+        : this(id, label, minimum, maximum, value, 1, false, "0")
+    {
+    }
+
+    private RetouchControl(
+        string id,
+        string label,
+        double minimum,
+        double maximum,
+        double value,
+        double tickFrequency,
+        bool isSnapToTickEnabled,
+        string valueTextFormat)
     {
         Id = id;
         Label = label;
         Minimum = minimum;
         Maximum = maximum;
-        _defaultValue = value;
-        _value = value;
+        TickFrequency = tickFrequency;
+        IsSnapToTickEnabled = isSnapToTickEnabled;
+        SmallChange = tickFrequency;
+        LargeChange = Math.Max(tickFrequency, tickFrequency * 3);
+        ValueTextFormat = valueTextFormat;
+        _defaultValue = CoerceValue(value);
+        _value = _defaultValue;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -41,6 +60,11 @@ public sealed class RetouchControl : INotifyPropertyChanged
     public string Label { get; }
     public double Minimum { get; }
     public double Maximum { get; }
+    public double TickFrequency { get; }
+    public double SmallChange { get; }
+    public double LargeChange { get; }
+    public bool IsSnapToTickEnabled { get; }
+    public string ValueTextFormat { get; }
     public bool IsColorPicker { get; }
     public bool IsActionButton { get; }
     public bool IsBackgroundLibrary { get; }
@@ -131,18 +155,19 @@ public sealed class RetouchControl : INotifyPropertyChanged
         get => _value;
         set
         {
-            if (Math.Abs(_value - value) < 0.001)
+            double coercedValue = CoerceValue(value);
+            if (Math.Abs(_value - coercedValue) < 0.001)
             {
                 return;
             }
 
-            _value = value;
+            _value = coercedValue;
             OnPropertyChanged();
             OnPropertyChanged(nameof(DisplayValue));
         }
     }
 
-    public string DisplayValue => Value.ToString("0");
+    public string DisplayValue => FormatDisplayValue(Value);
     public string CurveStrengthLabel => $"\uCEE4\uBE0C \uC801\uC6A9\uB7C9 ({CurveChannelDisplayName})";
     private string CurveChannelDisplayName => CurveChannel switch
     {
@@ -190,6 +215,33 @@ public sealed class RetouchControl : INotifyPropertyChanged
         RetouchControl control = new(id, label, 0, 100, 100, isCurveEditor: true);
         control.InitializeCurvePoints();
         return control;
+    }
+
+    public static RetouchControl CreateExposure(string id, string label)
+    {
+        return new RetouchControl(id, label, -15, 15, 0, 0.5, false, "0.0");
+    }
+
+    public static RetouchControl CreateContrast(string id, string label)
+    {
+        return new RetouchControl(id, label, -25, 25, 0);
+    }
+
+    public string FormatDisplayValue(double value)
+    {
+        return value.ToString(ValueTextFormat, CultureInfo.InvariantCulture);
+    }
+
+    private double CoerceValue(double value)
+    {
+        double coerced = Math.Clamp(value, Minimum, Maximum);
+        if (IsSnapToTickEnabled && TickFrequency > 0)
+        {
+            double steps = Math.Round((coerced - Minimum) / TickFrequency, MidpointRounding.AwayFromZero);
+            coerced = Minimum + steps * TickFrequency;
+        }
+
+        return Math.Clamp(coerced, Minimum, Maximum);
     }
 
     private RetouchControl(string id, string label, double minimum, double maximum, double value, bool isColorPicker, string? colorValue)
@@ -333,18 +385,18 @@ public sealed class RetouchControl : INotifyPropertyChanged
     public CurvePoint? AddCurvePointFromCanvas(double canvasX, double canvasY)
     {
         ObservableCollection<CurvePoint> points = GetCurvePoints(CurveChannel);
-        if (points.Count >= MaxCurvePoints || !IsNearCurveLine(canvasX, canvasY))
+        if (points.Count >= MaxCurvePoints || !IsInsideCurvePlot(canvasX, canvasY))
         {
             return null;
         }
 
-        double input = Math.Clamp(CanvasXToInput(canvasX), 1, 254);
+        double input = CanvasXToInput(canvasX);
         if (points.Any(point => Math.Abs(point.Input - input) <= 2))
         {
             return null;
         }
 
-        double output = InterpolateCurveOutput(CurveChannel, input);
+        double output = CanvasYToOutput(canvasY);
         CurvePoint point = new(input, output, isEndpoint: false);
         points.Add(point);
         SortCurvePoints(points);
@@ -352,18 +404,12 @@ public sealed class RetouchControl : INotifyPropertyChanged
         return point;
     }
 
-    private bool IsNearCurveLine(double canvasX, double canvasY)
+    private static bool IsInsideCurvePlot(double canvasX, double canvasY)
     {
-        const double curveHitTolerance = 14;
-        if (canvasX < 0 || canvasX > CurveCanvasWidth || canvasY < 0 || canvasY > CurveCanvasHeight)
-        {
-            return false;
-        }
-
-        double input = CanvasXToInput(canvasX);
-        double output = InterpolateCurveOutput(CurveChannel, input);
-        double curveY = OutputToCanvasY(output);
-        return Math.Abs(canvasY - curveY) <= curveHitTolerance;
+        return canvasX >= CurvePlotOffset &&
+               canvasX <= CurvePlotOffset + CurvePlotWidth &&
+               canvasY >= CurvePlotOffset &&
+               canvasY <= CurvePlotOffset + CurvePlotHeight;
     }
 
     public void MoveCurvePoint(CurvePoint point, double canvasX, double canvasY)
@@ -477,8 +523,8 @@ public sealed class RetouchControl : INotifyPropertyChanged
         ObservableCollection<CurvePoint> points = GetCurvePoints(CurveChannel);
         bool isAlreadyReset =
             points.Count == 2 &&
-            points.Any(point => point.IsEndpoint && Math.Abs(point.Input) < 0.001 && Math.Abs(point.Output) < 0.001) &&
-            points.Any(point => point.IsEndpoint && Math.Abs(point.Input - 255) < 0.001 && Math.Abs(point.Output - 255) < 0.001);
+            points.Any(point => Math.Abs(point.Input) < 0.001 && Math.Abs(point.Output) < 0.001) &&
+            points.Any(point => Math.Abs(point.Input - 255) < 0.001 && Math.Abs(point.Output - 255) < 0.001);
 
         if (isAlreadyReset)
         {
@@ -487,8 +533,8 @@ public sealed class RetouchControl : INotifyPropertyChanged
 
         SelectedCurvePoint = null;
         points.Clear();
-        points.Add(new CurvePoint(0, 0, isEndpoint: true));
-        points.Add(new CurvePoint(255, 255, isEndpoint: true));
+        points.Add(new CurvePoint(0, 0, isEndpoint: false));
+        points.Add(new CurvePoint(255, 255, isEndpoint: false));
         NotifyCurveChanged();
         return true;
     }
@@ -500,8 +546,8 @@ public sealed class RetouchControl : INotifyPropertyChanged
                 channel => channel,
                 _ => new[]
                 {
-                    new CurvePointState(0, 0, true),
-                    new CurvePointState(255, 255, true)
+                    new CurvePointState(0, 0, false),
+                    new CurvePointState(255, 255, false)
                 });
     }
 
@@ -552,8 +598,8 @@ public sealed class RetouchControl : INotifyPropertyChanged
         {
             ObservableCollection<CurvePoint> points = GetCurvePoints(channel);
             points.Clear();
-            points.Add(new CurvePoint(0, 0, isEndpoint: true));
-            points.Add(new CurvePoint(255, 255, isEndpoint: true));
+            points.Add(new CurvePoint(0, 0, isEndpoint: false));
+            points.Add(new CurvePoint(255, 255, isEndpoint: false));
         }
 
         CurveChannel = CurveChannel.All;
@@ -563,17 +609,7 @@ public sealed class RetouchControl : INotifyPropertyChanged
     private static CurvePointState[] NormalizeCurvePointStates(IEnumerable<CurvePointState>? states)
     {
         CurvePointState[] saved = states?.ToArray() ?? Array.Empty<CurvePointState>();
-        CurvePointState blackPoint = saved
-            .Where(point => point.IsEndpoint)
-            .OrderBy(point => Math.Abs(point.Input))
-            .FirstOrDefault() ?? new CurvePointState(0, 0, true);
-        CurvePointState whitePoint = saved
-            .Where(point => point.IsEndpoint)
-            .OrderBy(point => Math.Abs(point.Input - 255))
-            .FirstOrDefault() ?? new CurvePointState(255, 255, true);
-
-        IEnumerable<CurvePointState> middlePoints = saved
-            .Where(point => !point.IsEndpoint)
+        CurvePointState[] normalized = saved
             .Select(point => new CurvePointState(
                 Math.Clamp(point.Input, 0, 255),
                 Math.Clamp(point.Output, 0, 255),
@@ -581,18 +617,16 @@ public sealed class RetouchControl : INotifyPropertyChanged
             .GroupBy(point => Math.Round(point.Input))
             .Select(group => group.Last())
             .OrderBy(point => point.Input)
-            .Take(MaxCurvePoints - 2);
-
-        return new[]
-            {
-                new CurvePointState(Math.Clamp(blackPoint.Input, 0, 255), Math.Clamp(blackPoint.Output, 0, 255), true)
-            }
-            .Concat(middlePoints)
-            .Concat(new[]
-            {
-                new CurvePointState(Math.Clamp(whitePoint.Input, 0, 255), Math.Clamp(whitePoint.Output, 0, 255), true)
-            })
+            .Take(MaxCurvePoints)
             .ToArray();
+
+        return normalized.Length == 0
+            ? new[]
+            {
+                new CurvePointState(0, 0, false),
+                new CurvePointState(255, 255, false)
+            }
+            : normalized;
     }
 
     private static (double Minimum, double Maximum) GetInputBoundsForPoint(ObservableCollection<CurvePoint> points, CurvePoint point)
@@ -602,10 +636,7 @@ public sealed class RetouchControl : INotifyPropertyChanged
 
     public void MarkCurvePointForDeletion(CurvePoint point)
     {
-        if (!point.IsEndpoint)
-        {
-            point.IsPendingDelete = true;
-        }
+        point.IsPendingDelete = true;
     }
 
     public bool DeleteCurvePointIfMarked(CurvePoint point)
@@ -615,11 +646,6 @@ public sealed class RetouchControl : INotifyPropertyChanged
 
     public bool DeleteCurvePoint(CurvePoint point)
     {
-        if (point.IsEndpoint)
-        {
-            return false;
-        }
-
         ObservableCollection<CurvePoint> points = GetCurvePoints(CurveChannel);
         bool removed = points.Remove(point);
         if (removed)
@@ -772,8 +798,8 @@ public sealed class RetouchControl : INotifyPropertyChanged
         {
             _curvePointsByChannel[channel] = new ObservableCollection<CurvePoint>
             {
-                new(0, 0, isEndpoint: true),
-                new(255, 255, isEndpoint: true)
+                new(0, 0, isEndpoint: false),
+                new(255, 255, isEndpoint: false)
             };
         }
     }
@@ -784,8 +810,8 @@ public sealed class RetouchControl : INotifyPropertyChanged
         {
             points = new ObservableCollection<CurvePoint>
             {
-                new(0, 0, isEndpoint: true),
-                new(255, 255, isEndpoint: true)
+                new(0, 0, isEndpoint: false),
+                new(255, 255, isEndpoint: false)
             };
             _curvePointsByChannel[channel] = points;
         }
@@ -845,3 +871,22 @@ public sealed class RetouchControl : INotifyPropertyChanged
     }
 }
 
+public sealed class RetouchValueTextConverter : System.Windows.Data.IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 2 ||
+            values[0] is not double value ||
+            values[1] is not RetouchControl control)
+        {
+            return string.Empty;
+        }
+
+        return control.FormatDisplayValue(value);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}

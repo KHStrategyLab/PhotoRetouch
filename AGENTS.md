@@ -107,11 +107,14 @@ Key rules:
 
 ## Engine Roadmap
 
-Do this before adding C++:
+Already completed before adding C++:
 
-- Introduce a `PreviewAdjustment` model.
-- Introduce an `IPreviewEngine` interface.
-- Move current pixel code into a `CSharpPreviewEngine`.
+- Introduced a `PreviewAdjustment` model.
+- Introduced an `IPreviewEngine` interface.
+- Moved current pixel code into a `CSharpPreviewEngine`.
+- Added `PreviewEngineFactory`.
+- Added `PreviewSourceFactory` for screen-sized preview source creation.
+- Moved app settings models out of `SettingsWindow.xaml.cs` into `Settings/`.
 
 Later:
 
@@ -161,7 +164,8 @@ Current rules:
 
 - Channels: All, R, G, B
 - Max 7 anchors per channel
-- Endpoints are fixed and cannot be deleted
+- Default corner anchors start at 0,0 and 255,255, but they are editable and deletable
+- Dragging anchors past each other is allowed so cross-curve shapes can be created
 - Add points by clicking the curve canvas/line
 - Drag points to edit
 - Delete selected point with Delete or Backspace
@@ -205,10 +209,9 @@ Known files:
 
 ## Suggested Next Engineering Step
 
-After stabilizing the current curve editor behavior, start engine separation:
+After stabilizing the current curve editor behavior, continue engine separation:
 
-1. Create `PreviewAdjustment`.
-2. Create `IPreviewEngine`.
-3. Move current `PhotoAdjustmentEngine` logic into `CSharpPreviewEngine`.
-4. Keep `PhotoAdjustmentEngine` as a facade if useful.
-5. Only after that, plan `PhotoRetouch.Native` for C++.
+1. Keep `PreviewEngineFactory` as the single engine selection point.
+2. Consider extracting preview render orchestration from `MainWindow.xaml.cs`.
+3. Add `NativeCpuPreviewEngine` interface scaffolding only when the managed engine path is stable.
+4. Only after that, plan `PhotoRetouch.Native` for C++.

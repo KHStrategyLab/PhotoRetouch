@@ -54,6 +54,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isUpdatingRetouchSliderFromSlider;
     private bool _pendingRetouchSliderLivePreview;
     private bool _isResettingRetouchControlsForPhotoChange;
+    private bool _isDraggingFaceWorkArea;
+    private FaceWorkAreaDragMode _faceWorkAreaDragMode;
+    private System.Windows.Point _faceWorkAreaDragStart;
+    private FaceWorkArea _faceWorkAreaDragStartArea = FaceWorkArea.Default;
+    private RetouchAdjustmentState? _faceWorkAreaDragUndoBeforeState;
     private bool _isSectionOrderEditMode;
     private RetouchAdjustmentState? _retouchSliderUndoBeforeState;
     private RetouchAdjustmentState? _curveAmountUndoBeforeState;
@@ -66,6 +71,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly System.Windows.Threading.DispatcherTimer _retouchSliderPreviewTimer;
     private readonly List<RetouchHistoryEntry> _undoHistory = new();
     private readonly List<RetouchHistoryEntry> _redoHistory = new();
+    private IPreviewEngine _previewEngine = PreviewEngineFactory.Create();
 
     public ObservableCollection<PersonOption> People { get; } = CreatePeople();
     public ObservableCollection<PhotoItem> Photos { get; } = new();
@@ -142,6 +148,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility PhotoPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility MockPreviewVisibility => SelectedPhotos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility PreviewTitleVisibility => SelectedPhotos.Count == 1 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility FaceWorkAreaOverlayVisibility =>
+        _activeRetouchSection?.Id == "face_shape" &&
+        SelectedPhotos.Count == 1 &&
+        !_isShowingOriginalPreview
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    public double FaceWorkAreaOverlayLeft => GetFaceWorkAreaOverlayBounds().Left;
+    public double FaceWorkAreaOverlayTop => GetFaceWorkAreaOverlayBounds().Top;
+    public double FaceWorkAreaOverlayWidth => GetFaceWorkAreaOverlayBounds().Width;
+    public double FaceWorkAreaOverlayHeight => GetFaceWorkAreaOverlayBounds().Height;
     public string PreviewTitleText => _isShowingOriginalPreview ? "Original" : "Preview";
     public System.Windows.Media.Brush PreviewBackgroundBrush => _previewBackgroundBrush;
     public bool IsSplitPreview => SelectedPhotos.Count > 1;
@@ -243,7 +259,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new RetouchControl[]
             {
                 new("blemish_remove", "\uC7A1\uD2F0 \uC81C\uAC70", 0, 100, 0),
-                new("skin_smooth", "\uD53C\uBD80\uACB0 \uC815\uB9AC", 0, 100, 20),
+                new("skin_smooth", "\uD53C\uBD80\uACB0 \uC815\uB9AC", 0, 100, 0),
                 new("pore_clean", "\uBAA8\uACF5 \uC815\uB9AC", 0, 100, 0),
                 new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0)
             }),
@@ -254,7 +270,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new RetouchControl[]
             {
                 new("oval_face", "\uACC4\uB780\uD615 \uBCF4\uC815", 0, 100, 0),
-                new("face_balance", "\uC88C\uC6B0 \uBC38\uB7F0\uC2A4", 0, 100, 0),
+                new("face_balance", "\uC88C\uC6B0 \uBC38\uB7F0\uC2A4", -100, 100, 0),
                 new("cheekbone_soften", "\uAD11\uB300 \uC644\uD654", 0, 100, 0),
                 new("jawline_define", "\uD131\uC120 \uC120\uBA85\uB3C4", 0, 100, 0),
                 new("chin_length", "\uD131\uB05D \uAE38\uC774", -100, 100, 0),
@@ -291,8 +307,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new RetouchControl[]
             {
                 RetouchControl.CreateCurve("photo_curves", "\uCEE4\uBE0C \uC870\uC815"),
-                new("photo_brightness", "\uB178\uCD9C", -100, 100, 0),
-                new("photo_contrast", "\uB300\uBE44", -100, 100, 0),
+                RetouchControl.CreateExposure("photo_brightness", "\uB178\uCD9C"),
+                RetouchControl.CreateContrast("photo_contrast", "\uB300\uBE44"),
                 new("photo_saturation", "\uCC44\uB3C4", -100, 100, 0),
                 new("photo_white_balance", "\uD654\uC774\uD2B8\uBC38\uB7F0\uC2A4", -100, 100, 0),
                 new("photo_blur_sharpen", "\uC120\uBA85\uB3C4", -100, 100, 0)
@@ -387,6 +403,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(PhotoPreviewVisibility));
             OnPropertyChanged(nameof(MockPreviewVisibility));
             OnPropertyChanged(nameof(PreviewTitleVisibility));
+            OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
+            OnFaceWorkAreaOverlayPropertiesChanged();
             OnPropertyChanged(nameof(PreviewRows));
             OnPropertyChanged(nameof(PreviewColumns));
             OnPropertyChanged(nameof(IsSplitPreview));
@@ -399,6 +417,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         OnPropertyChanged(nameof(SplitZoomScale));
         OnPropertyChanged(nameof(SplitPanX));
         OnPropertyChanged(nameof(SplitPanY));
+        OnFaceWorkAreaOverlayPropertiesChanged();
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -693,6 +712,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ColorManagementMode previousMode = ColorManagementSettings.Mode;
         string? previousManualProfilePath = ColorManagementSettings.ManualDisplayProfilePath;
         string previousWorkingFolderPath = WorkingFolderSettings.WorkingFolderPath;
+        PreviewEngineMode previousPreviewEngine = PerformanceSettings.PreviewEngine;
 
         SettingsWindow settingsWindow = new()
         {
@@ -704,6 +724,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             !string.Equals(previousManualProfilePath, ColorManagementSettings.ManualDisplayProfilePath, StringComparison.OrdinalIgnoreCase))
         {
             ReloadPhotosForColorManagement();
+        }
+
+        if (previousPreviewEngine != PerformanceSettings.PreviewEngine)
+        {
+            _previewEngine = PreviewEngineFactory.Create();
         }
 
         _ = ApplyPhotoAdjustmentsAsync();
@@ -731,7 +756,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (e.PropertyName is not (nameof(RetouchControl.Value) or nameof(RetouchControl.CurveChannel)) ||
             sender is not RetouchControl control ||
-            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves"))
+            control.Id is not ("photo_brightness" or "photo_contrast" or "photo_saturation" or "photo_white_balance" or "photo_blur_sharpen" or "photo_curves" or "blemish_remove" or "skin_smooth" or "pore_clean" or "tone_even" or "oval_face" or "face_balance" or "cheekbone_soften" or "jawline_define" or "chin_length" or "chin_width"))
         {
             return;
         }
@@ -761,15 +786,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        double brightness = FindRetouchControl("photo_brightness")?.Value ?? 0;
-        double contrast = FindRetouchControl("photo_contrast")?.Value ?? 0;
-        double saturation = FindRetouchControl("photo_saturation")?.Value ?? 0;
-        double whiteBalance = FindRetouchControl("photo_white_balance")?.Value ?? 0;
-        double blurSharpen = FindRetouchControl("photo_blur_sharpen")?.Value ?? 0;
-        RetouchControl? curveControl = FindRetouchControl("photo_curves");
-        double curveAmount = curveControl?.Value ?? 0;
-        CurveChannel curveChannel = curveControl?.CurveChannel ?? CurveChannel.All;
-        byte[] curveLookup = curveControl?.BuildCurveLookupTable(curveChannel) ?? PhotoAdjustmentEngine.CreateIdentityLookupTable();
+        PreviewAdjustment adjustment = CapturePreviewAdjustment();
         PhotoItem[] adjustmentTargets = GetPreviewAdjustmentTargets();
         if (adjustmentTargets.Length == 0)
         {
@@ -790,7 +807,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 Dictionary<PhotoItem, BitmapSource> results = new();
                 foreach ((PhotoItem photo, BitmapSource previewSource) in previewSources)
                 {
-                    results[photo] = PhotoAdjustmentEngine.ApplyBasicTone(previewSource, brightness, contrast, saturation, whiteBalance, blurSharpen, curveAmount, curveChannel, curveLookup);
+                    results[photo] = _previewEngine.Render(previewSource, adjustment);
                 }
 
                 return results;
@@ -895,8 +912,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         PhotoItem photo = SelectedPhoto;
-        (double brightness, double contrast, double saturation, double whiteBalance, double blurSharpen, double curveAmount, CurveChannel curveChannel, byte[] curveLookup) = CaptureCurrentAdjustmentValues();
-        if (!PhotoAdjustmentEngine.HasEffectiveAdjustment(brightness, contrast, saturation, whiteBalance, blurSharpen, curveAmount, curveLookup))
+        PreviewAdjustment adjustment = CapturePreviewAdjustment();
+        if (!_previewEngine.HasEffectiveAdjustment(adjustment))
         {
             System.Windows.MessageBox.Show(
                 this,
@@ -913,16 +930,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             IsPreviewProcessing = true;
             BitmapSource adjustedImage = await Task.Run(() =>
-                PhotoAdjustmentEngine.ApplyBasicTone(
-                    photo.BaseImage,
-                    brightness,
-                    contrast,
-                    saturation,
-                    whiteBalance,
-                    blurSharpen,
-                    curveAmount,
-                    curveChannel,
-                    curveLookup));
+                _previewEngine.Render(photo.BaseImage, adjustment));
 
             await Task.Run(() => SaveBitmapToFile(adjustedImage, savePath));
             System.Windows.MessageBox.Show(
@@ -948,19 +956,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private (double Brightness, double Contrast, double Saturation, double WhiteBalance, double BlurSharpen, double CurveAmount, CurveChannel CurveChannel, byte[] CurveLookup) CaptureCurrentAdjustmentValues()
+    private PreviewAdjustment CapturePreviewAdjustment()
     {
         RetouchControl? curveControl = FindRetouchControl("photo_curves");
         CurveChannel curveChannel = curveControl?.CurveChannel ?? CurveChannel.All;
-        return (
+        return new PreviewAdjustment(
             FindRetouchControl("photo_brightness")?.Value ?? 0,
             FindRetouchControl("photo_contrast")?.Value ?? 0,
             FindRetouchControl("photo_saturation")?.Value ?? 0,
             FindRetouchControl("photo_white_balance")?.Value ?? 0,
             FindRetouchControl("photo_blur_sharpen")?.Value ?? 0,
+            FindRetouchControl("blemish_remove")?.Value ?? 0,
+            FindRetouchControl("skin_smooth")?.Value ?? 0,
+            FindRetouchControl("pore_clean")?.Value ?? 0,
+            FindRetouchControl("tone_even")?.Value ?? 0,
+            FindRetouchControl("oval_face")?.Value ?? 0,
+            FindRetouchControl("face_balance")?.Value ?? 0,
+            FindRetouchControl("cheekbone_soften")?.Value ?? 0,
+            FindRetouchControl("jawline_define")?.Value ?? 0,
+            FindRetouchControl("chin_length")?.Value ?? 0,
+            FindRetouchControl("chin_width")?.Value ?? 0,
+            SelectedPhoto?.FaceWorkArea ?? FaceWorkArea.Default,
             curveControl?.Value ?? 0,
             curveChannel,
-            curveControl?.BuildCurveLookupTable(curveChannel) ?? PhotoAdjustmentEngine.CreateIdentityLookupTable());
+            curveControl?.BuildCurveLookupTable(curveChannel) ?? CurveLookupTables.CreateIdentity());
     }
 
     private static string CreateNumberedSavePath(string sourcePath)
@@ -1620,11 +1639,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _retouchSliderUndoBeforeState = null;
         _retouchSliderPreviewTimer.Stop();
         _isResettingRetouchControlsForPhotoChange = true;
+        _faceWorkAreaDragUndoBeforeState = null;
         try
         {
             foreach (RetouchControl control in section.Controls)
             {
                 control.ResetToDefault();
+            }
+
+            if (section.Id == "face_shape" && SelectedPhoto is not null)
+            {
+                SelectedPhoto.FaceWorkArea = FaceWorkArea.Default;
+                OnFaceWorkAreaOverlayPropertiesChanged();
             }
         }
         finally
@@ -1648,7 +1674,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "photo_saturation" or
             "photo_white_balance" or
             "photo_blur_sharpen" or
-            "photo_curves";
+            "photo_curves" or
+            "blemish_remove" or
+            "skin_smooth" or
+            "pore_clean" or
+            "tone_even" or
+            "oval_face" or
+            "face_balance" or
+            "cheekbone_soften" or
+            "jawline_define" or
+            "chin_length" or
+            "chin_width";
     }
 
     private static bool ShouldLivePreviewSlider(RetouchControl control)
@@ -1734,7 +1770,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         System.Windows.Point point = e.GetPosition(canvas);
-        if (IsOutsideCurveCanvas(point))
+        if (IsOutsideCurveCanvas(canvas, point))
         {
             _draggingCurveControl.MarkCurvePointForDeletion(_draggingCurvePoint);
         }
@@ -1812,7 +1848,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (_selectedCurveControl is null ||
             _selectedCurvePoint is null ||
-            _selectedCurvePoint.IsEndpoint ||
             IsPreviewProcessing)
         {
             return false;
@@ -1822,13 +1857,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return true;
     }
 
-    private static bool IsOutsideCurveCanvas(System.Windows.Point point)
+    private static bool IsOutsideCurveCanvas(System.Windows.Controls.Canvas canvas, System.Windows.Point point)
     {
         const double deleteMargin = 10;
         return point.X < -deleteMargin ||
                point.Y < -deleteMargin ||
-               point.X > 180 + deleteMargin ||
-               point.Y > 180 + deleteMargin;
+               point.X > canvas.ActualWidth + deleteMargin ||
+               point.Y > canvas.ActualHeight + deleteMargin;
     }
 
     private void SelectCurvePoint(RetouchControl control, CurvePoint point)
@@ -2037,7 +2072,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return new RetouchAdjustmentState(
             controlValues,
             curveChannel,
-            curveControl?.ExportCurvePointsByChannel() ?? RetouchControl.CreateDefaultCurvePointsByChannel());
+            curveControl?.ExportCurvePointsByChannel() ?? RetouchControl.CreateDefaultCurvePointsByChannel(),
+            SelectedPhoto?.FaceWorkArea ?? FaceWorkArea.Default);
     }
 
     private void RestoreRetouchControlsForPhotoSelection(PhotoItem photo)
@@ -2117,6 +2153,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 curveControl.RestoreCurveState(state.CurveChannel, state.CurvePointsByChannel);
             }
+
+            if (SelectedPhoto is not null)
+            {
+                SelectedPhoto.FaceWorkArea = state.FaceWorkArea;
+                OnFaceWorkAreaOverlayPropertiesChanged();
+            }
         }
         finally
         {
@@ -2147,6 +2189,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _curveAmountUndoBeforeState = null;
         _curveDragUndoBeforeState = null;
         _curveKeyboardUndoBeforeState = null;
+        _faceWorkAreaDragUndoBeforeState = null;
     }
 
     private static bool AreRetouchStatesEquivalent(RetouchAdjustmentState left, RetouchAdjustmentState right)
@@ -2165,6 +2208,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         if (left.CurveChannel != right.CurveChannel)
+        {
+            return false;
+        }
+
+        if (!AreFaceWorkAreasEquivalent(left.FaceWorkArea, right.FaceWorkArea))
         {
             return false;
         }
@@ -2192,6 +2240,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         return true;
+    }
+
+    private static bool AreFaceWorkAreasEquivalent(FaceWorkArea left, FaceWorkArea right)
+    {
+        return Math.Abs(left.CenterX - right.CenterX) < 0.001 &&
+               Math.Abs(left.CenterY - right.CenterY) < 0.001 &&
+               Math.Abs(left.Width - right.Width) < 0.001 &&
+               Math.Abs(left.Height - right.Height) < 0.001;
     }
 
     private void SetRetouchControlValue(string id, double value)
@@ -2364,8 +2420,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private void PreviewSurface_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        OnFaceWorkAreaOverlayPropertiesChanged();
+    }
+
     private void PreviewFrame_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsFaceWorkAreaOverlayMouseSource(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        if (_isDraggingFaceWorkArea)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (IsPreviewProcessing)
         {
             e.Handled = true;
@@ -2428,6 +2500,96 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         e.Handled = true;
+    }
+
+    private static bool IsFaceWorkAreaOverlayMouseSource(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is FrameworkElement { Tag: "FaceWorkAreaOverlay" })
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
+    private void FaceWorkAreaOverlay_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (IsPreviewProcessing ||
+            SelectedPhoto is null ||
+            SelectedPhotos.Count != 1 ||
+            sender is not FrameworkElement overlay)
+        {
+            return;
+        }
+
+        _isDraggingFaceWorkArea = true;
+        _faceWorkAreaDragStart = e.GetPosition(PreviewSurface);
+        _faceWorkAreaDragStartArea = SelectedPhoto.FaceWorkArea;
+        _faceWorkAreaDragUndoBeforeState = CaptureRetouchState();
+        _faceWorkAreaDragMode = GetFaceWorkAreaDragMode(e.GetPosition(overlay), overlay.ActualWidth, overlay.ActualHeight);
+        Mouse.Capture(overlay);
+        e.Handled = true;
+    }
+
+    private void FaceWorkAreaOverlay_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_isDraggingFaceWorkArea ||
+            e.LeftButton != MouseButtonState.Pressed ||
+            SelectedPhoto is null)
+        {
+            return;
+        }
+
+        Rect imageRect = GetSelectedPhotoDisplayRect();
+        if (imageRect.Width <= 0 || imageRect.Height <= 0)
+        {
+            return;
+        }
+
+        System.Windows.Point currentPoint = e.GetPosition(PreviewSurface);
+        SelectedPhoto.FaceWorkArea = _faceWorkAreaDragMode == FaceWorkAreaDragMode.Move
+            ? MoveFaceWorkArea(_faceWorkAreaDragStartArea, currentPoint, imageRect)
+            : ResizeFaceWorkArea(_faceWorkAreaDragStartArea, currentPoint, imageRect, _faceWorkAreaDragMode);
+        OnFaceWorkAreaOverlayPropertiesChanged();
+        e.Handled = true;
+    }
+
+    private async void FaceWorkAreaOverlay_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDraggingFaceWorkArea)
+        {
+            return;
+        }
+
+        _isDraggingFaceWorkArea = false;
+        _faceWorkAreaDragMode = FaceWorkAreaDragMode.None;
+        PushRetouchHistory(_faceWorkAreaDragUndoBeforeState, CaptureRetouchState());
+        _faceWorkAreaDragUndoBeforeState = null;
+        if (Mouse.Captured == sender)
+        {
+            Mouse.Capture(null);
+        }
+
+        e.Handled = true;
+        if (HasActiveFaceShapePreviewWarp())
+        {
+            await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+        }
+    }
+
+    private bool HasActiveFaceShapePreviewWarp()
+    {
+        return Math.Abs(FindRetouchControl("oval_face")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("face_balance")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("cheekbone_soften")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("jawline_define")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("chin_length")?.Value ?? 0) >= 0.001 ||
+               Math.Abs(FindRetouchControl("chin_width")?.Value ?? 0) >= 0.001;
     }
 
     private void PreviewFrame_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
@@ -2568,6 +2730,142 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         OnPreviewTransformPropertiesChanged();
     }
 
+    private Rect GetFaceWorkAreaOverlayBounds()
+    {
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            return Rect.Empty;
+        }
+
+        Rect imageRect = GetSelectedPhotoDisplayRect();
+        if (imageRect.Width <= 0 || imageRect.Height <= 0)
+        {
+            return Rect.Empty;
+        }
+
+        FaceWorkArea faceArea = SelectedPhoto.FaceWorkArea.Clamp();
+        double width = imageRect.Width * faceArea.Width;
+        double height = imageRect.Height * faceArea.Height;
+        double left = imageRect.Left + imageRect.Width * faceArea.CenterX - width / 2;
+        double top = imageRect.Top + imageRect.Height * faceArea.CenterY - height / 2;
+        return new Rect(left, top, width, height);
+    }
+
+    private Rect GetSelectedPhotoDisplayRect()
+    {
+        if (SelectedPhoto is null || PreviewSurface.ActualWidth <= 0 || PreviewSurface.ActualHeight <= 0)
+        {
+            return Rect.Empty;
+        }
+
+        (double fitWidth, double fitHeight) = GetFitImageSize(SelectedPhoto, PreviewSurface.ActualWidth, PreviewSurface.ActualHeight);
+        double left = (PreviewSurface.ActualWidth - fitWidth) / 2;
+        double top = (PreviewSurface.ActualHeight - fitHeight) / 2;
+        double scale = SelectedPhoto.PreviewZoomScale;
+        double originX = PreviewSurface.ActualWidth * Math.Clamp(SelectedPhoto.PreviewZoomOrigin.X, 0, 1);
+        double originY = PreviewSurface.ActualHeight * Math.Clamp(SelectedPhoto.PreviewZoomOrigin.Y, 0, 1);
+
+        double scaledLeft = originX + (left - originX) * scale + SelectedPhoto.PreviewPanX;
+        double scaledTop = originY + (top - originY) * scale + SelectedPhoto.PreviewPanY;
+        return new Rect(scaledLeft, scaledTop, fitWidth * scale, fitHeight * scale);
+    }
+
+    private void OnFaceWorkAreaOverlayPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(FaceWorkAreaOverlayLeft));
+        OnPropertyChanged(nameof(FaceWorkAreaOverlayTop));
+        OnPropertyChanged(nameof(FaceWorkAreaOverlayWidth));
+        OnPropertyChanged(nameof(FaceWorkAreaOverlayHeight));
+    }
+
+    private static FaceWorkAreaDragMode GetFaceWorkAreaDragMode(System.Windows.Point point, double width, double height)
+    {
+        const double handleRange = 22;
+        bool nearLeft = point.X <= handleRange;
+        bool nearRight = point.X >= width - handleRange;
+        bool nearTop = point.Y <= handleRange;
+        bool nearBottom = point.Y >= height - handleRange;
+
+        if (nearLeft && nearTop)
+        {
+            return FaceWorkAreaDragMode.ResizeTopLeft;
+        }
+
+        if (nearRight && nearTop)
+        {
+            return FaceWorkAreaDragMode.ResizeTopRight;
+        }
+
+        if (nearLeft && nearBottom)
+        {
+            return FaceWorkAreaDragMode.ResizeBottomLeft;
+        }
+
+        if (nearRight && nearBottom)
+        {
+            return FaceWorkAreaDragMode.ResizeBottomRight;
+        }
+
+        return FaceWorkAreaDragMode.Move;
+    }
+
+    private FaceWorkArea MoveFaceWorkArea(FaceWorkArea startArea, System.Windows.Point currentPoint, Rect imageRect)
+    {
+        double deltaX = (currentPoint.X - _faceWorkAreaDragStart.X) / imageRect.Width;
+        double deltaY = (currentPoint.Y - _faceWorkAreaDragStart.Y) / imageRect.Height;
+        return new FaceWorkArea(
+            startArea.CenterX + deltaX,
+            startArea.CenterY + deltaY,
+            startArea.Width,
+            startArea.Height).Clamp();
+    }
+
+    private static FaceWorkArea ResizeFaceWorkArea(
+        FaceWorkArea startArea,
+        System.Windows.Point currentPoint,
+        Rect imageRect,
+        FaceWorkAreaDragMode mode)
+    {
+        const double minimumSize = 0.08;
+        double left = startArea.CenterX - startArea.Width / 2;
+        double right = startArea.CenterX + startArea.Width / 2;
+        double top = startArea.CenterY - startArea.Height / 2;
+        double bottom = startArea.CenterY + startArea.Height / 2;
+        double normalizedX = Math.Clamp((currentPoint.X - imageRect.Left) / imageRect.Width, 0, 1);
+        double normalizedY = Math.Clamp((currentPoint.Y - imageRect.Top) / imageRect.Height, 0, 1);
+
+        switch (mode)
+        {
+            case FaceWorkAreaDragMode.ResizeTopLeft:
+                left = Math.Min(normalizedX, right - minimumSize);
+                top = Math.Min(normalizedY, bottom - minimumSize);
+                break;
+            case FaceWorkAreaDragMode.ResizeTopRight:
+                right = Math.Max(normalizedX, left + minimumSize);
+                top = Math.Min(normalizedY, bottom - minimumSize);
+                break;
+            case FaceWorkAreaDragMode.ResizeBottomLeft:
+                left = Math.Min(normalizedX, right - minimumSize);
+                bottom = Math.Max(normalizedY, top + minimumSize);
+                break;
+            case FaceWorkAreaDragMode.ResizeBottomRight:
+                right = Math.Max(normalizedX, left + minimumSize);
+                bottom = Math.Max(normalizedY, top + minimumSize);
+                break;
+        }
+
+        left = Math.Clamp(left, 0, 1 - minimumSize);
+        right = Math.Clamp(right, left + minimumSize, 1);
+        top = Math.Clamp(top, 0, 1 - minimumSize);
+        bottom = Math.Clamp(bottom, top + minimumSize, 1);
+
+        return new FaceWorkArea(
+            (left + right) / 2,
+            (top + bottom) / 2,
+            right - left,
+            bottom - top).Clamp();
+    }
+
     private void ClampPreviewPan()
     {
         SetClampedPreviewPan(PanX, PanY);
@@ -2662,7 +2960,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return Math.Max(100, 100 / fitScale);
     }
 
-    private static void ClampPhotoPreviewPan(PhotoItem photo, double width, double height, double panX, double panY)
+    private void ClampPhotoPreviewPan(PhotoItem photo, double width, double height, double panX, double panY)
     {
         if (width <= 0 || height <= 0 || photo.PreviewZoomScale <= 1)
         {
@@ -2683,6 +2981,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             displayHeight,
             Math.Clamp(photo.PreviewZoomOrigin.Y, 0, 1),
             photo.PreviewZoomScale);
+        if (ReferenceEquals(photo, SelectedPhoto))
+        {
+            OnFaceWorkAreaOverlayPropertiesChanged();
+        }
     }
 
     private static double ClampContentPan(double pan, double viewportSize, double contentSize, double origin, double zoomScale)
@@ -2746,6 +3048,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             ClearRetouchHistory();
             _activeRetouchSection = expandedSection;
+            OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
         }
 
         foreach (RetouchSection section in RetouchSections)
@@ -2993,6 +3296,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isShowingOriginalPreview = true;
             OnPropertyChanged(nameof(PreviewTitleText));
+            OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
         }
 
         OriginalMockPreview.Visibility = Visibility.Visible;
@@ -3005,6 +3309,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isShowingOriginalPreview = false;
             OnPropertyChanged(nameof(PreviewTitleText));
+            OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
         }
 
         OriginalMockPreview.Visibility = Visibility.Collapsed;
@@ -3107,4 +3412,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         return people;
     }
+}
+
+public enum FaceWorkAreaDragMode
+{
+    None,
+    Move,
+    ResizeTopLeft,
+    ResizeTopRight,
+    ResizeBottomLeft,
+    ResizeBottomRight
 }
