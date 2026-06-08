@@ -14,11 +14,11 @@ Sources checked:
 
 ## Result
 
-No numbered order from `ORDER_00` through `ORDER_29` is missing from the conversation/context after the latest pasted orders are included.
+No numbered order from `ORDER_00` through `ORDER_30` is missing from the conversation/context after the latest pasted orders are included.
 
 Important caveat:
 
-- `ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION` is referenced as the next order after `ORDER_29`, but the full `ORDER_30` content has not been received yet.
+- `ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION` has now been received and stored as a queued/planned order.
 - `ORDER_13_TONE_EVEN` arrived later than several later-numbered orders. It should be treated as a real queued order that belongs before `ORDER_14_TEXTURE_RESTORE`.
 - `ORDER_17` through `ORDER_29` arrived as planned/queued future orders. They should not be implemented before their prerequisites are complete.
 
@@ -56,7 +56,7 @@ Important caveat:
 | ORDER_27 | Export / save options | Queued/Planned. |
 | ORDER_28 | Preset save/load | Queued/Planned. Existing doc created. |
 | ORDER_29 | Batch processing | Queued/Planned. |
-| ORDER_30 | High-res performance optimization | Referenced only. Full order not received. |
+| ORDER_30 | High-res performance optimization | Queued/Planned. Full order stored. |
 
 ## Out-Of-Order Arrivals
 
@@ -74,6 +74,4 @@ Important caveat:
 ## Current Risk Notes
 
 - ToneEven is the main order at risk of being under-implemented because it currently exists as a simple processor stage, not as the full planned filter with candidate masks and reports.
-- Full `ORDER_30` content is not available yet.
 - `ORDER_17` should not introduce large UI redesign. It should align existing structures first.
-

@@ -498,14 +498,15 @@ Hold 처리된 오더:
 
 추가 확인:
 
-* `ORDER_00`부터 `ORDER_29`까지의 오더 흐름을 다시 대조함.
+* `ORDER_00`부터 `ORDER_30`까지의 오더 흐름을 다시 대조함.
 * `ORDER_13_TONE_EVEN`은 늦게 도착했지만 `ORDER_14_TEXTURE_RESTORE` 앞에 위치해야 하는 실제 오더로 확인됨.
 * `ORDER_17`부터 `ORDER_29`까지는 `Queued / Planned` 상태로 보관함.
-* `ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION`은 `ORDER_29`의 후속 오더로 언급되었지만, 전문은 아직 도착하지 않음.
+* `ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION` 전문이 도착했고 `Queued / Planned` 상태로 보관함.
 
 추가 문서:
 
 * `docs/orders/ORDER_SEQUENCE_AUDIT_2026-06-09.md`
+* `docs/orders/ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION.md`
 
 현재 주의:
 
