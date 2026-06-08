@@ -6,6 +6,20 @@ PhotoRetouch is a 64-bit Windows WPF portrait retouching application for daily p
 
 The application should feel stable, calm, and predictable. Avoid surprising UI movement, sudden list changes, or heavy live recalculation while the user is adjusting values.
 
+## Current Highest Priority Note
+
+The current work is not a stage for adding tempting new features.
+
+`ORDER_01` through `ORDER_30` are the V1 single-face skin retouch engine stabilization flow. Keep the order sequence intact and finish only the current active order.
+
+Stage and Slider changes must not regenerate SnapshotMask. SnapshotMask regeneration is only for image changes, ReAnalyze, and later manual face-keypoint adjustment.
+
+HardProtect outranks every filter. Eyes, eyebrows, lips, inner mouth, teeth, nostrils, hair, beard, mustache, and glasses remain original even at Stage 10.
+
+Multi-face, left/right ShapeBalance, generative AI retouching, background replacement, and clothing retouch are not discarded. They are Hold / After V1.
+
+The current goal is not feature expansion. The current goal is to finish the V1 engine reliably.
+
 ## Mouse-First Workflow
 
 The app is primarily operated by mouse. Keyboard shortcuts exist, but they should support mouse work rather than take over the workflow.

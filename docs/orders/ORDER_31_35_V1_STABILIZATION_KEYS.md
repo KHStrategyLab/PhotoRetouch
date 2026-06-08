@@ -12,6 +12,9 @@ Core decision:
 `ORDER_01` through `ORDER_30` are the V1 core engine development flow.
 After `ORDER_30`, do not keep adding new core filters or AI features. Move into stabilization, product polish, settings persistence, packaging, and final review.
 
+Current highest-priority note:
+Do not let attractive future features interrupt the current order. Stage and Slider changes are not SnapshotMask regeneration conditions. HardProtect outranks every filter. Hold / After V1 items stay recorded, but they are not part of the current V1 scope.
+
 ## Remaining Orders After ORDER_30
 
 1. `ORDER_31_CACHE_MEMORY_CLEANUP`
