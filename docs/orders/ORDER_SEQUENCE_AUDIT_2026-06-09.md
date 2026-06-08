@@ -52,7 +52,7 @@ Important caveat:
 | ORDER_22 | Full test image set | Implemented / Needs local image assignment. |
 | ORDER_23 | Stage 1/5/10 compare report | Implemented / Needs local image run. |
 | ORDER_24 | SnapshotMask cache persistence | Implemented / Needs real reload test. |
-| ORDER_25 | Manual Mask Brush | Queued/Planned. |
+| ORDER_25 | Manual Mask Brush | InProgress / Core engine implemented. |
 | ORDER_26 | Face position / keypoint manual adjust | Queued/Planned. |
 | ORDER_27 | Export / save options | Queued/Planned. |
 | ORDER_28 | Preset save/load | Queued/Planned. Existing doc created. |

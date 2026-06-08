@@ -73,6 +73,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public BitmapSource BaseImage => _baseImage;
     public RetouchAdjustmentState? RetouchState { get; set; }
     public FaceSnapshotMaskSet? SnapshotMaskSet { get; set; }
+    public ManualMaskOverride? ManualMaskOverride { get; set; }
     public FaceWorkArea FaceWorkArea
     {
         get => _faceWorkArea;
@@ -206,6 +207,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         _effectPreviewCache.Clear();
         _neutralPreviewImage = null;
         SnapshotMaskSet = null;
+        ManualMaskOverride = null;
         Image = _baseImage;
         Thumbnail = LoadBitmap(Path, 96);
         UpdateFileVersion(Path);
@@ -293,6 +295,12 @@ public sealed class PhotoItem : INotifyPropertyChanged
         FileName = System.IO.Path.GetFileName(newPath);
         UpdateFileVersion(newPath);
         SnapshotMaskSet = null;
+        ManualMaskOverride = null;
+    }
+
+    public void ResetManualMaskOverride()
+    {
+        ManualMaskOverride = null;
     }
 
     public void ResetPreviewPan()

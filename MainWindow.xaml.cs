@@ -921,6 +921,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _showPreviewProcessingOverlay = false;
             IsPreviewProcessing = true;
             FaceSnapshotMaskSet snapshot = await Task.Run(() => _snapshotMaskBuilder.GetOrCreate(photo));
+            snapshot = ManualMaskOverrideApplier.Apply(snapshot, photo.ManualMaskOverride);
             OnPropertyChanged(nameof(SnapshotMaskStatusText));
             BitmapSource overlay = await Dispatcher.InvokeAsync(() => CreateSelectedDebugMaskPreview(photo.BaseImage, snapshot));
             photo.SetAdjustedImage(overlay);
@@ -1088,11 +1089,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             (FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output) = await Task.Run(() =>
             {
                 FaceSnapshotMaskSet maskSnapshot = _snapshotMaskBuilder.GetOrCreate(photo);
+                FaceSnapshotMaskSet effectiveSnapshot = ManualMaskOverrideApplier.Apply(maskSnapshot, photo.ManualMaskOverride);
                 RetouchStageProcessorOutput result = _retouchStageProcessor.Process(
                     photo.BaseImage,
-                    maskSnapshot,
+                    effectiveSnapshot,
                     CreateRetouchOptions((int)Math.Round(stage)));
-                return (maskSnapshot, result);
+                return (effectiveSnapshot, result);
             });
 
             if (ReferenceEquals(SelectedPhoto, photo) && _isDummyMaskRetouchPreviewEnabled)
@@ -1193,11 +1195,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             (FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output) = await Task.Run(() =>
             {
                 FaceSnapshotMaskSet rebuiltSnapshot = _snapshotMaskBuilder.Rebuild(photo);
+                FaceSnapshotMaskSet effectiveSnapshot = ManualMaskOverrideApplier.Apply(rebuiltSnapshot, photo.ManualMaskOverride);
                 RetouchStageProcessorOutput result = _retouchStageProcessor.Process(
                     photo.BaseImage,
-                    rebuiltSnapshot,
+                    effectiveSnapshot,
                     CreateRetouchOptions((int)Math.Round(DummyMaskStageValue)));
-                return (rebuiltSnapshot, result);
+                return (effectiveSnapshot, result);
             });
 
             if (ReferenceEquals(SelectedPhoto, photo))
