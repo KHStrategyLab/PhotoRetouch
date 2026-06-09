@@ -29,6 +29,11 @@ public sealed class SnapshotMaskDiskCache
 
     public SnapshotMaskCacheLoadResult TryLoad(PhotoItem photo, string maskVersion)
     {
+        return TryLoad(photo, maskVersion, photo.BaseImage.PixelWidth, photo.BaseImage.PixelHeight);
+    }
+
+    public SnapshotMaskCacheLoadResult TryLoad(PhotoItem photo, string maskVersion, int imageWidth, int imageHeight)
+    {
         try
         {
             (DateTime lastWriteTimeUtc, long sourceLength) = photo.GetSourceVersion();
@@ -49,7 +54,7 @@ public sealed class SnapshotMaskDiskCache
                     continue;
                 }
 
-                string invalidReason = GetInvalidReason(document, photo, imageId, lastWriteTimeUtc, sourceLength, cropVersion, maskVersion);
+                string invalidReason = GetInvalidReason(document, imageId, lastWriteTimeUtc, sourceLength, imageWidth, imageHeight, cropVersion, maskVersion);
                 if (!string.IsNullOrEmpty(invalidReason))
                 {
                     return SnapshotMaskCacheLoadResult.Miss(invalidReason);
@@ -106,10 +111,11 @@ public sealed class SnapshotMaskDiskCache
 
     private static string GetInvalidReason(
         SnapshotMaskCacheDocument document,
-        PhotoItem photo,
         string imageId,
         DateTime lastWriteTimeUtc,
         long sourceLength,
+        int imageWidth,
+        int imageHeight,
         string cropVersion,
         string maskVersion)
     {
@@ -128,7 +134,7 @@ public sealed class SnapshotMaskDiskCache
             return "source_file_changed";
         }
 
-        if (document.CacheKey.ImageWidth != photo.BaseImage.PixelWidth || document.CacheKey.ImageHeight != photo.BaseImage.PixelHeight)
+        if (document.CacheKey.ImageWidth != imageWidth || document.CacheKey.ImageHeight != imageHeight)
         {
             return "image_size_mismatch";
         }

@@ -14,6 +14,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     private BitmapSource _baseImage;
     private BitmapSource _image;
     private BitmapSource _thumbnail;
+    private FaceSnapshotMaskSet? _snapshotMaskSet;
     private BitmapSource? _neutralPreviewImage;
     private readonly Dictionary<int, BitmapSource> _effectPreviewCache = new();
     private bool _isSelected;
@@ -72,7 +73,27 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public string DisplayInfo { get; }
     public BitmapSource BaseImage => _baseImage;
     public RetouchAdjustmentState? RetouchState { get; set; }
-    public FaceSnapshotMaskSet? SnapshotMaskSet { get; set; }
+    public FaceSnapshotMaskSet? SnapshotMaskSet
+    {
+        get => _snapshotMaskSet;
+        set
+        {
+            if (ReferenceEquals(_snapshotMaskSet, value))
+            {
+                return;
+            }
+
+            _snapshotMaskSet = value;
+            InvalidateShapeBalanceCache();
+        }
+    }
+
+    public BalancedImageBundle? CachedShapeBalanceBundle { get; private set; }
+
+    public string? CachedShapeBalanceKey { get; private set; }
+
+    public PreviewRenderDirtyState PreviewDirtyState { get; private set; } = PreviewRenderDirtyState.Clean;
+
     public ManualMaskOverride? ManualMaskOverride { get; set; }
     public FaceManualAdjustOverride? FaceManualAdjustOverride { get; private set; }
     public FaceWorkArea FaceWorkArea
@@ -88,6 +109,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
 
             _faceWorkArea = clampedValue;
             SnapshotMaskSet = null;
+            MarkMaskDirty("face_work_area_changed");
             OnPropertyChanged();
         }
     }
@@ -212,6 +234,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         SnapshotMaskSet = null;
         ManualMaskOverride = null;
         FaceManualAdjustOverride = null;
+        MarkMaskDirty("image_reloaded");
         LoadManualFaceAdjustOverride();
         Image = _baseImage;
         Thumbnail = LoadBitmap(Path, 96);
@@ -220,10 +243,15 @@ public sealed class PhotoItem : INotifyPropertyChanged
 
     public BitmapSource GetEffectPreviewSource(int? visibleMaxLongSide)
     {
-        int cacheKey = CreateEffectPreviewCacheKey(visibleMaxLongSide);
+        return GetEffectPreviewSource(PreviewRenderTier.QualityPreview, visibleMaxLongSide);
+    }
+
+    public BitmapSource GetEffectPreviewSource(PreviewRenderTier tier, int? visibleMaxLongSide)
+    {
+        int cacheKey = CreateEffectPreviewCacheKey(tier, visibleMaxLongSide);
         if (!_effectPreviewCache.TryGetValue(cacheKey, out BitmapSource? previewSource))
         {
-            previewSource = PreviewSourceFactory.CreateEffectPreviewSource(BaseImage, visibleMaxLongSide);
+            previewSource = PreviewSourceFactory.CreateEffectPreviewSource(BaseImage, tier, visibleMaxLongSide);
             _effectPreviewCache[cacheKey] = previewSource;
         }
 
@@ -256,6 +284,11 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public void ResetAdjustedImage()
     {
         Image = BaseImage;
+    }
+
+    public void SetLowPreviewImage(int? visibleMaxLongSide)
+    {
+        Image = GetEffectPreviewSource(PreviewRenderTier.LowPreview, visibleMaxLongSide);
     }
 
     public void ResetRetouchWorkState()
@@ -302,11 +335,26 @@ public sealed class PhotoItem : INotifyPropertyChanged
         SnapshotMaskSet = null;
         ManualMaskOverride = null;
         FaceManualAdjustOverride = null;
+        MarkMaskDirty("photo_renamed");
     }
 
     public void ResetManualMaskOverride()
     {
         ManualMaskOverride = null;
+        InvalidateShapeBalanceCache();
+        MarkShapeDirty("manual_mask_reset");
+    }
+
+    public void ApplyAutoFaceWorkArea(FaceWorkArea faceWorkArea)
+    {
+        FaceWorkArea clampedValue = faceWorkArea.Clamp();
+        if (_faceWorkArea == clampedValue)
+        {
+            return;
+        }
+
+        _faceWorkArea = clampedValue;
+        OnPropertyChanged(nameof(FaceWorkArea));
     }
 
     public void ClearTransientPreviewCache()
@@ -319,10 +367,50 @@ public sealed class PhotoItem : INotifyPropertyChanged
     {
         ClearTransientPreviewCache();
         SnapshotMaskSet = null;
+        InvalidateShapeBalanceCache();
         if (!ReferenceEquals(_image, _baseImage))
         {
             Image = _baseImage;
         }
+    }
+
+    public void CacheShapeBalanceBundle(string cacheKey, BalancedImageBundle bundle)
+    {
+        CachedShapeBalanceKey = cacheKey;
+        CachedShapeBalanceBundle = bundle;
+    }
+
+    public void InvalidateShapeBalanceCache()
+    {
+        CachedShapeBalanceKey = null;
+        CachedShapeBalanceBundle = null;
+    }
+
+    public void MarkMaskDirty(string reason)
+    {
+        InvalidateShapeBalanceCache();
+        PreviewDirtyState = PreviewDirtyState.MarkMaskDirty(reason);
+    }
+
+    public void MarkShapeDirty(string reason)
+    {
+        InvalidateShapeBalanceCache();
+        PreviewDirtyState = PreviewDirtyState.MarkShapeDirty(reason);
+    }
+
+    public void MarkSkinDirty(string reason)
+    {
+        PreviewDirtyState = PreviewDirtyState.MarkSkinDirty(reason);
+    }
+
+    public void MarkPreviewRendered(string reason)
+    {
+        PreviewDirtyState = PreviewDirtyState.MarkPreviewRendered(reason);
+    }
+
+    public void MarkExportClean(string reason)
+    {
+        PreviewDirtyState = PreviewDirtyState.MarkExportClean(reason);
     }
 
     public void ApplyManualFaceAdjustOverride(FaceWorkArea faceWorkArea, string snapshotMaskCacheKey)
@@ -338,6 +426,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         }
 
         SnapshotMaskSet = null;
+        MarkMaskDirty("face_manual_adjust");
     }
 
     public void ResetManualFaceAdjustOverride()
@@ -345,6 +434,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         FaceManualAdjustOverride = null;
         FaceManualAdjustStore.Default.Delete(this);
         FaceWorkArea = FaceWorkArea.Default;
+        MarkMaskDirty("face_manual_adjust_reset");
     }
 
     private void LoadManualFaceAdjustOverride()
@@ -388,9 +478,10 @@ public sealed class PhotoItem : INotifyPropertyChanged
         return (fileInfo.LastWriteTimeUtc, fileInfo.Length);
     }
 
-    private static int CreateEffectPreviewCacheKey(int? visibleMaxLongSide)
+    private static int CreateEffectPreviewCacheKey(PreviewRenderTier tier, int? visibleMaxLongSide)
     {
         return HashCode.Combine(
+            tier,
             visibleMaxLongSide ?? -1,
             PreviewSettings.UseOriginalSize,
             PreviewSettings.MaxLongSidePixels,

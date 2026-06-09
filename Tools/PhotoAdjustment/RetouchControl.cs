@@ -228,6 +228,16 @@ public sealed class RetouchControl : INotifyPropertyChanged
         return new RetouchControl(id, label, -25, 25, 0);
     }
 
+    public static RetouchControl CreateStage(string id, string label, int defaultValue)
+    {
+        return new RetouchControl(id, label, 1, 10, defaultValue, 1, true, "0");
+    }
+
+    public static RetouchControl CreateSwitch(string id, string label, bool defaultValue)
+    {
+        return new RetouchControl(id, label, 0, 1, defaultValue ? 1 : 0, 1, true, "0");
+    }
+
     public string FormatDisplayValue(double value)
     {
         return value.ToString(ValueTextFormat, CultureInfo.InvariantCulture);

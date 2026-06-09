@@ -159,6 +159,26 @@ Engine behavior:
 
 Skin retouching is now mask-first. Do not continue strengthening blemish, acne, mole, age-spot, or smoothing filters until mask debug output is reliable.
 
+SkinRetouch is a grouped skin module, not one global skin blur.
+
+SkinRetouch may contain separate masked correction layers such as:
+
+- Skin tone mask
+- Blemish mask
+- Acne mask
+- Mole and age-spot mask
+- Pore mask
+- Wrinkle mask
+- Beard-shadow mask
+
+The wrinkle mask is also a grouped correction layer. It should separate under-eye, glabella, forehead, nasolabial fold, mouth-corner, neck, and nose-shadow wrinkle masks instead of treating the whole face as one wrinkle blur area.
+
+Wrinkle correction means conservative softening of selected wrinkle candidates while preserving structure, expression, skin texture, eye edges, lip edges, and nose detail.
+
+The beard-shadow mask means shaving marks, blue or gray cast, and dark beard shadow reduction.
+
+Real beard, mustache, sideburn hair, nostrils, lips, eyes, eyebrows, and other hard-protected details must remain protected.
+
 Snapshot mask policy:
 
 - Analyze a newly loaded photo once and save a `FaceSnapshotMaskSet`.
@@ -330,6 +350,7 @@ Required test image set:
 - Portraiture-style multi-scale skin controls: separate fine texture, medium blemish, large blotch/tone handling, plus conservative fill-light support.
 - Skin texture restoration after defect removal. Use a subtle Soft-Light-style texture pass so repaired spots do not become flat or plastic.
 - Photoshop-style realistic smoothing layer: inverted/detail-separated smoothing candidate, high-pass radius, secondary blur radius, then reveal only through a soft skin mask.
+- Beard shadow policy note: future `BeardShadowAmount` means shaving mark / blue cast / beard shadow reduction, not beard hair removal. See `docs/BEARD_SHADOW_POLICY.md`.
 - Strength behavior tuned for ID photos.
 
 Filter implementation order after mask validation:
@@ -473,6 +494,23 @@ Filter implementation order after mask validation:
 - Hair color select
 - Hair color amount
 - Gray hair cover
+
+### Mask Policy
+
+HairRetouch is a grouped hair module, not one global paint-over.
+
+HairRetouch may contain separate masked correction layers such as:
+
+- Hair gloss mask
+- Hair color mask
+- Gray hair candidate mask
+- Flyaway hair mask, optional
+
+Gray hair cover means selective gray or white hair candidate coverage inside the `HairMask`.
+
+It should preserve hair strand texture, hairline edges, face boundary, eyebrows, beard, mustache, glasses, and background separation.
+
+Because hair is normally hard-protected, HairRetouch must open only the specific hair correction candidate mask requested by the user.
 
 ### Needs Work
 

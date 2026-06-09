@@ -345,6 +345,7 @@ Part policy table:
 - Cheeks, forehead, chin, jaw skin, and neck skin: retouch allow.
 - Forehead wrinkles and neck wrinkles: soft protect.
 - Hair, beard, mustache, glasses, earrings, and accessories: hard protect.
+- HairRetouch can selectively open hair correction candidate masks later, such as gray hair cover, gloss, or color, but must preserve hair texture and hair-edge detail.
 
 Builder decomposition:
 

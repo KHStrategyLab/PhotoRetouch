@@ -25,37 +25,57 @@ public sealed class SnapshotMaskBuilder
 
     public FaceSnapshotMaskSet GetOrCreate(PhotoItem photo)
     {
+        return GetOrCreate(photo, photo.BaseImage);
+    }
+
+    public FaceSnapshotMaskSet GetOrCreate(PhotoItem photo, BitmapSource analysisSource)
+    {
         (DateTime lastWriteTimeUtc, long sourceLength) = photo.GetSourceVersion();
         if (photo.SnapshotMaskSet is not null &&
-            CanReuseSnapshot(photo, photo.SnapshotMaskSet, lastWriteTimeUtc, sourceLength))
+            CanReuseSnapshot(photo, photo.SnapshotMaskSet, lastWriteTimeUtc, sourceLength, analysisSource))
         {
+            ApplyAutoFaceWorkAreaFromSnapshot(photo, photo.SnapshotMaskSet, analysisSource);
             Interlocked.Increment(ref _cacheHitCount);
             return photo.SnapshotMaskSet;
         }
 
-        SnapshotMaskCacheLoadResult diskResult = _diskCache.TryLoad(photo, _maskEngine.MaskVersion);
+        SnapshotMaskCacheLoadResult diskResult = _diskCache.TryLoad(photo, _maskEngine.MaskVersion, analysisSource.PixelWidth, analysisSource.PixelHeight);
         if (diskResult.CacheHit && diskResult.Snapshot is not null)
         {
             photo.SnapshotMaskSet = diskResult.Snapshot;
+            ApplyAutoFaceWorkAreaFromSnapshot(photo, diskResult.Snapshot, analysisSource);
             Interlocked.Increment(ref _cacheHitCount);
             Interlocked.Increment(ref _diskCacheHitCount);
             return diskResult.Snapshot;
         }
 
-        return Rebuild(photo);
+        return Rebuild(photo, analysisSource);
     }
 
     public FaceSnapshotMaskSet Rebuild(PhotoItem photo)
+    {
+        return Rebuild(photo, photo.BaseImage);
+    }
+
+    public FaceSnapshotMaskSet Rebuild(PhotoItem photo, BitmapSource analysisSource)
     {
         (DateTime lastWriteTimeUtc, long sourceLength) = photo.GetSourceVersion();
         FaceSnapshotMaskSet snapshot = Create(
             photo.Path,
             lastWriteTimeUtc,
             sourceLength,
-            photo.BaseImage,
+            analysisSource,
             photo.FaceWorkArea,
             photo.FaceManualAdjustOverride);
         photo.SnapshotMaskSet = snapshot;
+        if (photo.FaceManualAdjustOverride is not { HasOverrides: true })
+        {
+            photo.ApplyAutoFaceWorkArea(CreateFaceWorkAreaFromFaceBox(
+                snapshot.Analysis.FaceBox,
+                analysisSource.PixelWidth,
+                analysisSource.PixelHeight));
+        }
+
         _diskCache.Save(snapshot);
         Interlocked.Increment(ref _createdCount);
         return snapshot;
@@ -70,12 +90,15 @@ public sealed class SnapshotMaskBuilder
         FaceManualAdjustOverride? faceManualAdjustOverride)
     {
         PortraitMaskResult result = _maskEngine.Analyze(source, faceWorkArea);
+        FaceWorkArea effectiveFaceWorkArea = faceManualAdjustOverride is { HasOverrides: true }
+            ? faceWorkArea.Clamp()
+            : CreateFaceWorkAreaFromFaceBox(result.Analysis.FaceBox, source.PixelWidth, source.PixelHeight);
         SnapshotMaskCacheKey cacheKey = CreateCacheKey(
             sourcePath,
             sourceLastWriteTimeUtc,
             sourceLength,
             source,
-            faceWorkArea,
+            effectiveFaceWorkArea,
             faceManualAdjustOverride,
             result.Analysis.FaceBox,
             result.Analysis.FaceAngle,
@@ -95,13 +118,42 @@ public sealed class SnapshotMaskBuilder
             result.NostrilDetection);
     }
 
-    private bool CanReuseSnapshot(PhotoItem photo, FaceSnapshotMaskSet snapshot, DateTime lastWriteTimeUtc, long sourceLength)
+    public static FaceWorkArea CreateFaceWorkAreaFromFaceBox(Int32Rect faceBox, int imageWidth, int imageHeight)
+    {
+        double safeWidth = Math.Max(1, imageWidth);
+        double safeHeight = Math.Max(1, imageHeight);
+        double centerX = (faceBox.X + faceBox.Width / 2d) / safeWidth;
+        double centerY = (faceBox.Y + faceBox.Height * 0.52) / safeHeight;
+        double width = faceBox.Width * 1.08 / safeWidth;
+        double height = faceBox.Height * 1.12 / safeHeight;
+        return new FaceWorkArea(centerX, centerY, width, height).Clamp();
+    }
+
+    private static void ApplyAutoFaceWorkAreaFromSnapshot(PhotoItem photo, FaceSnapshotMaskSet snapshot, BitmapSource analysisSource)
+    {
+        if (photo.FaceManualAdjustOverride is { HasOverrides: true })
+        {
+            return;
+        }
+
+        photo.ApplyAutoFaceWorkArea(CreateFaceWorkAreaFromFaceBox(
+            snapshot.Analysis.FaceBox,
+            analysisSource.PixelWidth,
+            analysisSource.PixelHeight));
+    }
+
+    private bool CanReuseSnapshot(
+        PhotoItem photo,
+        FaceSnapshotMaskSet snapshot,
+        DateTime lastWriteTimeUtc,
+        long sourceLength,
+        BitmapSource analysisSource)
     {
         return string.Equals(snapshot.SourcePath, photo.Path, StringComparison.OrdinalIgnoreCase) &&
                snapshot.SourceLastWriteTimeUtc == lastWriteTimeUtc &&
                snapshot.SourceLength == sourceLength &&
-               snapshot.CacheKey.ImageWidth == photo.BaseImage.PixelWidth &&
-               snapshot.CacheKey.ImageHeight == photo.BaseImage.PixelHeight &&
+               snapshot.CacheKey.ImageWidth == analysisSource.PixelWidth &&
+               snapshot.CacheKey.ImageHeight == analysisSource.PixelHeight &&
                snapshot.CacheKey.CropVersion == CreateCropVersion(photo.FaceWorkArea.Clamp(), photo.FaceManualAdjustOverride) &&
                snapshot.CacheKey.MaskVersion == _maskEngine.MaskVersion;
     }

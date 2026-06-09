@@ -161,6 +161,11 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
             pixels = ApplySolidBackgroundColorPreview(pixels, adjustment.BackgroundColor, adjustment.BackgroundColorAmount);
         }
 
+        if (HasEffectiveHairRetouch(adjustment))
+        {
+            pixels = ApplyHairRetouch(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment);
+        }
+
         if (Math.Abs(adjustment.BlurSharpen) >= AdjustmentEpsilon)
         {
             pixels = ApplyBlurSharpen(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.BlurSharpen);
@@ -205,7 +210,15 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
                Math.Abs(adjustment.DoubleChin) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.NeckJawEdge) >= AdjustmentEpsilon ||
                Math.Abs(adjustment.BackgroundColorAmount) >= AdjustmentEpsilon ||
+               HasEffectiveHairRetouch(adjustment) ||
                (Math.Abs(adjustment.CurveAmount) >= AdjustmentEpsilon && !IsIdentityLookupTable(adjustment.CurveLookup));
+    }
+
+    private static bool HasEffectiveHairRetouch(PreviewAdjustment adjustment)
+    {
+        return Math.Abs(adjustment.HairColorAmount) >= AdjustmentEpsilon ||
+            Math.Abs(adjustment.HairGloss) >= AdjustmentEpsilon ||
+            Math.Abs(adjustment.GrayHairCover) >= AdjustmentEpsilon;
     }
 
     private static bool IsIdentityLookupTable(byte[] lookup)
@@ -1102,6 +1115,143 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
         }
 
         return result;
+    }
+
+    private static byte[] ApplyHairRetouch(byte[] source, int width, int height, int stride, PreviewAdjustment adjustment)
+    {
+        if (adjustment.HairMask is not { } hairMask ||
+            hairMask.Width != width ||
+            hairMask.Height != height)
+        {
+            return source;
+        }
+
+        byte[] result = new byte[source.Length];
+        Array.Copy(source, result, source.Length);
+
+        (double targetRed, double targetGreen, double targetBlue) = EstimateHairCoverColor(
+            source,
+            width,
+            height,
+            stride,
+            hairMask,
+            adjustment.HairColor);
+        double grayCoverAmount = Math.Clamp(adjustment.GrayHairCover, 0, 100) / 100 * 0.72;
+        double colorAmount = Math.Clamp(adjustment.HairColorAmount, 0, 100) / 100 * 0.34;
+        double glossAmount = Math.Clamp(adjustment.HairGloss, 0, 100) / 100 * 0.20;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double maskWeight = Math.Clamp(hairMask[x, y], 0, 1);
+                if (maskWeight <= 0.01)
+                {
+                    continue;
+                }
+
+                double blue = source[index];
+                double green = source[index + 1];
+                double red = source[index + 2];
+                double luminance = GetLuminance((byte)red, (byte)green, (byte)blue);
+                double maxChannel = Math.Max(red, Math.Max(green, blue));
+                double minChannel = Math.Min(red, Math.Min(green, blue));
+                double chroma = maxChannel - minChannel;
+                double saturation = maxChannel <= 1 ? 0 : chroma / maxChannel;
+                double textureProtect = SmoothStep(74, 126, GetLocalLuminanceGradient(source, width, height, stride, x, y));
+
+                double grayCandidateWeight =
+                    SmoothStep(112, 210, luminance) *
+                    (1 - SmoothStep(0.12, 0.30, saturation)) *
+                    (1 - textureProtect * 0.35);
+                double grayCoverWeight = maskWeight * grayCoverAmount * grayCandidateWeight;
+
+                double colorWeight = maskWeight * colorAmount * (1 - grayCandidateWeight * 0.45);
+                if (colorWeight > 0.001)
+                {
+                    double targetLuminance = Math.Max(1, GetLuminance(adjustment.HairColor.R, adjustment.HairColor.G, adjustment.HairColor.B));
+                    double luminanceScale = Math.Clamp(luminance / targetLuminance, 0.35, 1.75);
+                    red = red + (adjustment.HairColor.R * luminanceScale - red) * colorWeight;
+                    green = green + (adjustment.HairColor.G * luminanceScale - green) * colorWeight;
+                    blue = blue + (adjustment.HairColor.B * luminanceScale - blue) * colorWeight;
+                }
+
+                if (grayCoverWeight > 0.001)
+                {
+                    red = red + (targetRed - red) * grayCoverWeight;
+                    green = green + (targetGreen - green) * grayCoverWeight;
+                    blue = blue + (targetBlue - blue) * grayCoverWeight;
+                }
+
+                double glossWeight = maskWeight * glossAmount * SmoothStep(46, 174, luminance) * (1 - SmoothStep(230, 252, luminance));
+                if (glossWeight > 0.001)
+                {
+                    double highlightLift = 18 * glossWeight;
+                    red += highlightLift;
+                    green += highlightLift;
+                    blue += highlightLift;
+                }
+
+                result[index] = ClampToByte(blue);
+                result[index + 1] = ClampToByte(green);
+                result[index + 2] = ClampToByte(red);
+            }
+        }
+
+        return result;
+    }
+
+    private static (double Red, double Green, double Blue) EstimateHairCoverColor(
+        byte[] source,
+        int width,
+        int height,
+        int stride,
+        MaskPlane hairMask,
+        System.Windows.Media.Color fallbackColor)
+    {
+        double redSum = 0;
+        double greenSum = 0;
+        double blueSum = 0;
+        double weightSum = 0;
+
+        for (int y = 0; y < height; y += 2)
+        {
+            for (int x = 0; x < width; x += 2)
+            {
+                double maskWeight = Math.Clamp(hairMask[x, y], 0, 1);
+                if (maskWeight <= 0.05)
+                {
+                    continue;
+                }
+
+                int index = y * stride + x * 4;
+                byte blue = source[index];
+                byte green = source[index + 1];
+                byte red = source[index + 2];
+                double luminance = GetLuminance(red, green, blue);
+                double maxChannel = Math.Max(red, Math.Max(green, blue));
+                double minChannel = Math.Min(red, Math.Min(green, blue));
+                double saturation = maxChannel <= 1 ? 0 : (maxChannel - minChannel) / maxChannel;
+                double nonGrayWeight = maskWeight * (1 - SmoothStep(122, 214, luminance)) * SmoothStep(0.08, 0.26, saturation);
+                if (nonGrayWeight <= 0.001)
+                {
+                    continue;
+                }
+
+                redSum += red * nonGrayWeight;
+                greenSum += green * nonGrayWeight;
+                blueSum += blue * nonGrayWeight;
+                weightSum += nonGrayWeight;
+            }
+        }
+
+        if (weightSum < 8)
+        {
+            return (fallbackColor.R, fallbackColor.G, fallbackColor.B);
+        }
+
+        return (redSum / weightSum, greenSum / weightSum, blueSum / weightSum);
     }
 
     private static byte[] ApplyBlurSharpen(byte[] source, int width, int height, int stride, double blurSharpen)
