@@ -61,7 +61,7 @@ Important caveat:
 | ORDER_31 | Cache / memory cleanup | InProgress / First cleanup pass implemented. |
 | ORDER_32 | UI product polish | InProgress / First polish pass implemented. |
 | ORDER_33 | User settings persistence | InProgress / First session persistence pass implemented. |
-| ORDER_34 | Installer / package | Queued/Planned as V1 stabilization key. |
+| ORDER_34 | Installer / package | InProgress / Publish package script implemented. |
 | ORDER_35 | V1 final review | Queued/Planned as V1 stabilization key. |
 
 ## Out-Of-Order Arrivals

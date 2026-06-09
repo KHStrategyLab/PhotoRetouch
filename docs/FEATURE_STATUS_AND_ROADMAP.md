@@ -262,6 +262,7 @@ Required test image set:
 - ORDER_31 first cache/memory cleanup pass is added. Blemish, Wrinkle, and TextureRestore analysis caches are bounded, processor cache status/clear APIs exist, and inactive photos release transient preview/Snapshot memory on selection changes.
 - ORDER_32 first UI product polish pass is added. The top bar now uses `K Retouch Pro`, removes the temporary review badge and unused reset button, hides developer status text until debug/retouch preview is active, and shows selected photo size plus zoom percent.
 - ORDER_33 first session persistence pass is added. Open photo paths, selected photo path, and zoom percent are saved on close and restored on startup, skipping missing files.
+- ORDER_34 first packaging pass is added. `build/Publish-V1.ps1` creates a win-x64 publish folder and ZIP package while generated output stays out of git.
 - `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-30` are accounted for.
 - `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
@@ -316,6 +317,7 @@ Required test image set:
 - ORDER_31 disk cache size limits, manual cache clear command, and long-session stress testing.
 - ORDER_32 export/preset/batch UI polish, debug control grouping, and full visual QA.
 - ORDER_33 full project/session persistence, last active tool section, preset/export option persistence, and missing-file UI.
+- ORDER_34 real installer, code signing, version stamping, release notes, and packaging QA on another PC.
 - Stage `1-10` preset mapping with hard protection always preserved.
 - Brush/manual target mode for precise blemish removal.
 - Texture-preserving smoothing.

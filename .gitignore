@@ -18,6 +18,9 @@ cache/
 *.analysiscache
 batch_outputs/
 batch_reports/
+publish/
+release/
+installer_output/
 presets/user/
 *.retouchpreset.local.json
 
