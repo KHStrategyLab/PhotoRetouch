@@ -62,7 +62,7 @@ Important caveat:
 | ORDER_32 | UI product polish | InProgress / First polish pass implemented. |
 | ORDER_33 | User settings persistence | InProgress / First session persistence pass implemented. |
 | ORDER_34 | Installer / package | InProgress / Publish package script implemented. |
-| ORDER_35 | V1 final review | Queued/Planned as V1 stabilization key. |
+| ORDER_35 | V1 final review | InProgress / First final review recorded. |
 
 ## Out-Of-Order Arrivals
 
