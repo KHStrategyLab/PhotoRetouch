@@ -7,6 +7,67 @@ namespace PhotoRetouch;
 
 public static class RetouchDebugExporter
 {
+    public static void SaveForChangedControl(
+        BitmapSource original,
+        FaceSnapshotMaskSet snapshot,
+        RetouchStageProcessorOutput output,
+        string outputDirectory,
+        string? changedControlId)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(output);
+
+        Directory.CreateDirectory(outputDirectory);
+
+        string scope = GetDebugScope(changedControlId);
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.HardProtectMask), Path.Combine(outputDirectory, "debug_hard_protect.png"));
+
+        switch (scope)
+        {
+            case "blemish":
+                SaveAverageFaceColorDebug(original, snapshot, outputDirectory);
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.BlemishCandidateMask), Path.Combine(outputDirectory, "debug_blemish_candidates.png"));
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.BlemishMask), Path.Combine(outputDirectory, "debug_blemish_mask.png"));
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(CreateBlemishSearchMask(snapshot.Masks)), Path.Combine(outputDirectory, "debug_blemish_search_mask.png"));
+                SaveBitmap(output.BlemishReducedImage, Path.Combine(outputDirectory, "debug_blemish_corrected.png"));
+                break;
+            case "wrinkle":
+                SaveAverageFaceColorDebug(original, snapshot, outputDirectory);
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.WrinkleCandidateMask), Path.Combine(outputDirectory, "debug_wrinkle_candidates.png"));
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(GetWrinkleMaskForControl(output, changedControlId)), Path.Combine(outputDirectory, GetWrinkleMaskFileName(changedControlId)));
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.WrinkleAppliedMask), Path.Combine(outputDirectory, "debug_wrinkle_applied_mask.png"));
+                SaveBitmap(output.WrinkleReducedImage, Path.Combine(outputDirectory, "debug_wrinkle_corrected.png"));
+                break;
+            case "tone":
+                SaveAverageFaceColorDebug(original, snapshot, outputDirectory);
+                SaveBitmap(output.ToneEvenImage, Path.Combine(outputDirectory, "debug_tone_even_image.png"));
+                SaveBitmap(DebugMaskExporter.CreateMaskOverlayPreview(original, AverageFaceColorMaskBuilder.Build(original, snapshot.Analysis, snapshot.Masks).ColorDifferenceMask, 80, 180, 255, 0.62), Path.Combine(outputDirectory, "debug_tone_even_average_color_overlay.png"));
+                break;
+            case "texture":
+                SaveAverageFaceColorDebug(original, snapshot, outputDirectory);
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.TextureRestoreMask), Path.Combine(outputDirectory, "debug_texture_restore_mask.png"));
+                SaveBitmap(DebugMaskExporter.CreateMaskPreview(output.TextureRestoreStrengthMap), Path.Combine(outputDirectory, "debug_texture_restore_strength_map.png"));
+                SaveBitmap(output.FinalTextureRestoredImage, Path.Combine(outputDirectory, "debug_texture_restored_image.png"));
+                break;
+            case "smooth":
+                SaveAverageFaceColorDebug(original, snapshot, outputDirectory);
+                SaveBitmap(output.SmoothBaseImage, Path.Combine(outputDirectory, "debug_smooth_image.png"));
+                SaveBitmap(output.DetailLayerImage, Path.Combine(outputDirectory, "debug_detail_layer.png"));
+                break;
+            case "shape":
+                SaveBitmap(DebugMaskExporter.CreateFinalOverlayPreview(original, snapshot.Masks), Path.Combine(outputDirectory, "debug_shape_current_mask_overlay.png"));
+                break;
+            default:
+                SaveBitmap(output.FinalImage, Path.Combine(outputDirectory, $"debug_current_output_stage_{output.Report.AppliedStage}.png"));
+                break;
+        }
+
+        SaveBitmap(output.FinalImage, Path.Combine(outputDirectory, "debug_current_preview_result.png"));
+        SaveReport(output.Report, Path.Combine(outputDirectory, "debug_retouch_report.txt"));
+        SavePipelineReport(output.PipelineReport, Path.Combine(outputDirectory, "debug_pipeline_report.txt"));
+    }
+
     public static void SaveAll(
         BitmapSource original,
         FaceSnapshotMaskSet snapshot,
@@ -116,6 +177,64 @@ public static class RetouchDebugExporter
         SaveReport(output.Report, Path.Combine(outputDirectory, "debug_retouch_report.txt"));
         SavePipelineReport(output.PipelineReport, Path.Combine(outputDirectory, "debug_pipeline_report.txt"));
         SaveStagePresetValues(Path.Combine(outputDirectory, "debug_stage_preset_values.json"));
+    }
+
+    private static string GetDebugScope(string? changedControlId)
+    {
+        return changedControlId switch
+        {
+            "blemish_remove" or "acne_remove" or "mole_age_spot_remove" or "beard_shadow_reduce" => "blemish",
+            "wrinkle_global" or "wrinkle_under_eye" or "wrinkle_glabella" or "wrinkle_forehead" or "wrinkle_nasolabial" or "wrinkle_mouth_corner" or "wrinkle_neck" or "wrinkle_nose_shadow" => "wrinkle",
+            "tone_even" => "tone",
+            "skin_texture_protect" or "pore_clean" => "texture",
+            "skin_smooth" => "smooth",
+            "face_balance" or "jaw_balance" or "head_tilt_balance" or "eye_height_balance" or "brow_height_balance" or "mouth_corner_balance" or "nose_center_balance" or "oval_face" or "cheekbone_soften" or "chin_width" or "chin_length" or "jawline_define" => "shape",
+            _ => "current"
+        };
+    }
+
+    private static void SaveAverageFaceColorDebug(BitmapSource original, FaceSnapshotMaskSet snapshot, string outputDirectory)
+    {
+        AverageFaceColorMaskResult averageColorMask = AverageFaceColorMaskBuilder.Build(original, snapshot.Analysis, snapshot.Masks);
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(averageColorMask.ColorDifferenceMask), Path.Combine(outputDirectory, "debug_average_face_color_mask.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskOverlayPreview(original, averageColorMask.ColorDifferenceMask, 80, 180, 255, 0.62), Path.Combine(outputDirectory, "debug_average_face_color_overlay.png"));
+        string[] lines =
+        {
+            "AverageFaceColorMask",
+            "ReferenceColor: " + averageColorMask.ReferenceColor.R + "," + averageColorMask.ReferenceColor.G + "," + averageColorMask.ReferenceColor.B,
+            "AverageSignal: " + averageColorMask.AverageSignal.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+        };
+        File.WriteAllLines(Path.Combine(outputDirectory, "debug_average_face_color_report.txt"), lines, System.Text.Encoding.UTF8);
+    }
+
+    private static MaskPlane GetWrinkleMaskForControl(RetouchStageProcessorOutput output, string? changedControlId)
+    {
+        return changedControlId switch
+        {
+            "wrinkle_under_eye" => output.WrinkleMaskSet.UnderEyeWrinkleMask,
+            "wrinkle_glabella" => output.WrinkleMaskSet.GlabellaWrinkleMask,
+            "wrinkle_forehead" => output.WrinkleMaskSet.ForeheadWrinkleMask,
+            "wrinkle_nasolabial" => output.WrinkleMaskSet.NasolabialFoldMask,
+            "wrinkle_mouth_corner" => output.WrinkleMaskSet.MouthCornerWrinkleMask,
+            "wrinkle_neck" => output.WrinkleMaskSet.NeckWrinkleMask,
+            "wrinkle_nose_shadow" => output.WrinkleMaskSet.NoseShadowWrinkleMask,
+            _ => output.WrinkleMaskSet.CombinedWrinkleMask
+        };
+    }
+
+    private static string GetWrinkleMaskFileName(string? changedControlId)
+    {
+        return changedControlId switch
+        {
+            "wrinkle_under_eye" => "debug_wrinkle_under_eye_mask.png",
+            "wrinkle_glabella" => "debug_wrinkle_glabella_mask.png",
+            "wrinkle_forehead" => "debug_wrinkle_forehead_mask.png",
+            "wrinkle_nasolabial" => "debug_wrinkle_nasolabial_mask.png",
+            "wrinkle_mouth_corner" => "debug_wrinkle_mouth_corner_mask.png",
+            "wrinkle_neck" => "debug_wrinkle_neck_mask.png",
+            "wrinkle_nose_shadow" => "debug_wrinkle_nose_shadow_mask.png",
+            _ => "debug_wrinkle_combined_mask.png"
+        };
     }
 
     private static BitmapSource CreateStageInfoImage(int stage, int limit)

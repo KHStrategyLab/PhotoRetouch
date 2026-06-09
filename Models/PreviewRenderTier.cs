@@ -16,6 +16,18 @@ public sealed record PreviewRenderTierPolicy(
 {
     public static PreviewRenderTierPolicy For(PreviewRenderTier tier, int? visibleMaxLongSide = null)
     {
+        if (PreviewSettings.UseOriginalSize)
+        {
+            return tier switch
+            {
+                PreviewRenderTier.LowPreview or
+                    PreviewRenderTier.FastPreview or
+                    PreviewRenderTier.QualityPreview or
+                    PreviewRenderTier.ExportRender => new PreviewRenderTierPolicy(tier, null, true, true),
+                _ => new PreviewRenderTierPolicy(tier, null, false, true)
+            };
+        }
+
         return tier switch
         {
             PreviewRenderTier.LowPreview => new PreviewRenderTierPolicy(tier, ClampVisibleLongSide(visibleMaxLongSide, 1200, PreviewSettings.MaximumMaxLongSidePixels), true, false),

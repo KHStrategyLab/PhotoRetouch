@@ -17,14 +17,17 @@ public static class PreviewSourceFactory
             return source;
         }
 
+        if (PreviewSettings.UseOriginalSize)
+        {
+            return source;
+        }
+
         int longestSide = Math.Max(source.PixelWidth, source.PixelHeight);
         PreviewRenderTierPolicy tierPolicy = PreviewRenderTierPolicy.For(tier, visibleMaxLongSide);
-        int settingMaxLongSide = PreviewSettings.UseOriginalSize
-            ? PreviewSettings.MaximumMaxLongSidePixels
-            : Math.Clamp(
-                PreviewSettings.MaxLongSidePixels,
-                PreviewSettings.MinimumMaxLongSidePixels,
-                PreviewSettings.MaximumMaxLongSidePixels);
+        int settingMaxLongSide = Math.Clamp(
+            PreviewSettings.MaxLongSidePixels,
+            PreviewSettings.MinimumMaxLongSidePixels,
+            PreviewSettings.MaximumMaxLongSidePixels);
         int maxLongSide = tierPolicy.MaxLongSide is null
             ? settingMaxLongSide
             : Math.Min(

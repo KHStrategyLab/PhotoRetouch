@@ -63,6 +63,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _isEnsuringSnapshotMask;
     private bool _isAutoAiMaskPreviewRendering;
     private bool _pendingAutoAiMaskPreviewRefresh;
+    private bool _pendingAutoAiMaskSaveOnComplete;
+    private bool _suppressSelectionAutoAiMaskPreviewRefresh;
+    private CancellationTokenSource? _autoAiMaskPreviewCancellation;
     private PhotoItem? _maskDebugPhoto;
     private BitmapSource? _maskDebugPreviousImage;
     private BitmapSource? _autoAiMaskPreviewImage;
@@ -98,7 +101,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly RetouchStageProcessor _retouchStageProcessor = new();
     private readonly ShapeBalanceProcessor _shapeBalanceProcessor = new();
 
-    public ObservableCollection<PersonOption> People { get; } = CreatePeople();
     public ObservableCollection<PhotoItem> Photos { get; } = new();
     public ObservableCollection<PhotoItem> SelectedPhotos { get; } = new();
     public ObservableCollection<DebugMaskOption> DebugMaskOptions { get; } = CreateDebugMaskOptions();
@@ -285,7 +287,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(PreviewColumns));
             OnPropertyChanged(nameof(DeveloperStatusVisibility));
             OnPreviewTransformPropertiesChanged();
-            _ = RefreshAutoAiMaskPreviewAsync();
+            if (!_suppressSelectionAutoAiMaskPreviewRefresh && RetouchSections.Any(section => section.IsExpanded && IsAutoAiMaskPreviewSection(section)))
+            {
+                _ = RefreshAutoAiMaskPreviewAsync();
+            }
         }
     }
 
@@ -409,7 +414,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 new("pore_clean", "\uBAA8\uACF5 \uC815\uB9AC", 0, 100, 0),
                 new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0),
                 RetouchControl.CreateAction("skin_sample_tone", "\uD53C\uBD80\uD1A4 \uAE30\uC900", "\uB113\uC740 \uC2A4\uD3EC\uC774\uB4DC"),
-                new("skin_mask_range", "\uD53C\uBD80 \uBCF4\uC815 \uBC94\uC704", 0, 100, 45),
+                new("skin_mask_range", "\uD53C\uBD80 \uBCF4\uC815 \uBC94\uC704", 0, 100, 75),
                 new("skin_texture_protect", "\uD53C\uBD80\uACB0 \uBCF4\uC874", 0, 100, 70)
             }),
         new RetouchSection(
@@ -1086,6 +1091,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (_isAutoAiMaskPreviewRendering)
         {
+            CancelAutoAiMaskPreviewRender(clearPreview: false);
             _pendingAutoAiMaskPreviewRefresh = true;
             return;
         }
@@ -1098,35 +1104,101 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         PhotoItem photo = SelectedPhoto;
+        _autoAiMaskPreviewCancellation?.Dispose();
+        _autoAiMaskPreviewCancellation = new CancellationTokenSource();
+        CancellationTokenSource cancellationSource = _autoAiMaskPreviewCancellation;
+        CancellationToken cancellationToken = cancellationSource.Token;
         _isAutoAiMaskPreviewRendering = true;
-        AutoAiMaskPreviewStatusText = "AI 마스크 분석 중";
+        AutoAiMaskPreviewStatusText = "평균색 계산 중";
         double skinMaskRange = CaptureSkinMaskRange();
         AutoAiMaskPreviewOptions previewOptions = CaptureAutoAiMaskPreviewOptions();
-        RetouchOptions retouchOptions = CreateRetouchOptions((int)Math.Round(DummyMaskStageValue));
+        if (photo.TryGetAverageFaceColorMaskPreview(skinMaskRange, out AverageFaceColorMaskPreviewCache cachedMask))
+        {
+            AutoAiMaskPreviewImage = cachedMask.PreviewImage;
+            AutoAiMaskPreviewStatusText = "평균색 마스크";
+            if (_pendingAutoAiMaskSaveOnComplete)
+            {
+                _pendingAutoAiMaskSaveOnComplete = false;
+                SaveAutoAiMaskDebugImages(photo, cachedMask.Result, cachedMask.Snapshot, skinMaskRange);
+            }
+
+            _isAutoAiMaskPreviewRendering = false;
+            if (ReferenceEquals(_autoAiMaskPreviewCancellation, cancellationSource))
+            {
+                cancellationSource.Dispose();
+                _autoAiMaskPreviewCancellation = null;
+            }
+
+            return;
+        }
+
         try
         {
             BitmapSource analysisImage = CreateThreadSafeBgraBitmap(photo.BaseImage);
-            BitmapSource maskPreview = await Task.Run(() =>
+            (BitmapSource? maskPreview, AverageFaceColorMaskResult? colorMask, FaceSnapshotMaskSet? effectiveSnapshot) = await Task.Run(() =>
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return ((BitmapSource?)null, (AverageFaceColorMaskResult?)null, (FaceSnapshotMaskSet?)null);
+                }
+
                 FaceSnapshotMaskSet snapshot = _snapshotMaskBuilder.GetOrCreate(photo, analysisImage);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return ((BitmapSource?)null, (AverageFaceColorMaskResult?)null, (FaceSnapshotMaskSet?)null);
+                }
+
                 FaceSnapshotMaskSet effectiveSnapshot = ManualMaskOverrideApplier.Apply(snapshot, photo.ManualMaskOverride);
                 effectiveSnapshot = ApplySkinMaskRangeToSnapshot(effectiveSnapshot, skinMaskRange);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return ((BitmapSource?)null, (AverageFaceColorMaskResult?)null, (FaceSnapshotMaskSet?)null);
+                }
+
                 RetouchStageProcessorOutput? output = ReferenceEquals(_lastRetouchOutputPhoto, photo)
                     ? _lastRetouchStageOutput
                     : null;
-                output ??= _retouchStageProcessor.Process(analysisImage, effectiveSnapshot, retouchOptions);
-                return DebugMaskExporter.CreateAutoAiMaskPreview(
+                AverageFaceColorMaskResult colorMask = AverageFaceColorMaskBuilder.Build(
+                    analysisImage,
+                    effectiveSnapshot.Analysis,
                     effectiveSnapshot.Masks,
-                    previewOptions,
-                    CreateAutoAiMaskFilterLayers(output));
+                    skinMaskRange,
+                    cancellationToken);
+                if (cancellationToken.IsCancellationRequested || colorMask.AverageSignal <= 0.000001)
+                {
+                    return ((BitmapSource?)null, (AverageFaceColorMaskResult?)null, (FaceSnapshotMaskSet?)null);
+                }
+
+                BitmapSource preview = DebugMaskExporter.CreateSourceColorMaskPreview(
+                    analysisImage,
+                    colorMask.ColorDifferenceMask,
+                    previewOptions.MaskOpacity);
+                return (preview, colorMask, effectiveSnapshot);
             });
 
-            if (ReferenceEquals(SelectedPhoto, photo) && SelectedPhotos.Count == 1)
+            if (!cancellationToken.IsCancellationRequested &&
+                maskPreview is not null &&
+                colorMask is not null &&
+                effectiveSnapshot is not null)
             {
-                AutoAiMaskPreviewImage = maskPreview;
-                AutoAiMaskPreviewStatusText = "Auto AI Mask";
-                OnPropertyChanged(nameof(SnapshotMaskStatusText));
+                photo.CacheAverageFaceColorMaskPreview(skinMaskRange, colorMask, effectiveSnapshot, maskPreview);
+                if (_pendingAutoAiMaskSaveOnComplete)
+                {
+                    _pendingAutoAiMaskSaveOnComplete = false;
+                    SaveAutoAiMaskDebugImages(photo, colorMask, effectiveSnapshot, skinMaskRange);
+                }
+
+                if (ReferenceEquals(SelectedPhoto, photo) &&
+                    SelectedPhotos.Count == 1)
+                {
+                    AutoAiMaskPreviewImage = maskPreview;
+                    AutoAiMaskPreviewStatusText = "평균색 마스크";
+                    OnPropertyChanged(nameof(SnapshotMaskStatusText));
+                }
             }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
         {
@@ -1139,6 +1211,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         finally
         {
             _isAutoAiMaskPreviewRendering = false;
+            if (ReferenceEquals(_autoAiMaskPreviewCancellation, cancellationSource))
+            {
+                cancellationSource.Dispose();
+                _autoAiMaskPreviewCancellation = null;
+            }
         }
 
         if (_pendingAutoAiMaskPreviewRefresh)
@@ -1148,11 +1225,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private static AutoAiMaskFilterLayers CreateAutoAiMaskFilterLayers(RetouchStageProcessorOutput? output)
+    private void CancelAutoAiMaskPreviewRender(bool clearPreview)
+    {
+        _pendingAutoAiMaskPreviewRefresh = false;
+        _autoAiMaskPreviewCancellation?.Cancel();
+        if (clearPreview)
+        {
+            _pendingAutoAiMaskSaveOnComplete = false;
+            AutoAiMaskPreviewImage = null;
+            AutoAiMaskPreviewStatusText = "마스크 대기";
+        }
+    }
+
+    private static AutoAiMaskFilterLayers CreateAutoAiMaskFilterLayers(RetouchStageProcessorOutput? output, MaskPlane? averageColorDifferenceMask)
     {
         return output is null
-            ? AutoAiMaskFilterLayers.Empty
+            ? AutoAiMaskFilterLayers.Empty with { AverageColorDifferenceMask = averageColorDifferenceMask }
             : new AutoAiMaskFilterLayers(
+                averageColorDifferenceMask,
                 output.BlemishCandidateMask,
                 output.BlemishMask,
                 output.WrinkleCandidateMask,
@@ -1303,7 +1393,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         double? changedControlValue = _pendingRetouchBindingControlValue;
         PreviewRenderDirtyState dirtyBefore = photo.PreviewDirtyState;
         bool forceShapeRebuild = photo.PreviewDirtyState.ShapeDirty;
-        RetouchOptions retouchOptions = CreateRetouchOptions((int)Math.Round(stage));
+        RetouchOptions retouchOptions = CreateRetouchOptions((int)Math.Round(stage), changedControlId);
         ShapeBalanceToolset shapeBalanceToolset = CaptureShapeBalanceToolset();
         PreviewAdjustment sourceAdjustment = CapturePreviewAdjustment();
         double skinMaskRange = CaptureSkinMaskRange();
@@ -1315,22 +1405,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _showPreviewProcessingOverlay = false;
             PreviewProcessingStatusText = "피부 보정 계산 중...";
             IsPreviewProcessing = true;
-            (ShapeBalanceBundleUse shapeUse, RetouchStageProcessorOutput output, BitmapSource visibleWorkingImage) = await Task.Run(() =>
+            (ShapeBalanceBundleUse? shapeUse, FaceSnapshotMaskSet debugSnapshot, RetouchStageProcessorOutput output, BitmapSource visibleWorkingImage) = await Task.Run(() =>
             {
                 FaceSnapshotMaskSet originalSnapshot = _snapshotMaskBuilder.GetOrCreate(photo, previewAnalysisImage);
                 FaceSnapshotMaskSet effectiveSnapshot = ManualMaskOverrideApplier.Apply(originalSnapshot, photo.ManualMaskOverride);
-                ShapeBalanceOptions shapeBalanceOptions = AppliedShapeBalanceOptions.Create(shapeBalanceToolset, effectiveSnapshot.QualityReport).Options;
-                ShapeBalanceBundleUse balancedBundleUse = GetOrCreateShapeBalanceBundle(
-                    photo,
-                    previewAnalysisImage,
-                    effectiveSnapshot,
-                    shapeBalanceOptions,
-                    forceRebuild: forceShapeRebuild);
+                BitmapSource retouchImage = previewAnalysisImage;
+                FaceSnapshotMaskSet retouchBaseSnapshot = effectiveSnapshot;
+                ShapeBalanceBundleUse? balancedBundleUse = null;
+                if (ShouldUseShapeBalanceForRetouch(photo, changedControlId, forceShapeRebuild))
+                {
+                    ShapeBalanceOptions shapeBalanceOptions = AppliedShapeBalanceOptions.Create(shapeBalanceToolset, effectiveSnapshot.QualityReport).Options;
+                    balancedBundleUse = GetOrCreateShapeBalanceBundle(
+                        photo,
+                        previewAnalysisImage,
+                        effectiveSnapshot,
+                        shapeBalanceOptions,
+                        forceRebuild: forceShapeRebuild);
+                    retouchImage = balancedBundleUse.Bundle.BalancedImage;
+                    retouchBaseSnapshot = balancedBundleUse.Bundle.BalancedSnapshot;
+                }
+
                 FaceSnapshotMaskSet retouchSnapshot = ApplySkinMaskRangeToSnapshot(
-                    balancedBundleUse.Bundle.BalancedSnapshot,
+                    retouchBaseSnapshot,
                     skinMaskRange);
                 RetouchStageProcessorOutput result = _retouchStageProcessor.Process(
-                    balancedBundleUse.Bundle.BalancedImage,
+                    retouchImage,
                     retouchSnapshot,
                     retouchOptions);
                 PreviewAdjustment downstreamAdjustment = CreateDownstreamCorrectionAdjustment(
@@ -1341,7 +1440,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     result.FinalImage,
                     downstreamResult,
                     retouchSnapshot.Masks.HardProtectMask);
-                return (balancedBundleUse, result, downstreamResult);
+                return (balancedBundleUse, retouchSnapshot, result, downstreamResult);
             });
 
             if (ReferenceEquals(SelectedPhoto, photo) && (_isDummyMaskRetouchPreviewEnabled || allowDirtyPreview))
@@ -1352,18 +1451,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 _lastRetouchOutputPhoto = photo;
                 _lastRetouchStageOutput = output;
                 UpdateRetouchBindingReport(eventName, changedControlId, changedControlValue, output, createdBefore, cacheBefore);
-                SaveRetouchDebugImages(photo, shapeUse.Bundle, output);
-                SaveIntegrationPreviewDebugImages(
-                    photo,
-                    tier,
-                    dirtyBefore,
-                    eventName,
-                    changedControlId,
-                    createdBefore,
-                    shapeUse.ShapeBalanceMapRebuilt,
-                    shapeUse.Bundle,
-                    output,
-                    visibleWorkingImage);
+                if (shapeUse is not null)
+                {
+                    SaveRetouchDebugImages(photo, shapeUse.Bundle, output, changedControlId);
+                }
+                else
+                {
+                    SaveRetouchDebugImages(photo, debugSnapshot, output, changedControlId);
+                }
             }
 
             OnPropertyChanged(nameof(SnapshotMaskStatusText));
@@ -1433,7 +1528,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             analysisReexecuted,
             true,
             output.Report.IsStageLimited);
-        System.Diagnostics.Debug.WriteLine(_lastRetouchBindingReport.ToStatusText());
     }
 
     private sealed record ShapeBalanceBundleUse(BalancedImageBundle Bundle, bool ShapeBalanceMapRebuilt);
@@ -1470,6 +1564,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         BalancedImageBundle bundle = _shapeBalanceProcessor.Process(analysisImage, effectiveSnapshot, options);
         photo.CacheShapeBalanceBundle(cacheKey, bundle);
         return new ShapeBalanceBundleUse(bundle, true);
+    }
+
+    private bool ShouldUseShapeBalanceForRetouch(PhotoItem photo, string? changedControlId, bool forceShapeRebuild)
+    {
+        if (changedControlId is not null &&
+            FindRetouchControl(changedControlId) is { } changedControl &&
+            IsShapeBalanceControl(changedControl))
+        {
+            return true;
+        }
+
+        return forceShapeRebuild ||
+            photo.CachedShapeBalanceBundle is not null ||
+            HasActiveShapeBalanceControls();
+    }
+
+    private bool HasActiveShapeBalanceControls()
+    {
+        return RetouchSections
+            .SelectMany(section => section.Controls)
+            .Any(control => IsShapeBalanceControl(control) && HasUserOverride(control));
     }
 
     private async void ReAnalyzeButton_Click(object sender, RoutedEventArgs e)
@@ -1553,20 +1668,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
                     OnPropertyChanged(nameof(DeveloperStatusVisibility));
                     photo.SetAdjustedImage(CreateTierDisplayImage(visibleWorkingImage, PreviewRenderTier.QualityPreview, visiblePreviewMaxLongSide));
-                    SaveRetouchDebugImages(photo, shapeUse.Bundle, output);
+                    SaveRetouchDebugImages(photo, shapeUse.Bundle, output, changedControlId: null);
                 }
-
-                SaveIntegrationPreviewDebugImages(
-                    photo,
-                    PreviewRenderTier.QualityPreview,
-                    dirtyBefore,
-                    "ReAnalyze",
-                    null,
-                    createdBefore,
-                    shapeUse.ShapeBalanceMapRebuilt,
-                    shapeUse.Bundle,
-                    output,
-                    visibleWorkingImage);
 
                 OnPropertyChanged(nameof(SnapshotMaskStatusText));
                 OnPropertyChanged(nameof(RetouchBindingStatusText));
@@ -1617,9 +1720,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             });
             OnPropertyChanged(nameof(SnapshotMaskStatusText));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
+        catch (IOException)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
         }
         finally
         {
@@ -1652,7 +1763,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             outputDirectory);
     }
 
-    private static void SaveRetouchDebugImages(PhotoItem photo, FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output)
+    private static void SaveRetouchDebugImages(PhotoItem photo, FaceSnapshotMaskSet snapshot, RetouchStageProcessorOutput output, string? changedControlId)
     {
         string? outputDirectory = GetSnapshotDebugDirectory(photo);
         if (outputDirectory is null)
@@ -1660,10 +1771,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        RetouchDebugExporter.SaveAll(photo.BaseImage, snapshot, output, outputDirectory);
+        RetouchDebugExporter.SaveForChangedControl(photo.BaseImage, snapshot, output, outputDirectory, changedControlId);
     }
 
-    private static void SaveRetouchDebugImages(PhotoItem photo, BalancedImageBundle bundle, RetouchStageProcessorOutput output)
+    private static void SaveRetouchDebugImages(PhotoItem photo, BalancedImageBundle bundle, RetouchStageProcessorOutput output, string? changedControlId)
     {
         string? outputDirectory = GetSnapshotDebugDirectory(photo);
         if (outputDirectory is null)
@@ -1671,8 +1782,73 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        ShapeBalanceDebugExporter.SaveAll(photo.BaseImage, bundle, outputDirectory);
-        RetouchDebugExporter.SaveAll(bundle.BalancedImage, bundle.BalancedSnapshot, output, outputDirectory);
+        RetouchDebugExporter.SaveForChangedControl(bundle.BalancedImage, bundle.BalancedSnapshot, output, outputDirectory, changedControlId);
+    }
+
+    private static void SaveAutoAiMaskDebugImages(PhotoItem photo, AverageFaceColorMaskResult colorMask, FaceSnapshotMaskSet snapshot, double skinMaskRange)
+    {
+        string? outputDirectory = GetSnapshotDebugDirectory(photo);
+        if (outputDirectory is null)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(outputDirectory);
+        DeleteOldAverageColorMaskDebugFiles(outputDirectory);
+        MaskPlane opacityMask = ApplyMaskOpacity(colorMask.ColorDifferenceMask, skinMaskRange);
+        SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(opacityMask), Path.Combine(outputDirectory, "debug_average_skin_mask_bw.png"));
+        SaveDebugBitmap(DebugMaskExporter.CreateSourceColorMaskPreview(photo.BaseImage, colorMask.ColorDifferenceMask, skinMaskRange), Path.Combine(outputDirectory, "debug_average_skin_mask_color.png"));
+        string[] lines =
+        {
+            "Average Skin Color Mask",
+            "Mode: selected_skin_color_only",
+            "SkinMaskOpacity: " + Math.Clamp(skinMaskRange, 0, 1).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "ColorPreview: source_pixel_color_mask",
+            "DisplayReferenceColor: " + colorMask.ReferenceColor.R + "," + colorMask.ReferenceColor.G + "," + colorMask.ReferenceColor.B,
+            "AverageSignal: " + colorMask.AverageSignal.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "ImageId: " + snapshot.ImageId,
+            "CacheKey: " + snapshot.CacheKey.StableId
+        };
+        File.WriteAllLines(Path.Combine(outputDirectory, "debug_average_skin_mask_report.txt"), lines, System.Text.Encoding.UTF8);
+    }
+
+    private static void DeleteOldAverageColorMaskDebugFiles(string outputDirectory)
+    {
+        string[] oldNames =
+        {
+            "debug_auto_ai_mask_bw.png",
+            "debug_auto_ai_mask_color.png",
+            "debug_auto_ai_mask_bw_report.txt"
+        };
+
+        foreach (string oldName in oldNames)
+        {
+            string path = Path.Combine(outputDirectory, oldName);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    private static MaskPlane ApplyMaskOpacity(MaskPlane source, double opacity)
+    {
+        double amount = Math.Clamp(opacity, 0, 1);
+        MaskPlane result = MaskPlane.Empty(source.Width, source.Height);
+        for (int i = 0; i < source.Values.Length; i++)
+        {
+            result.Values[i] = Math.Clamp(source.Values[i] * amount, 0, 1);
+        }
+
+        return result;
+    }
+
+    private static void SaveDebugBitmap(BitmapSource bitmap, string path)
+    {
+        PngBitmapEncoder encoder = new();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using FileStream stream = File.Create(path);
+        encoder.Save(stream);
     }
 
     private void SaveIntegrationPreviewDebugImages(
@@ -1799,7 +1975,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (e.PropertyName is not (nameof(RetouchControl.Value) or nameof(RetouchControl.CurveChannel)) ||
             sender is not RetouchControl control ||
-            !IsPhotoAdjustmentControl(control))
+            !RequiresPreviewRenderAfterControlChange(control))
         {
             return;
         }
@@ -1822,7 +1998,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             MarkSelectedPhotoDirtyForControl(control);
             if (IsAutoAiMaskPreviewControl(control))
             {
+                if (!HasActiveAutoAiMaskPreviewControls())
+                {
+                    CancelAutoAiMaskPreviewRender(clearPreview: true);
+                    return;
+                }
+
                 _ = RefreshAutoAiMaskPreviewAsync();
+                return;
             }
         }
 
@@ -2282,7 +2465,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             FindRetouchControl("skin_smooth")?.Value ?? 0,
             FindRetouchControl("pore_clean")?.Value ?? 0,
             FindRetouchControl("tone_even")?.Value ?? 0,
-            FindRetouchControl("skin_mask_range")?.Value ?? 45,
+            FindRetouchControl("skin_mask_range")?.Value ?? 75,
             FindRetouchControl("skin_texture_protect")?.Value ?? 70,
             _manualSkinReferenceColor.HasValue,
             _manualSkinReferenceColor ?? System.Windows.Media.Colors.Transparent,
@@ -2338,16 +2521,67 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         };
     }
 
-    private RetouchOptions CreateRetouchOptions(int requestedStage)
+    private RetouchOptions CreateRetouchOptions(int requestedStage, string? changedControlId = null)
     {
+        RetouchProcessingScope scope = CreateRetouchProcessingScope(changedControlId);
         return new RetouchOptions(
             requestedStage,
+            EnableSkinSmooth: scope.SkinSmooth,
+            EnableBlemishReduce: scope.Blemish,
+            EnableWrinkleReduce: scope.Wrinkle,
+            EnableToneEven: scope.Tone,
+            EnableTextureRestore: scope.Texture,
             Toolset: CaptureRetouchToolset(requestedStage));
+    }
+
+    private RetouchProcessingScope CreateRetouchProcessingScope(string? changedControlId)
+    {
+        return changedControlId switch
+        {
+            "skin_smooth" => new RetouchProcessingScope(SkinSmooth: true),
+            "blemish_remove" or "acne_remove" or "mole_age_spot_remove" => new RetouchProcessingScope(Blemish: true),
+            "wrinkle_global" or "wrinkle_under_eye" or "wrinkle_glabella" or "wrinkle_forehead" or "wrinkle_nasolabial" or "wrinkle_mouth_corner" or "wrinkle_neck" or "wrinkle_nose_shadow" => new RetouchProcessingScope(Wrinkle: true),
+            "tone_even" => new RetouchProcessingScope(Tone: true),
+            "pore_clean" or "skin_texture_protect" => new RetouchProcessingScope(Texture: true),
+            "skin_mask_range" => CreateRetouchProcessingScopeFromActiveControls(),
+            null => CreateRetouchProcessingScopeFromActiveControls(),
+            _ => RetouchProcessingScope.None
+        };
+    }
+
+    private RetouchProcessingScope CreateRetouchProcessingScopeFromActiveControls()
+    {
+        return new RetouchProcessingScope(
+            SkinSmooth: NormalizeSlider(FindRetouchControl("skin_smooth")) > 0,
+            Blemish: NormalizeSlider(FindRetouchControl("blemish_remove")) > 0 ||
+                NormalizeSlider(FindRetouchControl("acne_remove")) > 0 ||
+                NormalizeSlider(FindRetouchControl("mole_age_spot_remove")) > 0,
+            Wrinkle: NormalizeSlider(FindRetouchControl("wrinkle_global")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_under_eye")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_glabella")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_forehead")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_nasolabial")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_mouth_corner")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_neck")) > 0 ||
+                NormalizeSlider(FindRetouchControl("wrinkle_nose_shadow")) > 0,
+            Tone: NormalizeSlider(FindRetouchControl("tone_even")) > 0,
+            Texture: NormalizeSlider(FindRetouchControl("pore_clean")) > 0 ||
+                HasUserOverride(FindRetouchControl("skin_texture_protect")));
+    }
+
+    private sealed record RetouchProcessingScope(
+        bool SkinSmooth = false,
+        bool Blemish = false,
+        bool Wrinkle = false,
+        bool Tone = false,
+        bool Texture = false)
+    {
+        public static RetouchProcessingScope None { get; } = new();
     }
 
     private double CaptureSkinMaskRange()
     {
-        return NormalizeSlider(FindRetouchControl("skin_mask_range"), 0.45);
+        return NormalizeSlider(FindRetouchControl("skin_mask_range"), 0.75);
     }
 
     private AutoAiMaskPreviewOptions CaptureAutoAiMaskPreviewOptions()
@@ -2378,7 +2612,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             blemishAmount,
             NormalizeSlider(FindRetouchControl("tone_even")),
             wrinkleAmount,
-            textureAmount);
+            textureAmount,
+            CaptureSkinMaskRange());
     }
 
     private static FaceSnapshotMaskSet ApplySkinMaskRangeToSnapshot(FaceSnapshotMaskSet snapshot, double skinMaskRange)
@@ -2795,7 +3030,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private static BitmapSource CreateTierDisplayImage(BitmapSource source, PreviewRenderTier tier, int? visibleMaxLongSide)
     {
-        if (tier == PreviewRenderTier.ExportRender)
+        if (tier == PreviewRenderTier.ExportRender || PreviewSettings.UseOriginalSize)
         {
             return source;
         }
@@ -2887,10 +3122,93 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        Dictionary<string, PhotoItem> reusablePhotos = CaptureReusablePhotoCache();
-        ClearPhotoListForWorkingFolderReload();
-        await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        LoadWorkingFolderPhotos(clearExisting: false, reusablePhotos);
+        _suppressSelectionAutoAiMaskPreviewRefresh = true;
+        try
+        {
+            ResetEditingWorkspaceForWorkingFolderRefresh();
+            DeleteWorkingFolderDebugPhotoDirectories();
+            ClearPhotoListForWorkingFolderReload();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            LoadWorkingFolderPhotos(clearExisting: false, reusablePhotos: null);
+        }
+        finally
+        {
+            _suppressSelectionAutoAiMaskPreviewRefresh = false;
+        }
+    }
+
+    private void ResetEditingWorkspaceForWorkingFolderRefresh()
+    {
+        RestoreMaskDebugPreviousPreview();
+        _isMaskDebugPreviewEnabled = false;
+        _isDummyMaskRetouchPreviewEnabled = false;
+        _isEnsuringSnapshotMask = false;
+        _pendingPreviewAdjustment = false;
+        _pendingPreviewAdjustmentShowsOverlay = false;
+        _pendingRetouchSliderLivePreview = false;
+        _pendingRetouchSliderControlId = null;
+        _pendingCurveAmountLivePreview = false;
+        CancelAutoAiMaskPreviewRender(clearPreview: true);
+        _retouchSliderPreviewTimer.Stop();
+        _curveAmountPreviewTimer.Stop();
+        _activeRetouchSection = null;
+        AutoAiMaskPreviewStatusText = "툴 열림 대기";
+        _lastRetouchProcessReport = null;
+        _lastRetouchOutputPhoto = null;
+        _lastRetouchStageOutput = null;
+        _lastRetouchBindingReport = RetouchBindingReport.Empty;
+        ClearRetouchHistory();
+        CloseAllRetouchSections();
+        ClearPendingRetouchBindingEvent();
+        OnDeveloperStatusPropertiesChanged();
+        OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+        OnPropertyChanged(nameof(MaskDebugButtonText));
+        OnPropertyChanged(nameof(DebugMaskPanelVisibility));
+        OnPropertyChanged(nameof(PreviewProcessingVisibility));
+        OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
+    }
+
+    private void CloseAllRetouchSections()
+    {
+        foreach (RetouchSection section in RetouchSections)
+        {
+            section.IsExpanded = false;
+        }
+    }
+
+    private static void DeleteWorkingFolderDebugPhotoDirectories()
+    {
+        if (!Directory.Exists(WorkingFolderSettings.WorkingFolderPath))
+        {
+            return;
+        }
+
+        string workingFolder = Path.GetFullPath(WorkingFolderSettings.WorkingFolderPath);
+        string debugRoot = Path.GetFullPath(Path.Combine(workingFolder, "_mask_debug"));
+        string expectedParent = workingFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!debugRoot.StartsWith(expectedParent, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(Path.GetFileName(debugRoot), "_mask_debug", StringComparison.OrdinalIgnoreCase) ||
+            !Directory.Exists(debugRoot))
+        {
+            return;
+        }
+
+        foreach (string photoDebugDirectory in Directory.EnumerateDirectories(debugRoot))
+        {
+            try
+            {
+                Directory.Delete(photoDebugDirectory, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (NotSupportedException)
+            {
+            }
+        }
     }
 
     private void LoadWorkingFolderPhotos()
@@ -3187,9 +3505,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (sender is not System.Windows.Controls.Slider slider ||
             slider.DataContext is not RetouchControl control ||
-            !ShouldLivePreviewSlider(control) ||
             !slider.IsLoaded ||
             (!slider.IsMouseCaptureWithin && !slider.IsKeyboardFocusWithin))
+        {
+            return;
+        }
+
+        if (IsAutoAiMaskPreviewControl(control))
+        {
+            _retouchSliderUndoBeforeState ??= CaptureRetouchState();
+            if (CommitValueSliderValue(slider))
+            {
+                MarkSelectedPhotoDirtyForControl(control);
+                if (!HasActiveAutoAiMaskPreviewControls())
+                {
+                    CancelAutoAiMaskPreviewRender(clearPreview: true);
+                    return;
+                }
+
+                _pendingRetouchSliderControlId = control.Id;
+                _pendingRetouchSliderLivePreview = true;
+                if (!_retouchSliderPreviewTimer.IsEnabled)
+                {
+                    _retouchSliderPreviewTimer.Start();
+                }
+            }
+
+            return;
+        }
+
+        if (!ShouldLivePreviewSlider(control))
         {
             return;
         }
@@ -3226,6 +3571,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         bool hasPendingShapeRender = IsShapeBalanceControl(control) &&
             SelectedPhoto?.PreviewDirtyState.ShapeDirty == true;
 
+        if (IsAutoAiMaskPreviewControl(control))
+        {
+            _retouchSliderUndoBeforeState = null;
+            _pendingRetouchSliderLivePreview = false;
+            _pendingRetouchSliderControlId = null;
+            _retouchSliderPreviewTimer.Stop();
+            PushRetouchHistory(before, CaptureRetouchState());
+            if (NormalizeSlider(control) <= 0 && !HasActiveAutoAiMaskPreviewControls())
+            {
+                CancelAutoAiMaskPreviewRender(clearPreview: true);
+                e.Handled = true;
+                return;
+            }
+
+            _pendingAutoAiMaskSaveOnComplete = true;
+            _ = RefreshAutoAiMaskPreviewAsync();
+            e.Handled = true;
+            return;
+        }
+
+        bool shouldRenderPreview = ShouldLivePreviewSlider(control) && (changed || hadPendingPreview || hasPendingShapeRender);
+        if (shouldRenderPreview)
+        {
+            SetPendingRetouchBindingEvent("SliderReleased", control.Id, control.Value);
+        }
+
         if (ShouldLivePreviewSlider(control))
         {
             _retouchSliderUndoBeforeState = null;
@@ -3235,7 +3606,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         PushRetouchHistory(before, CaptureRetouchState());
-        if (ShouldLivePreviewSlider(control) && (changed || hadPendingPreview || hasPendingShapeRender))
+        if (shouldRenderPreview)
         {
             await ApplyPhotoAdjustmentsAsync(showOverlay: false, tier: PreviewRenderTier.QualityPreview);
         }
@@ -3276,6 +3647,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         _pendingRetouchSliderLivePreview = false;
+        string? pendingControlId = _pendingRetouchSliderControlId;
+        RetouchControl? pendingControl = pendingControlId is null
+            ? null
+            : FindRetouchControl(pendingControlId);
+        if (pendingControl is not null && IsAutoAiMaskPreviewControl(pendingControl))
+        {
+            if (!HasActiveAutoAiMaskPreviewControls())
+            {
+                CancelAutoAiMaskPreviewRender(clearPreview: true);
+                return;
+            }
+
+            _ = RefreshAutoAiMaskPreviewAsync();
+            return;
+        }
+
+        if (pendingControl is not null)
+        {
+            SetPendingRetouchBindingEvent("SliderDragging", pendingControl.Id, pendingControl.Value);
+        }
+
         await ApplyPhotoAdjustmentsAsync(showOverlay: false, tier: PreviewRenderTier.QualityPreview);
     }
 
@@ -3465,8 +3857,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _pendingCurveAmountLivePreview = false;
         _curveAmountPreviewTimer.Stop();
         _pendingRetouchSliderLivePreview = false;
+        _pendingRetouchSliderControlId = null;
+        ClearPendingRetouchBindingEvent();
         _retouchSliderUndoBeforeState = null;
         _retouchSliderPreviewTimer.Stop();
+        CancelAutoAiMaskPreviewRender(clearPreview: section.Controls.Any(IsAutoAiMaskPreviewControl));
         _isResettingRetouchControlsForPhotoChange = true;
         _faceWorkAreaDragUndoBeforeState = null;
         try
@@ -3488,7 +3883,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         PushRetouchHistory(before, CaptureRetouchState());
-        if (section.Controls.Any(IsPhotoAdjustmentControl))
+        if (section.Controls.Any(IsAutoAiMaskPreviewControl))
+        {
+            _lastRetouchProcessReport = null;
+            _lastRetouchOutputPhoto = null;
+            _lastRetouchStageOutput = null;
+            _isDummyMaskRetouchPreviewEnabled = false;
+            SelectedPhoto?.ResetAdjustedImage();
+            OnDeveloperStatusPropertiesChanged();
+            OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            e.Handled = true;
+            return;
+        }
+
+        if (section.Controls.Any(RequiresPreviewRenderAfterControlChange))
         {
             await ApplyPhotoAdjustmentsAsync(showOverlay: false);
         }
@@ -3496,7 +3904,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         e.Handled = true;
     }
 
-    private static bool IsPhotoAdjustmentControl(RetouchControl control)
+    private static bool RequiresPreviewRenderAfterControlChange(RetouchControl control)
     {
         return control.Id is "photo_brightness" or
             "photo_contrast" or
@@ -3635,6 +4043,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "wrinkle_nose_shadow";
     }
 
+    private static bool IsAutoAiMaskPreviewSection(RetouchSection section)
+    {
+        return section.Controls.Any(IsAutoAiMaskPreviewControl);
+    }
+
+    private bool HasActiveAutoAiMaskPreviewControls()
+    {
+        return RetouchSections
+            .SelectMany(section => section.Controls)
+            .Any(control => IsAutoAiMaskPreviewControl(control) && HasUserOverride(control) && NormalizeSlider(control) > 0);
+    }
+
     private static bool IsHairRetouchControl(RetouchControl control)
     {
         return control.Id is "hair_gloss" or
@@ -3644,7 +4064,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private static bool ShouldLivePreviewSlider(RetouchControl control)
     {
-        return IsPhotoAdjustmentControl(control) && control.Id != "photo_curves";
+        return RequiresPreviewRenderAfterControlChange(control) &&
+            control.Id != "photo_curves" &&
+            !IsAutoAiMaskPreviewControl(control);
     }
 
     private void CurveCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -3948,6 +4370,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         PhotoItem[] previousSelection = SelectedPhotos.ToArray();
         PhotoItem? previousSelectedPhoto = SelectedPhoto;
+        bool previousSinglePhoto = previousSelectedPhoto is not null &&
+            previousSelection.Length == 1;
+        bool previousSinglePhotoChanged = previousSinglePhoto &&
+            HasActiveAutoAiMaskPreviewControls();
         if (_isMaskDebugPreviewEnabled)
         {
             _isMaskDebugPreviewEnabled = false;
@@ -3969,9 +4395,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .Distinct()
             .Take(8)
             .ToArray();
-        if (previousSelectedPhoto is not null && previousSelection.Length == 1)
+        if (previousSinglePhoto && previousSelectedPhoto is not null)
         {
             StoreRetouchStateForPhoto(previousSelectedPhoto);
+        }
+
+        if (previousSinglePhotoChanged && previousSelectedPhoto is not null)
+        {
+            _pendingAutoAiMaskSaveOnComplete = true;
+            _ = RefreshAutoAiMaskPreviewAsync();
         }
 
         foreach (PhotoItem photo in Photos)
@@ -3999,6 +4431,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (selectedPhotoChanged && SelectedPhoto is not null && selected.Length == 1)
         {
             RestoreRetouchControlsForPhotoSelection(SelectedPhoto);
+            CloseAllRetouchSections();
+            AutoAiMaskPreviewImage = null;
+            AutoAiMaskPreviewStatusText = "툴 열림 대기";
         }
 
         UpdateCurveHistogram();
@@ -5377,6 +5812,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (SelectedPhoto is { } photo)
         {
             _ = PrepareEditingForSelectedPhotoAsync(photo, expandedSection);
+            if (IsAutoAiMaskPreviewSection(expandedSection))
+            {
+                _pendingAutoAiMaskSaveOnComplete = true;
+                _ = RefreshAutoAiMaskPreviewAsync();
+            }
         }
     }
 
@@ -5716,21 +6156,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
-
-    private static ObservableCollection<PersonOption> CreatePeople()
-    {
-        ObservableCollection<PersonOption> people = new()
-        {
-            new PersonOption("all", "\uBAA8\uB4E0 \uC778\uBB3C", "ALL")
-        };
-
-        for (int i = 1; i <= 10; i++)
-        {
-            people.Add(new PersonOption($"person_{i:00}", $"\uC778\uBB3C {i:00}", i.ToString("00")));
-        }
-
-        return people;
     }
 
     private static ObservableCollection<DebugMaskOption> CreateDebugMaskOptions()

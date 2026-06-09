@@ -143,6 +143,7 @@
             <Setter Property="Margin" Value="0,6,0,16"/>
             <Setter Property="Foreground" Value="{StaticResource SliderFill}"/>
             <Setter Property="Background" Value="{StaticResource SliderTrack}"/>
+            <Setter Property="IsMoveToPointEnabled" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
@@ -151,10 +152,10 @@
                                 <Border Background="{TemplateBinding Background}" CornerRadius="3" Height="5" VerticalAlignment="Center"/>
                                 <Track x:Name="PART_Track">
                                     <Track.DecreaseRepeatButton>
-                                        <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False" Opacity="0"/>
+                                        <RepeatButton Focusable="False" IsHitTestVisible="False" Opacity="0"/>
                                     </Track.DecreaseRepeatButton>
                                     <Track.IncreaseRepeatButton>
-                                        <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False" Opacity="0"/>
+                                        <RepeatButton Focusable="False" IsHitTestVisible="False" Opacity="0"/>
                                     </Track.IncreaseRepeatButton>
                                     <Track.Thumb>
                                         <Thumb Width="18" Height="18" Background="{StaticResource SliderThumb}">
@@ -612,7 +613,7 @@
                         <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="12" Margin="0,0,0,14">
                             <StackPanel>
                                 <Grid Margin="0,0,0,10">
-                                    <TextBlock Text="Auto AI Mask" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="평균색 마스크" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding AutoAiMaskPreviewStatusText}"
                                                Foreground="{StaticResource TextSub}"
                                                HorizontalAlignment="Right"
@@ -629,38 +630,6 @@
                                            SnapsToDevicePixels="True"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                 </Border>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="12" Margin="0,0,0,14">
-                            <StackPanel>
-                                <TextBlock Text="&#xC801;&#xC6A9; &#xB300;&#xC0C1;" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                                <UniformGrid Columns="3">
-                                    <RadioButton Content="&#xC804;&#xCCB4; &#xC5BC;&#xAD74;" Foreground="{StaticResource TextMain}" IsChecked="True" GroupName="TargetMode"/>
-                                    <RadioButton Content="&#xC120;&#xD0DD; &#xC778;&#xBB3C;" Foreground="{StaticResource TextMain}" GroupName="TargetMode"/>
-                                    <RadioButton Content="&#xBAA8;&#xB4E0; &#xC778;&#xBB3C;" Foreground="{StaticResource TextMain}" GroupName="TargetMode"/>
-                                </UniformGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="12" Margin="0,0,0,14">
-                            <StackPanel>
-                                <TextBlock Text="&#xC778;&#xBB3C; &#xC120;&#xD0DD;" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                                <ComboBox ItemsSource="{Binding People}" DisplayMemberPath="Name" SelectedIndex="0" Height="32" Margin="0,0,0,10"/>
-                                <ItemsControl ItemsSource="{Binding People}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <UniformGrid Columns="5"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="{StaticResource ControlBg}" BorderBrush="{StaticResource ControlStroke}" BorderThickness="1" Padding="8,6" Margin="0,0,6,6">
-                                                <TextBlock Text="{Binding ShortName}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
                             </StackPanel>
                         </Border>
 

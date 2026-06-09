@@ -45,54 +45,88 @@ public sealed class RetouchStageProcessor
         int appliedStage = appliedOptions.AppliedStage;
         StagePreset preset = ApplyFailSafeOpacity(appliedOptions.StagePreset, snapshot.QualityReport);
         RetouchToolset toolset = appliedOptions.RetouchToolset;
+        bool runSkinSmooth = options.EnableSkinSmooth && toolset.SkinSmooth.EnableSkinSmooth;
+        bool runBlemishReduce = options.EnableBlemishReduce && toolset.Blemish.EnableBlemishReduce;
+        bool runWrinkleReduce = options.EnableWrinkleReduce && toolset.Wrinkle.EnableWrinkleReduce;
+        bool runToneEven = options.EnableToneEven && toolset.ToneEven.EnableToneEven;
+        bool runTextureRestore = options.EnableTextureRestore && toolset.TextureRestore.EnableTextureRestore;
+
+        if (!runSkinSmooth &&
+            !runBlemishReduce &&
+            !runWrinkleReduce &&
+            !runToneEven &&
+            !runTextureRestore)
+        {
+            return CreatePassthroughOutput(bitmap, snapshot, appliedOptions, preset, requestedStage, appliedStage, maxAllowedStage, pipelineStartedAtUtc);
+        }
 
         int stride = width * 4;
         byte[] originalPixels = new byte[stride * height];
         bitmap.CopyPixels(originalPixels, stride, 0);
 
-        byte[] smoothBasePixels = options.EnableSkinSmooth && toolset.SkinSmooth.EnableSkinSmooth
+        byte[] smoothBasePixels = runSkinSmooth
             ? CreateSmoothBase(originalPixels, masks, width, height, preset.SkinSmoothAmount)
-            : (byte[])originalPixels.Clone();
+            : originalPixels;
 
-        byte[] detailLayerPixels = CreateDetailLayer(originalPixels, width, height);
-        byte[] textureRestoredPixels = options.EnableTextureRestore
+        byte[] detailLayerPixels = runSkinSmooth && runTextureRestore
+            ? CreateDetailLayer(originalPixels, width, height)
+            : originalPixels;
+        byte[] textureRestoredPixels = runSkinSmooth && runTextureRestore
             ? RestoreTexture(originalPixels, smoothBasePixels, detailLayerPixels, width, height, preset.TextureRestoreAmount)
-            : (byte[])smoothBasePixels.Clone();
-        RetouchComposeResult composeResult = ComposeFinal(originalPixels, textureRestoredPixels, masks, width, height, preset);
+            : smoothBasePixels;
 
-        BitmapSource smoothBaseImage = CreateBitmap(width, height, smoothBasePixels);
-        BitmapSource detailLayerImage = CreateBitmap(width, height, detailLayerPixels);
-        BitmapSource textureRestoredImage = CreateBitmap(width, height, textureRestoredPixels);
-        BitmapSource retouchAllowAppliedImage = CreateBitmap(width, height, composeResult.RetouchAllowAppliedPixels);
-        BitmapSource softProtectAppliedImage = CreateBitmap(width, height, composeResult.SoftProtectAppliedPixels);
-        BitmapSource hardProtectRestoredImage = CreateBitmap(width, height, composeResult.HardProtectRestoredPixels);
-        BitmapSource composedFinalImage = CreateBitmap(width, height, composeResult.FinalPixels);
-        BlemishReduceResult blemishResult = _blemishReduceFilter.Apply(new BlemishReduceInput(
-            bitmap,
-            composedFinalImage,
-            snapshot,
-            masks.RetouchAllowMask,
-            masks.SoftProtectMask,
-            masks.HardProtectMask,
-            appliedStage,
-            preset,
-            snapshot.QualityReport));
-        WrinkleSoftReduceResult wrinkleResult = _wrinkleSoftReduceFilter.Apply(new WrinkleSoftReduceInput(
-            bitmap,
-            blemishResult.BlemishReducedImage,
-            snapshot,
-            masks.RetouchAllowMask,
-            masks.SoftProtectMask,
-            masks.HardProtectMask,
-            appliedStage,
-            preset,
-            options.WrinkleToolset ?? toolset.Wrinkle,
-            snapshot.QualityReport,
-            blemishResult.BlemishMask));
-        BitmapSource toneEvenImage = options.EnableToneEven && toolset.ToneEven.EnableToneEven
+        BitmapSource smoothBaseImage = runSkinSmooth ? CreateBitmap(width, height, smoothBasePixels) : bitmap;
+        BitmapSource detailLayerImage = runSkinSmooth && runTextureRestore ? CreateBitmap(width, height, detailLayerPixels) : bitmap;
+        BitmapSource textureRestoredImage = runSkinSmooth && runTextureRestore ? CreateBitmap(width, height, textureRestoredPixels) : smoothBaseImage;
+        BitmapSource retouchAllowAppliedImage;
+        BitmapSource softProtectAppliedImage;
+        BitmapSource hardProtectRestoredImage;
+        BitmapSource composedFinalImage;
+        if (runSkinSmooth)
+        {
+            RetouchComposeResult composeResult = ComposeFinal(originalPixels, textureRestoredPixels, masks, width, height, preset);
+            retouchAllowAppliedImage = CreateBitmap(width, height, composeResult.RetouchAllowAppliedPixels);
+            softProtectAppliedImage = CreateBitmap(width, height, composeResult.SoftProtectAppliedPixels);
+            hardProtectRestoredImage = CreateBitmap(width, height, composeResult.HardProtectRestoredPixels);
+            composedFinalImage = CreateBitmap(width, height, composeResult.FinalPixels);
+        }
+        else
+        {
+            retouchAllowAppliedImage = bitmap;
+            softProtectAppliedImage = bitmap;
+            hardProtectRestoredImage = bitmap;
+            composedFinalImage = bitmap;
+        }
+        BlemishReduceResult blemishResult = runBlemishReduce
+            ? _blemishReduceFilter.Apply(new BlemishReduceInput(
+                bitmap,
+                composedFinalImage,
+                snapshot,
+                masks.RetouchAllowMask,
+                masks.SoftProtectMask,
+                masks.HardProtectMask,
+                appliedStage,
+                preset,
+                snapshot.QualityReport))
+            : CreateDisabledBlemishResult(composedFinalImage, width, height, preset.BlemishReduceAmount);
+        WrinkleSoftReduceResult wrinkleResult = runWrinkleReduce
+            ? _wrinkleSoftReduceFilter.Apply(new WrinkleSoftReduceInput(
+                bitmap,
+                blemishResult.BlemishReducedImage,
+                snapshot,
+                masks.RetouchAllowMask,
+                masks.SoftProtectMask,
+                masks.HardProtectMask,
+                appliedStage,
+                preset,
+                options.WrinkleToolset ?? toolset.Wrinkle,
+                snapshot.QualityReport,
+                blemishResult.BlemishMask))
+            : CreateDisabledWrinkleResult(blemishResult.BlemishReducedImage, width, height);
+        BitmapSource toneEvenImage = runToneEven
             ? ApplyToneEven(wrinkleResult.WrinkleReducedImage, originalPixels, masks, width, height, preset.ToneEvenAmount)
             : wrinkleResult.WrinkleReducedImage;
-        TextureRestoreResult textureResult = options.EnableTextureRestore && toolset.TextureRestore.EnableTextureRestore
+        TextureRestoreResult textureResult = runTextureRestore
             ? _textureRestoreFilter.Apply(new TextureRestoreInput(
                 bitmap,
                 toneEvenImage,
@@ -129,11 +163,11 @@ public sealed class RetouchStageProcessor
         }
         List<string> filtersExecuted = new()
         {
-            options.EnableSkinSmooth && toolset.SkinSmooth.EnableSkinSmooth ? "SkinSmoothFilter" : "SkinSmoothFilter(skipped)",
-            "BlemishReduceFilter",
-            "WrinkleSoftReduceFilter",
-            options.EnableToneEven && toolset.ToneEven.EnableToneEven ? "ToneEvenFilter" : "ToneEvenFilter(skipped)",
-            options.EnableTextureRestore && toolset.TextureRestore.EnableTextureRestore ? "TextureRestoreFilter" : "TextureRestoreFilter(skipped)",
+            runSkinSmooth ? "SkinSmoothFilter" : "SkinSmoothFilter(skipped)",
+            runBlemishReduce ? "BlemishReduceFilter" : "BlemishReduceFilter(skipped)",
+            runWrinkleReduce ? "WrinkleSoftReduceFilter" : "WrinkleSoftReduceFilter(skipped)",
+            runToneEven ? "ToneEvenFilter" : "ToneEvenFilter(skipped)",
+            runTextureRestore ? "TextureRestoreFilter" : "TextureRestoreFilter(skipped)",
             "HardProtectFinalRestoreFilter"
         };
 
@@ -272,6 +306,140 @@ public sealed class RetouchStageProcessor
         MaskPlane empty = MaskPlane.Empty(width, height);
         TextureRestoreProcessReport report = new(appliedStage, 0, 0, 0, 0, 0, new[] { "texture_restore_disabled" });
         return new TextureRestoreResult(currentImage, currentImage, currentImage, empty, empty, empty, report, report.DebugWarnings);
+    }
+
+    private static BlemishReduceResult CreateDisabledBlemishResult(BitmapSource currentImage, int width, int height, double amount)
+    {
+        MaskPlane empty = MaskPlane.Empty(width, height);
+        BlemishProcessReport report = new(0, 0, 0, amount, 0, new[] { "blemish_reduce_disabled" });
+        return new BlemishReduceResult(currentImage, empty, empty, report, report.DebugWarnings);
+    }
+
+    private static WrinkleSoftReduceResult CreateDisabledWrinkleResult(BitmapSource currentImage, int width, int height)
+    {
+        MaskPlane empty = MaskPlane.Empty(width, height);
+        WrinkleProcessReport report = WrinkleProcessReport.Empty(new[] { "wrinkle_reduce_disabled" });
+        return new WrinkleSoftReduceResult(currentImage, WrinkleMaskSet.Empty(width, height), empty, empty, report, report.DebugWarnings);
+    }
+
+    private static RetouchStageProcessorOutput CreatePassthroughOutput(
+        BitmapSource bitmap,
+        FaceSnapshotMaskSet snapshot,
+        AppliedRetouchOptions appliedOptions,
+        StagePreset preset,
+        int requestedStage,
+        int appliedStage,
+        int maxAllowedStage,
+        DateTime pipelineStartedAtUtc)
+    {
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        MaskPlane empty = MaskPlane.Empty(width, height);
+        BlemishProcessReport blemishReport = new(0, 0, 0, 0, 0, new[] { "blemish_reduce_not_requested" });
+        WrinkleProcessReport wrinkleReport = WrinkleProcessReport.Empty(new[] { "wrinkle_reduce_not_requested" });
+        TextureRestoreProcessReport textureReport = new(appliedStage, 0, 0, 0, 0, 0, new[] { "texture_restore_not_requested" });
+        HardProtectRestoreReport hardProtectReport = new(
+            appliedStage,
+            0,
+            0,
+            0,
+            0,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            new[] { "hardprotect_restore_not_requested" });
+        List<string> warnings = new(snapshot.QualityReport.Warnings);
+        warnings.AddRange(snapshot.QualityReport.FatalErrors.Select(error => "fatal_" + error));
+        warnings.Add("retouch_pipeline_passthrough_no_filter_requested");
+        DateTime pipelineFinishedAtUtc = DateTime.UtcNow;
+        PipelineDebugReport pipelineReport = new(
+            snapshot.ImageId,
+            snapshot.CacheKey.StableId,
+            requestedStage,
+            appliedStage,
+            pipelineStartedAtUtc,
+            pipelineFinishedAtUtc,
+            false,
+            true,
+            true,
+            new[]
+            {
+                "SkinSmoothFilter(skipped)",
+                "BlemishReduceFilter(skipped)",
+                "WrinkleSoftReduceFilter(skipped)",
+                "ToneEvenFilter(skipped)",
+                "TextureRestoreFilter(skipped)",
+                "HardProtectFinalRestoreFilter(skipped)"
+            },
+            warnings,
+            Array.Empty<string>());
+        RetouchProcessReport report = new(
+            requestedStage,
+            appliedStage,
+            maxAllowedStage,
+            0,
+            0,
+            0,
+            0,
+            0,
+            preset.DetailRestoreAmount,
+            false,
+            0,
+            0,
+            snapshot.QualityReport.Score,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            true,
+            warnings);
+
+        return new RetouchStageProcessorOutput(
+            bitmap,
+            bitmap,
+            bitmap,
+            bitmap,
+            bitmap,
+            bitmap,
+            bitmap,
+            bitmap,
+            empty,
+            empty,
+            blemishReport,
+            bitmap,
+            WrinkleMaskSet.Empty(width, height),
+            empty,
+            empty,
+            wrinkleReport,
+            bitmap,
+            bitmap,
+            bitmap,
+            bitmap,
+            empty,
+            empty,
+            empty,
+            textureReport,
+            bitmap,
+            empty,
+            empty,
+            hardProtectReport,
+            appliedStage,
+            appliedOptions,
+            report,
+            pipelineReport,
+            warnings);
     }
 
     private static double GetTextureQualityScale(MaskQualityReport qualityReport)

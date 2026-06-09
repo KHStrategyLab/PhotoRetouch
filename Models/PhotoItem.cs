@@ -15,6 +15,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     private BitmapSource _image;
     private BitmapSource _thumbnail;
     private FaceSnapshotMaskSet? _snapshotMaskSet;
+    private AverageFaceColorMaskPreviewCache? _averageFaceColorMaskPreviewCache;
     private BitmapSource? _neutralPreviewImage;
     private readonly Dictionary<int, BitmapSource> _effectPreviewCache = new();
     private bool _isSelected;
@@ -73,6 +74,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public string DisplayInfo { get; }
     public BitmapSource BaseImage => _baseImage;
     public RetouchAdjustmentState? RetouchState { get; set; }
+    public AverageFaceColorMaskPreviewCache? AverageFaceColorMaskPreviewCache => _averageFaceColorMaskPreviewCache;
     public FaceSnapshotMaskSet? SnapshotMaskSet
     {
         get => _snapshotMaskSet;
@@ -230,6 +232,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     {
         _baseImage = LoadBitmap(Path, null);
         _effectPreviewCache.Clear();
+        _averageFaceColorMaskPreviewCache = null;
         _neutralPreviewImage = null;
         SnapshotMaskSet = null;
         ManualMaskOverride = null;
@@ -294,6 +297,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public void ResetRetouchWorkState()
     {
         RetouchState = null;
+        _averageFaceColorMaskPreviewCache = null;
         Image = _neutralPreviewImage ?? GetEffectPreviewSource(null);
     }
 
@@ -372,6 +376,39 @@ public sealed class PhotoItem : INotifyPropertyChanged
         {
             Image = _baseImage;
         }
+    }
+
+    public bool TryGetAverageFaceColorMaskPreview(double skinMaskRange, out AverageFaceColorMaskPreviewCache cache)
+    {
+        AverageFaceColorMaskPreviewCache? cached = _averageFaceColorMaskPreviewCache;
+        (DateTime lastWriteTimeUtc, long length) = GetSourceVersion();
+        if (cached is not null &&
+            cached.SourceLastWriteTimeUtc == lastWriteTimeUtc &&
+            cached.SourceLength == length &&
+            cached.Width == BaseImage.PixelWidth &&
+            cached.Height == BaseImage.PixelHeight &&
+            Math.Abs(cached.SkinMaskRange - skinMaskRange) < 0.0005)
+        {
+            cache = cached;
+            return true;
+        }
+
+        cache = null!;
+        return false;
+    }
+
+    public void CacheAverageFaceColorMaskPreview(double skinMaskRange, AverageFaceColorMaskResult result, FaceSnapshotMaskSet snapshot, BitmapSource previewImage)
+    {
+        (DateTime lastWriteTimeUtc, long length) = GetSourceVersion();
+        _averageFaceColorMaskPreviewCache = new AverageFaceColorMaskPreviewCache(
+            skinMaskRange,
+            result,
+            snapshot,
+            previewImage,
+            BaseImage.PixelWidth,
+            BaseImage.PixelHeight,
+            lastWriteTimeUtc,
+            length);
     }
 
     public void CacheShapeBalanceBundle(string cacheKey, BalancedImageBundle bundle)
@@ -574,4 +611,14 @@ public sealed class PhotoItem : INotifyPropertyChanged
         return bitmap;
     }
 }
+
+public sealed record AverageFaceColorMaskPreviewCache(
+    double SkinMaskRange,
+    AverageFaceColorMaskResult Result,
+    FaceSnapshotMaskSet Snapshot,
+    BitmapSource PreviewImage,
+    int Width,
+    int Height,
+    DateTime SourceLastWriteTimeUtc,
+    long SourceLength);
 

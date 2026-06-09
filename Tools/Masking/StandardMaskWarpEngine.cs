@@ -12,7 +12,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
     private readonly NostrilDetector _nostrilDetector;
 
     public StandardMaskWarpEngine()
-        : this(new StandardMaskLoader(), new StandardAffineMaskWarper(), new OpenCvFaceAnalyzer(), new TemporaryFaceParsingDetector(), new NostrilDetector())
+        : this(new StandardMaskLoader(), new StandardAffineMaskWarper(), new OpenCvFaceAnalyzer(), new NoFaceParsingDetector(), new NostrilDetector())
     {
     }
 
@@ -30,7 +30,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         _nostrilDetector = nostrilDetector;
     }
 
-    public string MaskVersion => "standard_mask_warp_v1+skin_tone_v1+nose_structure_v1+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion + "+" + _nostrilDetector.DetectorVersion;
+    public string MaskVersion => "standard_mask_warp_v1+skin_tone_v1+nose_structure_v1+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
 
     public PortraitMaskResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -42,7 +42,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         WarpedMaskSet warped = _warper.Warp(standardMasks, input);
         MaskPlane empty = MaskPlane.Empty(width, height);
 
-        FaceMaskSet warpedStandardMasks = SkinToneMaskBuilder.ApplyToFaceMaskSet(BuildFaceMaskSetFromWarpedMasks(warped, empty));
+        FaceMaskSet warpedStandardMasks = BuildFaceMaskSetFromWarpedMasks(warped, empty);
         IReadOnlyDictionary<string, WpfPoint> landmarks = faceAnalyzerResult.ToLandmarks();
         ParsingMaskSet? parsingMasks = _parsingDetector.Detect(source, new FaceParsingInput(input.FaceBox, landmarks, input.FaceAngle));
 
@@ -71,19 +71,9 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         MaskPlane mustacheMask = parsingMasks?.MustacheMask ?? empty;
         MaskPlane glassesMask = parsingMasks?.GlassesMask ?? empty;
         MaskPlane neckMask = parsingMasks?.NeckMask ?? empty;
-        MaskPlane skinMask = UseParsingSkinMask(parsingMasks?.SkinMask, warped.SkinMask, input.FaceBox);
-        NostrilDetectorResult nostrilDetection = _nostrilDetector.Detect(new NostrilDetectorInput(
-            source,
-            input.FaceBox,
-            landmarks,
-            input.NoseTip,
-            input.MouthCenter,
-            input.LeftEyeCenter,
-            input.RightEyeCenter,
-            warped.NostrilProtectMask,
-            lipMask,
-            beardMask));
-        MaskPlane nostrilMask = nostrilDetection.NostrilMask;
+        MaskPlane skinMask = parsingMasks?.SkinMask ?? empty;
+        NostrilDetectorResult nostrilDetection = CreateDisabledNostrilDetection(width, height);
+        MaskPlane nostrilMask = empty;
         MaskPlane hardProtectMask = MaskPlane.Union(
             eyeMask,
             eyebrowMask,
@@ -95,15 +85,10 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             beardMask,
             mustacheMask,
             glassesMask);
-        MaskPlane noseSkinMask = MaskPlane.Subtract(warped.NoseMask, nostrilMask);
-        MaskPlane conservativeRetouchBase = MaskPlane.Intersect(
-            MaskPlane.Union(skinMask, noseSkinMask, neckMask),
-            MaskPlane.Union(warped.SkinMask, warped.NoseMask, neckMask));
-        MaskPlane retouchAllowMask = MaskPlane.Subtract(conservativeRetouchBase, hardProtectMask);
-        MaskPlane softProtectMask = warped.SoftProtectMask;
-        MaskPlane finalOverlayMask = MaskPlane.Subtract(
-            MaskPlane.Union(retouchAllowMask, MaskPlane.Multiply(softProtectMask, 0.45)),
-            hardProtectMask);
+        MaskPlane noseSkinMask = empty;
+        MaskPlane retouchAllowMask = empty;
+        MaskPlane softProtectMask = empty;
+        MaskPlane finalOverlayMask = hardProtectMask.Clone();
 
         FaceMaskSet masks = new(
             skinMask,
@@ -112,7 +97,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             lipMask,
             innerMouthMask,
             empty,
-            warped.NoseMask,
+            empty,
             noseSkinMask,
             nostrilMask,
             empty,
@@ -124,29 +109,24 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             softProtectMask,
             retouchAllowMask,
             finalOverlayMask);
-        masks = SkinToneMaskBuilder.ApplyToFaceMaskSet(masks);
 
         List<string> warnings = new()
         {
             "standard_mask_warp_engine",
-            "affine_warp_only"
+            "blob_mask_generators_removed"
         };
         warnings.AddRange(faceAnalyzerResult.DebugWarnings);
         warnings.AddRange(standardMasks.DebugWarnings);
         if (parsingMasks is null)
         {
-            warnings.Add("face_parsing_failed_fallback_to_warped_standard");
+            warnings.Add("face_parsing_not_connected_no_blob_fallback");
         }
         else
         {
             warnings.AddRange(parsingMasks.DebugWarnings);
             AddParsingAreaWarnings(warnings, parsingMasks, input.FaceBox);
         }
-        warnings.AddRange(nostrilDetection.DebugWarnings);
-        if (nostrilDetection.NostrilConfidence < 0.45)
-        {
-            warnings.Add("nose_lower_retouch_should_be_reduced");
-        }
+        warnings.Add("nostril_detector_disabled_for_face_color_only_mask");
 
         FaceAnalysisResult analysis = new(
             input.FaceBox,
@@ -166,33 +146,44 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         MaskPlane hardProtectMask = MaskPlane.Union(
             warped.EyeProtectMask,
             warped.EyebrowProtectMask,
-            warped.LipProtectMask,
-            warped.NostrilProtectMask);
-        MaskPlane noseSkinMask = MaskPlane.Subtract(warped.NoseMask, warped.NostrilProtectMask);
-        MaskPlane retouchAllowMask = MaskPlane.Subtract(MaskPlane.Union(warped.SkinMask, noseSkinMask), hardProtectMask);
-        MaskPlane finalOverlayMask = MaskPlane.Subtract(
-            MaskPlane.Union(retouchAllowMask, MaskPlane.Multiply(warped.SoftProtectMask, 0.45)),
-            hardProtectMask);
+            warped.LipProtectMask);
+        MaskPlane noseSkinMask = empty;
+        MaskPlane retouchAllowMask = empty;
+        MaskPlane softProtectMask = empty;
+        MaskPlane finalOverlayMask = hardProtectMask.Clone();
 
         return new FaceMaskSet(
-            warped.SkinMask,
+            empty,
             warped.EyeProtectMask,
             warped.EyebrowProtectMask,
             warped.LipProtectMask,
             empty,
             empty,
-            warped.NoseMask,
+            empty,
             noseSkinMask,
-            warped.NostrilProtectMask,
+            empty,
             empty,
             empty,
             empty,
             empty,
             empty,
             hardProtectMask,
-            warped.SoftProtectMask,
+            softProtectMask,
             retouchAllowMask,
             finalOverlayMask);
+    }
+
+    private static NostrilDetectorResult CreateDisabledNostrilDetection(int width, int height)
+    {
+        MaskPlane empty = MaskPlane.Empty(width, height);
+        return new NostrilDetectorResult(
+            empty,
+            new System.Windows.Int32Rect(0, 0, 1, 1),
+            empty,
+            empty,
+            0,
+            new[] { "nostril_detector_disabled" },
+            Array.Empty<NostrilCandidateComponent>());
     }
 
     private static MaskPlane UnionOptional(int width, int height, params MaskPlane?[] masks)
@@ -204,23 +195,6 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         return availableMasks.Length == 0
             ? MaskPlane.Empty(width, height)
             : MaskPlane.Union(availableMasks);
-    }
-
-    private static MaskPlane UseParsingSkinMask(MaskPlane? parsingSkinMask, MaskPlane fallbackSkinMask, System.Windows.Int32Rect faceBox)
-    {
-        if (parsingSkinMask is null)
-        {
-            return fallbackSkinMask;
-        }
-
-        double average = parsingSkinMask.Average();
-        double expectedFaceRatio = (double)faceBox.Width * faceBox.Height / (parsingSkinMask.Width * parsingSkinMask.Height);
-        if (average < expectedFaceRatio * 0.12 || average > expectedFaceRatio * 1.20)
-        {
-            return fallbackSkinMask;
-        }
-
-        return MaskPlane.Intersect(parsingSkinMask, MaskPlane.Union(fallbackSkinMask, MaskPlane.Multiply(parsingSkinMask, 0.35)));
     }
 
     private static void AddParsingAreaWarnings(List<string> warnings, ParsingMaskSet parsingMasks, System.Windows.Int32Rect faceBox)
