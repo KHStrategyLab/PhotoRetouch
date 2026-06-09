@@ -2860,6 +2860,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SelectedPhoto = currentPhoto is not null && selected.Contains(currentPhoto)
             ? currentPhoto
             : selected.FirstOrDefault();
+        ReleaseInactivePhotoMemory(selected);
         bool selectedPhotoChanged = !ReferenceEquals(previousSelectedPhoto, SelectedPhoto);
         bool selectionChanged = HasSelectionChanged(previousSelection, selected);
         if (selectionChanged)
@@ -2888,6 +2889,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 _pendingPreviewAdjustmentShowsOverlay = false;
                 ResetPhotosToOriginalPreview(selected);
             }
+        }
+    }
+
+    private void ReleaseInactivePhotoMemory(IReadOnlyCollection<PhotoItem> selected)
+    {
+        foreach (PhotoItem photo in Photos)
+        {
+            if (selected.Contains(photo))
+            {
+                continue;
+            }
+
+            photo.ReleaseInactiveRetouchMemory();
+        }
+
+        if (_lastRetouchOutputPhoto is not null && !selected.Contains(_lastRetouchOutputPhoto))
+        {
+            _lastRetouchOutputPhoto = null;
+            _lastRetouchStageOutput = null;
         }
     }
 

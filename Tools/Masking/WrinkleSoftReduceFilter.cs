@@ -7,7 +7,16 @@ namespace PhotoRetouch;
 
 public sealed class WrinkleSoftReduceFilter : IWrinkleSoftReduceFilter
 {
+    private const int MaxAnalysisCacheEntries = 16;
+
     private readonly Dictionary<string, WrinkleAnalysisCache> _analysisCache = new();
+
+    public int AnalysisCacheCount => _analysisCache.Count;
+
+    public void ClearAnalysisCache()
+    {
+        _analysisCache.Clear();
+    }
 
     public WrinkleSoftReduceResult Apply(WrinkleSoftReduceInput input)
     {
@@ -127,7 +136,16 @@ public sealed class WrinkleSoftReduceFilter : IWrinkleSoftReduceFilter
 
         WrinkleAnalysisCache created = AnalyzeWrinkles(input, originalPixels, width, height);
         _analysisCache[cacheKey] = created;
+        TrimAnalysisCache();
         return created;
+    }
+
+    private void TrimAnalysisCache()
+    {
+        while (_analysisCache.Count > MaxAnalysisCacheEntries)
+        {
+            _analysisCache.Remove(_analysisCache.Keys.First());
+        }
     }
 
     private static WrinkleProcessReport CreateReport(
@@ -764,7 +782,11 @@ public sealed class WrinkleSoftReduceFilter : IWrinkleSoftReduceFilter
 
 public interface IWrinkleSoftReduceFilter
 {
+    int AnalysisCacheCount { get; }
+
     WrinkleSoftReduceResult Apply(WrinkleSoftReduceInput input);
+
+    void ClearAnalysisCache();
 }
 
 public enum WrinklePart

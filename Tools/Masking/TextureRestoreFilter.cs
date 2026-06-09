@@ -5,7 +5,16 @@ namespace PhotoRetouch;
 
 public sealed class TextureRestoreFilter : ITextureRestoreFilter
 {
+    private const int MaxAnalysisCacheEntries = 12;
+
     private readonly Dictionary<string, TextureRestoreAnalysisCache> _analysisCache = new();
+
+    public int AnalysisCacheCount => _analysisCache.Count;
+
+    public void ClearAnalysisCache()
+    {
+        _analysisCache.Clear();
+    }
 
     public TextureRestoreResult Apply(TextureRestoreInput input)
     {
@@ -115,7 +124,16 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
 
         TextureRestoreAnalysisCache created = AnalyzeTexture(input, originalPixels, currentPixels, width, height);
         _analysisCache[cacheKey] = created;
+        TrimAnalysisCache();
         return created;
+    }
+
+    private void TrimAnalysisCache()
+    {
+        while (_analysisCache.Count > MaxAnalysisCacheEntries)
+        {
+            _analysisCache.Remove(_analysisCache.Keys.First());
+        }
     }
 
     private static TextureRestoreAnalysisCache AnalyzeTexture(TextureRestoreInput input, byte[] originalPixels, byte[] currentPixels, int width, int height)
@@ -382,7 +400,11 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
 
 public interface ITextureRestoreFilter
 {
+    int AnalysisCacheCount { get; }
+
     TextureRestoreResult Apply(TextureRestoreInput input);
+
+    void ClearAnalysisCache();
 }
 
 public sealed record TextureRestoreToolset(

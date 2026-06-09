@@ -10,6 +10,18 @@ public sealed class RetouchStageProcessor
     private readonly ITextureRestoreFilter _textureRestoreFilter = new TextureRestoreFilter();
     private readonly IHardProtectFinalRestoreFilter _hardProtectFinalRestoreFilter = new HardProtectFinalRestoreFilter();
 
+    public RetouchAnalysisCacheStatus AnalysisCacheStatus => new(
+        _blemishReduceFilter.AnalysisCacheCount,
+        _wrinkleSoftReduceFilter.AnalysisCacheCount,
+        _textureRestoreFilter.AnalysisCacheCount);
+
+    public void ClearAnalysisCaches()
+    {
+        _blemishReduceFilter.ClearAnalysisCache();
+        _wrinkleSoftReduceFilter.ClearAnalysisCache();
+        _textureRestoreFilter.ClearAnalysisCache();
+    }
+
     public RetouchStageProcessorOutput Process(BitmapSource originalImage, FaceSnapshotMaskSet snapshot, RetouchOptions options)
     {
         ArgumentNullException.ThrowIfNull(originalImage);
@@ -644,4 +656,12 @@ public sealed class RetouchStageProcessor
         byte[] RetouchAllowAppliedPixels,
         byte[] SoftProtectAppliedPixels,
         byte[] HardProtectRestoredPixels);
+}
+
+public sealed record RetouchAnalysisCacheStatus(
+    int BlemishAnalysisCacheCount,
+    int WrinkleAnalysisCacheCount,
+    int TextureRestoreAnalysisCacheCount)
+{
+    public int TotalCount => BlemishAnalysisCacheCount + WrinkleAnalysisCacheCount + TextureRestoreAnalysisCacheCount;
 }

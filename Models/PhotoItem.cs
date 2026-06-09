@@ -315,6 +315,16 @@ public sealed class PhotoItem : INotifyPropertyChanged
         _neutralPreviewImage = null;
     }
 
+    public void ReleaseInactiveRetouchMemory()
+    {
+        ClearTransientPreviewCache();
+        SnapshotMaskSet = null;
+        if (!ReferenceEquals(_image, _baseImage))
+        {
+            Image = _baseImage;
+        }
+    }
+
     public void ApplyManualFaceAdjustOverride(FaceWorkArea faceWorkArea, string snapshotMaskCacheKey)
     {
         FaceManualAdjustOverride = (FaceManualAdjustOverride ?? FaceManualAdjustOverride.Create(this, snapshotMaskCacheKey, faceWorkArea))

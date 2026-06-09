@@ -58,7 +58,7 @@ Important caveat:
 | ORDER_28 | Preset save/load | InProgress / Core implemented; preset UI pending. |
 | ORDER_29 | Batch processing | InProgress / Core implemented; batch UI pending. |
 | ORDER_30 | High-res performance optimization | InProgress / Core implemented; full timing integration pending. |
-| ORDER_31 | Cache / memory cleanup | Queued/Planned as V1 stabilization key. |
+| ORDER_31 | Cache / memory cleanup | InProgress / First cleanup pass implemented. |
 | ORDER_32 | UI product polish | Queued/Planned as V1 stabilization key. |
 | ORDER_33 | User settings persistence | Queued/Planned as V1 stabilization key. |
 | ORDER_34 | Installer / package | Queued/Planned as V1 stabilization key. |

@@ -5,7 +5,16 @@ namespace PhotoRetouch;
 
 public sealed class BlemishReduceFilter : IBlemishReduceFilter
 {
+    private const int MaxAnalysisCacheEntries = 16;
+
     private readonly Dictionary<string, BlemishAnalysisCache> _analysisCache = new();
+
+    public int AnalysisCacheCount => _analysisCache.Count;
+
+    public void ClearAnalysisCache()
+    {
+        _analysisCache.Clear();
+    }
 
     public BlemishReduceResult Apply(BlemishReduceInput input)
     {
@@ -110,7 +119,16 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
 
         BlemishAnalysisCache created = AnalyzeBlemishes(input, originalPixels, width, height);
         _analysisCache[cacheKey] = created;
+        TrimAnalysisCache();
         return created;
+    }
+
+    private void TrimAnalysisCache()
+    {
+        while (_analysisCache.Count > MaxAnalysisCacheEntries)
+        {
+            _analysisCache.Remove(_analysisCache.Keys.First());
+        }
     }
 
     private static BlemishAnalysisCache AnalyzeBlemishes(BlemishReduceInput input, byte[] originalPixels, int width, int height)
@@ -686,7 +704,11 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
 
 public interface IBlemishReduceFilter
 {
+    int AnalysisCacheCount { get; }
+
     BlemishReduceResult Apply(BlemishReduceInput input);
+
+    void ClearAnalysisCache();
 }
 
 public sealed record BlemishReduceInput(
