@@ -63,8 +63,8 @@ public static class FeatureMeshGenerator
             GeneratePairedFeatureFromMask(
                 FaceFeatureType.Brow,
                 browGuideMask,
-                new WpfPoint(input.LeftEyeCenter.X, input.LeftEyeCenter.Y - input.FaceBox.Height * 0.075),
-                new WpfPoint(input.RightEyeCenter.X, input.RightEyeCenter.Y - input.FaceBox.Height * 0.075),
+                OffsetAlongFaceUp(input.LeftEyeCenter, input, input.FaceBox.Height * 0.075),
+                OffsetAlongFaceUp(input.RightEyeCenter, input, input.FaceBox.Height * 0.075),
                 "left_brow_bw_contour",
                 "right_brow_bw_contour",
                 "bw_brow_mask_contour_50",
@@ -236,6 +236,13 @@ public static class FeatureMeshGenerator
     private static WpfPoint Add(WpfPoint point, WpfPoint direction, double distance)
     {
         return new WpfPoint(point.X + direction.X * distance, point.Y + direction.Y * distance);
+    }
+
+    private static WpfPoint OffsetAlongFaceUp(WpfPoint point, MaskWarpInput input, double distance)
+    {
+        double angle = Math.Atan2(input.RightEyeCenter.Y - input.LeftEyeCenter.Y, input.RightEyeCenter.X - input.LeftEyeCenter.X);
+        WpfPoint faceUp = new(-Math.Sin(angle), -Math.Cos(angle));
+        return Add(point, faceUp, distance);
     }
 
     private static WpfPoint Midpoint(WpfPoint left, WpfPoint right)
