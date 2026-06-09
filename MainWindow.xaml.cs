@@ -553,7 +553,47 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         MoveToRightmostScreen();
         LoadWorkingFolderPhotos();
+        RestoreLastSession();
         Focus();
+    }
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        SaveLastSession();
+    }
+
+    private void RestoreLastSession()
+    {
+        LastSessionState state = SessionSettings.Load();
+        if (state.OpenPhotoPaths.Count == 0)
+        {
+            return;
+        }
+
+        AddPhotos(state.OpenPhotoPaths, preserveSelection: true);
+        if (!string.IsNullOrWhiteSpace(state.SelectedPhotoPath))
+        {
+            PhotoItem? selected = Photos.FirstOrDefault(photo =>
+                string.Equals(NormalizePhotoPath(photo.Path), NormalizePhotoPath(state.SelectedPhotoPath), StringComparison.OrdinalIgnoreCase));
+            if (selected is not null)
+            {
+                SelectOnly(selected);
+            }
+        }
+
+        if (SelectedPhoto is not null)
+        {
+            ZoomPercent = Math.Clamp(state.ZoomPercent, 25, GetOneToOneZoomPercent(SelectedPhoto, GetPreviewCellWidth(), GetPreviewCellHeight()));
+        }
+    }
+
+    private void SaveLastSession()
+    {
+        SessionSettings.Save(new LastSessionState(
+            Photos.Select(photo => photo.Path).ToArray(),
+            SelectedPhoto?.Path,
+            ZoomPercent,
+            DateTime.UtcNow));
     }
 
     private void MoveToRightmostScreen()

@@ -10,6 +10,7 @@
         Background="#171819"
         WindowStartupLocation="Manual"
         Loaded="Window_Loaded"
+        Closing="Window_Closing"
         PreviewMouseDown="Window_PreviewMouseDown"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewKeyUp="Window_PreviewKeyUp">
