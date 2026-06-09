@@ -103,6 +103,9 @@ Core rules:
 - Recreate the snapshot mask after crop or rotation changes, manual mask edits, face work area changes, or a source file version change.
 - Reuse the snapshot mask to keep preview interaction fast and stable.
 - If AI confidence is weak, widen protection and reduce retouch strength inside the snapshot rather than rebuilding repeatedly.
+- Treat the completed `FaceSnapshotMaskSet` as the shared face backbone for all V1 skin filters. SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, Debug Overlay, Before/After, Preset application, and Batch processing must all read the same per-photo SnapshotMask instead of creating their own face masks.
+- Do not share one SnapshotMask across different photos. Each photo owns its own SnapshotMask; only that photo's filters and debug views reuse it.
+- Keep V2 geometry modules, including `ShapeBalance`, separate from the V1 skin retouch pipeline. After V1, ShapeBalance may reuse SnapshotMask, FaceLandmark, and HardProtect as reference data, but it must apply geometry through its own TransformMap rather than becoming a skin filter.
 
 `FaceSnapshotMaskSet` carries:
 

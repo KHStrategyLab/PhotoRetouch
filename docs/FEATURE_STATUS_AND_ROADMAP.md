@@ -164,6 +164,9 @@ Snapshot mask policy:
 - Analyze a newly loaded photo once and save a `FaceSnapshotMaskSet`.
 - Reuse the snapshot when Stage `1-10`, `SkinSmooth`, `BlemishReduce`, `ToneEven`, `TextureRestore`, or before/after view changes.
 - Rebuild the snapshot only when the image changes, face re-analysis is requested, crop/rotation changes, manual mask edits are saved, or face position changes significantly.
+- Use the completed `FaceSnapshotMaskSet` as the shared face backbone for the V1 skin pipeline. SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, Debug Overlay, Preset application, and Batch processing all reference the same per-photo SnapshotMask.
+- Never share one SnapshotMask across different photos. Batch processing creates and reuses a separate SnapshotMask for each photo.
+- Keep face left-right balance, symmetry correction, and future `ShapeBalance` work outside the V1 skin filter pipeline. After V1, `ShapeBalance` may reuse SnapshotMask, FaceLandmark, and HardProtect as reference data, but it remains a separate geometry-warp module.
 
 Required mask engine stages:
 

@@ -15,6 +15,9 @@ After `ORDER_30`, do not keep adding new core filters or AI features. Move into 
 Current highest-priority note:
 Do not let attractive future features interrupt the current order. Stage and Slider changes are not SnapshotMask regeneration conditions. HardProtect outranks every filter. Hold / After V1 items stay recorded, but they are not part of the current V1 scope.
 
+Shared mask backbone:
+The completed per-photo `FaceSnapshotMaskSet` is the common reference for the V1 skin pipeline. SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, Debug Overlay, Preset application, and Batch processing must reuse the same SnapshotMask for that photo. A SnapshotMask is never shared across different photos.
+
 ## Remaining Orders After ORDER_30
 
 1. `ORDER_31_CACHE_MEMORY_CLEANUP`
