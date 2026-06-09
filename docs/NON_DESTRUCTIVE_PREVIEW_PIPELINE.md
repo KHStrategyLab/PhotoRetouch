@@ -229,7 +229,8 @@ Skin dirty sources:
 
 ## Current Implementation Notes
 
-- Photo selection shows the selected base image and prepares SnapshotMask only.
+- Photo selection shows the selected base image only.
+- SnapshotMask and ShapeBalance analysis preparation start when the user opens a relevant right edit panel section.
 - The selected base image is the clear preview foundation, not a low-quality placeholder.
 - Skin Stage and skin slider changes reuse the cached `BalancedImageBundle`.
 - Shape-related control changes mark ShapeDirty, which forces the next ShapeBalance bundle rebuild.

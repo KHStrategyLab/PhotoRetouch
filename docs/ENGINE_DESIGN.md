@@ -185,6 +185,56 @@ Current FaceParsing scaffold:
 
 The current merge rule is conservative: protect masks are widened with parsing output, while retouch-allow skin remains constrained by the warped standard mask and hard protection.
 
+### Gender-Neutral Mask Policy
+
+PhotoRetouch is a mask-based and feature-based retouch engine. Gender is not a base engine condition.
+
+- Do not add `GenderDetection` to the default correction pipeline.
+- Decide skin tone, blemish, wrinkle, lip, hair, glasses, beard hair, and beard-shadow handling from detected masks and candidate regions.
+- `BeardShadowMask` is not male-only. It applies only when shaving marks, beard shadow, blue cast, or similar tone discoloration is detected.
+- `LipMask` is not female-only. Lips are hard-protected for every detected face.
+- Optional gender-like metadata may be considered later only for preset recommendations, not for mask decisions.
+
+See `docs/GENDER_NEUTRAL_MASK_POLICY.md`.
+
+### Nose Structure Protection
+
+Nose skin may be included in `SkinToneMask`, but it must not receive the same strength as general cheek or forehead skin.
+
+The nose is a structure area that carries facial depth. Keep a separate `NoseStructureProtectMask` and retouch-strength map for:
+
+- NoseBridge
+- NoseRidge
+- NoseTip
+- NoseWing
+- NoseSideShadow
+- NoseUnderShadow
+- NostrilMask
+
+Nostrils remain `HardProtect`. Nose side shadows and under-nose shadows are structure information, not blemishes. `ToneEven`, `SkinSmooth`, and `BlemishReduce` must not flatten those shadows as if they were skin defects.
+
+### ShapeBalance Symmetry Balance
+
+`ShapeBalance` is a geometry module, not a skin filter. `SymmetryBalance` is a child map inside `ShapeBalanceMap`.
+
+Current policy:
+
+- `GlobalTransform` handles broad roll/pitch-like correction only.
+- `Yaw-like` balance and left-right symmetry are local, face-only warps.
+- The ShapeBalance center line is a feature center line, not the image center or the face-box center.
+- The feature center line is estimated from the midpoint of the nostrils, both eyes, both eyebrows, and the mouth corners/mouth center.
+- Head bow / pitch-like correction uses the nose tip as the transform center when a nose-tip landmark is available.
+- Hair and background are not pulled into face-shape correction.
+- HardProtect features move with the face, but their details are protected by damping.
+- `SymmetryBalanceToolset` exposes a master `SymmetryAmount` from `0` to `100`, plus per-part weights.
+- `PerfectSymmetryPoint` is near the high range, and `OvershootZone` starts near `93`.
+- Overshoot is intentionally tiny and must not become cosmetic reconstruction.
+- Pupil size and nostril size are modeled as separate symmetry fields, but direct size exaggeration is not implemented in the first pass.
+- Preview is never used as the geometry source. The map is built from original-coordinate SnapshotMask and landmarks, then applied to image and masks together.
+- SkinRetouch runs after ShapeBalance on `BalancedImage` and `BalancedMaskSet`.
+
+Debug outputs include symmetry centerline, regions, strength map, per-part vector overlays, overshoot zone state, before/after compare, and `debug_symmetry_analysis_report.json`.
+
 Current first-pass retouch pipeline:
 
 - `StagePresetMapper` maps Stage `1-10` to skin smooth, blemish reduce, tone even, texture restore, soft protect opacity, and retouch allow opacity.

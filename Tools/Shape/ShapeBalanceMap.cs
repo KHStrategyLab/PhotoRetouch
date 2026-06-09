@@ -22,6 +22,8 @@ public sealed record ShapeBalanceMap(
     IReadOnlyList<ShapeBalanceWarpRegion> LocalWarpRegions,
     IReadOnlyList<ShapeBalanceProtectedRegion> ProtectedFeatureRegions,
     ShapeBalanceWarpStrengthMap WarpStrengthMap,
+    SymmetryBalanceAnalysisReport SymmetryAnalysisReport,
+    SymmetryBalanceMap SymmetryBalanceMap,
     IReadOnlyList<ShapeBalanceDebugVector> DebugVectors,
     DateTime CreatedAtUtc,
     string ShapeBalanceVersion)
@@ -54,9 +56,11 @@ public sealed record ShapeBalanceMap(
             Array.Empty<ShapeBalanceWarpRegion>(),
             Array.Empty<ShapeBalanceProtectedRegion>(),
             ShapeBalanceWarpStrengthMap.Empty(width, height),
+            SymmetryBalanceAnalysisReport.Empty(center),
+            SymmetryBalanceMap.Empty(width, height, center),
             Array.Empty<ShapeBalanceDebugVector>(),
             DateTime.UtcNow,
-            "shape_balance_map_v2");
+            "shape_balance_map_v4_face_only_yaw_symmetry");
     }
 
     public bool IsIdentity =>
@@ -66,7 +70,8 @@ public sealed record ShapeBalanceMap(
         Math.Abs(GlobalTransform.ScaleX - 1) < 0.00001 &&
         Math.Abs(GlobalTransform.ScaleY - 1) < 0.00001 &&
         Math.Abs(GlobalTransform.PitchShear) < 0.00001 &&
-        LocalWarpRegions.Count == 0;
+        LocalWarpRegions.Count == 0 &&
+        SymmetryBalanceMap.SymmetryWarpRegions.Count == 0;
 
     public WpfPoint MapSourceToBalanced(WpfPoint source)
     {
@@ -96,15 +101,12 @@ public sealed record ShapeBalanceMap(
         double dy = 0;
         foreach (ShapeBalanceWarpRegion region in LocalWarpRegions)
         {
-            double protectedDamping = CalculateProtectedDamping(point);
-            double weight = region.WeightAt(point.X, point.Y) * protectedDamping;
-            if (weight <= 0)
-            {
-                continue;
-            }
+            AddRegionDisplacement(region, point, ref dx, ref dy);
+        }
 
-            dx += region.DeltaX * weight;
-            dy += region.DeltaY * weight;
+        foreach (ShapeBalanceWarpRegion region in SymmetryBalanceMap.SymmetryWarpRegions)
+        {
+            AddRegionDisplacement(region, point, ref dx, ref dy);
         }
 
         double max = Math.Max(0, MaxDisplacementPixels);
@@ -115,6 +117,19 @@ public sealed record ShapeBalanceMap(
         }
 
         return new WpfPoint(dx, dy);
+    }
+
+    private void AddRegionDisplacement(ShapeBalanceWarpRegion region, WpfPoint point, ref double dx, ref double dy)
+    {
+        double protectedDamping = CalculateProtectedDamping(point);
+        double weight = region.WeightAt(point.X, point.Y) * protectedDamping;
+        if (weight <= 0)
+        {
+            return;
+        }
+
+        dx += region.DeltaX * weight;
+        dy += region.DeltaY * weight;
     }
 
     private double CalculateProtectedDamping(WpfPoint point)

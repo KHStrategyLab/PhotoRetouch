@@ -116,7 +116,7 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
 
     private TextureRestoreAnalysisCache GetOrCreateAnalysis(TextureRestoreInput input, byte[] originalPixels, byte[] currentPixels, int width, int height)
     {
-        string cacheKey = input.Snapshot.CacheKey.StableId + "|texture_restore_v1";
+        string cacheKey = input.Snapshot.CacheKey.StableId + "|texture_restore_v3";
         if (_analysisCache.TryGetValue(cacheKey, out TextureRestoreAnalysisCache? cached))
         {
             return cached;
@@ -141,7 +141,9 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
         int blurRadius = Math.Clamp((int)Math.Round(input.StagePreset.DetailLayerBlurRadius), 1, 8);
         byte[] blurOriginal = FastBoxBlur(originalPixels, width, height, blurRadius);
         byte[] detailPreview = new byte[originalPixels.Length];
-        MaskPlane textureMask = BuildTextureRestoreMask(input, width, height);
+        int colorMaskRadius = Math.Clamp(blurRadius * 4 + 8, 12, 34);
+        byte[] localToneReference = FastBoxBlur(originalPixels, width, height, colorMaskRadius);
+        MaskPlane textureMask = BuildTextureRestoreMask(input, originalPixels, localToneReference, width, height);
         MaskPlane plasticRiskMap = MaskPlane.Empty(width, height);
         double originalDetailSum = 0;
         double currentDetailSum = 0;
@@ -178,7 +180,7 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
         double plasticRisk = maskSum <= 0
             ? 0
             : Math.Clamp((originalDetailSum - currentDetailSum) / Math.Max(1, originalDetailSum), 0, 1);
-        List<string> warnings = new() { "texture_restore_filter_v1" };
+        List<string> warnings = new() { "texture_restore_filter_v3", "texture_restore_color_difference_mask" };
         if (plasticRisk > 0.42)
         {
             warnings.Add("plastic_skin_guard_boost");
@@ -194,15 +196,35 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
             warnings);
     }
 
-    private static MaskPlane BuildTextureRestoreMask(TextureRestoreInput input, int width, int height)
+    private static MaskPlane BuildTextureRestoreMask(TextureRestoreInput input, byte[] originalPixels, byte[] localToneReference, int width, int height)
     {
         MaskPlane mask = MaskPlane.Empty(width, height);
+        int stride = width * 4;
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
                 double hardProtect = input.HardProtectMask[x, y];
-                double value = Math.Clamp(input.RetouchAllowMask[x, y] + input.SoftProtectMask[x, y] * input.StagePreset.SoftProtectTextureRestoreAmount, 0, 1);
+                if (hardProtect >= 0.98)
+                {
+                    continue;
+                }
+
+                double retouchAllow = input.RetouchAllowMask[x, y];
+                double softProtect = input.SoftProtectMask[x, y] * input.StagePreset.SoftProtectTextureRestoreAmount;
+                double workArea = Math.Clamp(retouchAllow + softProtect * 0.42, 0, 1);
+                if (workArea <= 0.001)
+                {
+                    continue;
+                }
+
+                int index = y * stride + x * 4;
+                double colorDifference = GetLocalColorDifferenceSignal(originalPixels, localToneReference, index);
+                double edgeEnergy = GetGradientEnergy(originalPixels, x, y, width, height);
+                double structureSuppress = SmoothStep(18, 46, edgeEnergy);
+                double edgeSafeColorDifference = colorDifference * (1 - structureSuppress * 0.88);
+
+                double value = workArea * edgeSafeColorDifference;
                 double blemishBlock = input.BlemishMask?[x, y] ?? 0;
                 double wrinkleBlock = input.WrinkleAppliedMask?[x, y] ?? 0;
                 value *= 1 - Math.Clamp(blemishBlock * 0.48 + wrinkleBlock * 0.58, 0, 0.86);
@@ -211,6 +233,67 @@ public sealed class TextureRestoreFilter : ITextureRestoreFilter
         }
 
         return mask;
+    }
+
+    private static double GetLocalColorDifferenceSignal(byte[] sourcePixels, byte[] localToneReference, int index)
+    {
+        double sourceBlue = sourcePixels[index];
+        double sourceGreen = sourcePixels[index + 1];
+        double sourceRed = sourcePixels[index + 2];
+        double baseBlue = localToneReference[index];
+        double baseGreen = localToneReference[index + 1];
+        double baseRed = localToneReference[index + 2];
+
+        double sourceLuma = GetLuma(sourceRed, sourceGreen, sourceBlue);
+        double baseLuma = GetLuma(baseRed, baseGreen, baseBlue);
+        double lumaDelta = Math.Abs(sourceLuma - baseLuma);
+
+        double sourceRedChroma = sourceRed - sourceLuma;
+        double sourceGreenChroma = sourceGreen - sourceLuma;
+        double sourceBlueChroma = sourceBlue - sourceLuma;
+        double baseRedChroma = baseRed - baseLuma;
+        double baseGreenChroma = baseGreen - baseLuma;
+        double baseBlueChroma = baseBlue - baseLuma;
+        double chromaDelta =
+            (Math.Abs(sourceRedChroma - baseRedChroma) +
+             Math.Abs(sourceGreenChroma - baseGreenChroma) +
+             Math.Abs(sourceBlueChroma - baseBlueChroma)) / 3d;
+        double redBlueDelta = Math.Abs((sourceRed - sourceBlue) - (baseRed - baseBlue));
+
+        double chromaSignal = SmoothStep(8, 34, chromaDelta);
+        double redBlueSignal = SmoothStep(8, 32, redBlueDelta);
+        double colorSignal = Math.Max(chromaSignal, redBlueSignal);
+        double lumaSignal = SmoothStep(18, 54, lumaDelta) * colorSignal;
+        double combined = Math.Clamp(colorSignal * 0.86 + lumaSignal * 0.14, 0, 1);
+        return Math.Pow(SmoothStep(0.24, 0.86, combined), 1.65);
+    }
+
+    private static double GetGradientEnergy(byte[] sourcePixels, int x, int y, int width, int height)
+    {
+        int left = Math.Max(0, x - 1);
+        int right = Math.Min(width - 1, x + 1);
+        int top = Math.Max(0, y - 1);
+        int bottom = Math.Min(height - 1, y + 1);
+        int stride = width * 4;
+        int leftIndex = y * stride + left * 4;
+        int rightIndex = y * stride + right * 4;
+        int topIndex = top * stride + x * 4;
+        int bottomIndex = bottom * stride + x * 4;
+
+        double horizontal =
+            Math.Abs(sourcePixels[rightIndex] - sourcePixels[leftIndex]) +
+            Math.Abs(sourcePixels[rightIndex + 1] - sourcePixels[leftIndex + 1]) +
+            Math.Abs(sourcePixels[rightIndex + 2] - sourcePixels[leftIndex + 2]);
+        double vertical =
+            Math.Abs(sourcePixels[bottomIndex] - sourcePixels[topIndex]) +
+            Math.Abs(sourcePixels[bottomIndex + 1] - sourcePixels[topIndex + 1]) +
+            Math.Abs(sourcePixels[bottomIndex + 2] - sourcePixels[topIndex + 2]);
+        return (horizontal + vertical) / 6d;
+    }
+
+    private static double GetLuma(double red, double green, double blue)
+    {
+        return red * 0.299 + green * 0.587 + blue * 0.114;
     }
 
     private static double GetQualityScale(MaskQualityReport report)

@@ -179,6 +179,14 @@ The beard-shadow mask means shaving marks, blue or gray cast, and dark beard sha
 
 Real beard, mustache, sideburn hair, nostrils, lips, eyes, eyebrows, and other hard-protected details must remain protected.
 
+Gender-neutral engine policy:
+
+- Do not use gender as a default retouch condition.
+- Do not add `GenderDetection` to the base pipeline.
+- Beard shadow, lips, wrinkles, blemishes, skin tone, hair, and glasses are handled from detected masks and candidate regions.
+- `BeardShadowMask` is not male-only; it is active only when shaving marks, beard shadow, blue cast, or similar tone candidates are detected.
+- `LipMask` is not female-only; lips are hard-protected for every detected face.
+
 Snapshot mask policy:
 
 - Analyze a newly loaded photo once and save a `FaceSnapshotMaskSet`.
@@ -223,7 +231,7 @@ Required debug outputs:
 
 Required test image set:
 
-- Age and gender coverage from 20s through 60s, men and women.
+- Age coverage from 20s through 60s, with varied visible facial features and optional gender labels for QA coverage only.
 - Skin conditions: acne, blemishes, freckles, redness, nasolabial folds, forehead wrinkles, neck wrinkles, pores, beard shadow.
 - Mask failure cases: large nostrils, strong under-nose shadow, thick eyebrows, clear eyelashes, strong lip edge, glasses, beard, hair touching the face, smiling photos, open mouth photos, near-side faces, strong lighting, and strong shadows.
 
@@ -375,6 +383,8 @@ Filter implementation order after mask validation:
 - Eye height balance - first paired eye-band height warp under face left-right balance
 - Brow height balance - first paired brow-band height warp under face left-right balance
 - Nose bend center correction - first central nose-strip warp under face left-right balance
+- Left-right symmetry enable, amount, and overshoot controls - first ShapeBalance symmetry toolset wiring
+- Nostril, nose wing, and jawline symmetry balance controls - first detailed symmetry weights
 - Double chin soften - first lower-center shadow/texture soften pass connected to the editable face work area
 - Neck and jaw boundary - first narrow jaw-neck edge refinement pass connected to the editable face work area
 
@@ -396,6 +406,12 @@ Filter implementation order after mask validation:
 - `eye_height_balance` applies a signed paired eye-band vertical warp inside the face work area.
 - `brow_height_balance` applies a signed paired brow-band vertical warp inside the face work area.
 - `nose_center_balance` applies a signed central nose-strip horizontal warp inside the face work area.
+- `SymmetryBalanceToolset`, `SymmetryBalanceAnalysisReport`, and `SymmetryBalanceMap` define the first multi-part symmetry balance structure inside ShapeBalance.
+- ShapeBalance centerline now uses a feature centerline from nostril midpoint, eye midpoint, eyebrow midpoint, and mouth center/mouth-corner midpoint instead of image or face-box center.
+- Pitch-like head bow correction is anchored around the nose tip when available.
+- `symmetry_amount` uses a `0` to `100` master scale. The upper range can enter a tiny overshoot zone while preserving identity and hard features.
+- Symmetry warp regions currently combine safe landmarks and mask-derived observations for mouth corner, eye line, eyebrow line, nostril observation, nose wing contour, jawline contour, and chin center.
+- Pupil size, eye width/height, nostril size/height, and jaw width have separate model fields for later stronger landmark/mask support, but the first pass avoids direct size exaggeration.
 - `double_chin` applies a localized lower-center shadow and texture softening pass inside the face work area.
 - `neck_jaw_edge` applies a narrow jaw-neck edge clarity and mild shadow cleanup pass inside the face work area.
 
@@ -407,6 +423,7 @@ Filter implementation order after mask validation:
 - Dedicated warp engine with stronger quality controls.
 - Bounds to prevent unrealistic edits.
 - Separate chin/jawline interaction review after real warp exists.
+- Product-polish pass for advanced symmetry sliders and debug visibility.
 
 ## Background
 

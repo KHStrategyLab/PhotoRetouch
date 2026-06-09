@@ -30,7 +30,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         _nostrilDetector = nostrilDetector;
     }
 
-    public string MaskVersion => "standard_mask_warp_v1+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion + "+" + _nostrilDetector.DetectorVersion;
+    public string MaskVersion => "standard_mask_warp_v1+skin_tone_v1+nose_structure_v1+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion + "+" + _nostrilDetector.DetectorVersion;
 
     public PortraitMaskResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -42,7 +42,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         WarpedMaskSet warped = _warper.Warp(standardMasks, input);
         MaskPlane empty = MaskPlane.Empty(width, height);
 
-        FaceMaskSet warpedStandardMasks = BuildFaceMaskSetFromWarpedMasks(warped, empty);
+        FaceMaskSet warpedStandardMasks = SkinToneMaskBuilder.ApplyToFaceMaskSet(BuildFaceMaskSetFromWarpedMasks(warped, empty));
         IReadOnlyDictionary<string, WpfPoint> landmarks = faceAnalyzerResult.ToLandmarks();
         ParsingMaskSet? parsingMasks = _parsingDetector.Detect(source, new FaceParsingInput(input.FaceBox, landmarks, input.FaceAngle));
 
@@ -124,6 +124,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             softProtectMask,
             retouchAllowMask,
             finalOverlayMask);
+        masks = SkinToneMaskBuilder.ApplyToFaceMaskSet(masks);
 
         List<string> warnings = new()
         {

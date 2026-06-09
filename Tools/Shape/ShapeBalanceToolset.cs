@@ -17,12 +17,17 @@ public sealed record ShapeBalanceToolset(
     double PreserveIdentityStrength,
     double MaxAllowedWarpStrength,
     bool DebugShapeOverlay,
+    SymmetryBalanceToolset SymmetryToolset,
     double ManualFaceBalanceShift,
     double ManualEyeLevelShift,
     double ManualEyebrowLevelShift,
     double ManualMouthCornerShift,
     double ManualNoseCenterShift,
-    double ManualChinCenterShift)
+    double ManualChinCenterShift,
+    double ManualOvalFaceAmount,
+    double ManualCheekboneSoftenAmount,
+    double ManualChinWidthShift,
+    double ManualChinLengthShift)
 {
     public static ShapeBalanceToolset FromStagePreset(ShapeBalanceStagePreset preset)
     {
@@ -43,6 +48,11 @@ public sealed record ShapeBalanceToolset(
             preset.PreserveIdentityStrength,
             preset.MaxAllowedWarpStrength,
             false,
+            SymmetryBalanceToolset.Default,
+            0,
+            0,
+            0,
+            0,
             0,
             0,
             0,
@@ -121,14 +131,19 @@ public sealed record AppliedShapeBalanceOptions(
             FaceContourBalanceAmount = Clamp01(toolset.FaceContourBalanceAmount * safetyFactor),
             ProtectHardFeatures = toolset.ProtectHardFeatures,
             PreserveIdentityStrength = Clamp01(Math.Max(toolset.PreserveIdentityStrength, preset.PreserveIdentityStrength)),
-            MaxAllowedWarpStrength = Clamp01(Math.Min(toolset.MaxAllowedWarpStrength, preset.MaxAllowedWarpStrength) * safetyFactor),
+            MaxAllowedWarpStrength = Clamp01(Math.Min(toolset.MaxAllowedWarpStrength, 0.50) * safetyFactor),
             DebugShapeOverlay = toolset.DebugShapeOverlay,
+            SymmetryToolset = toolset.SymmetryToolset,
             ManualFaceBalanceShift = ClampSigned(toolset.ManualFaceBalanceShift),
             ManualEyeLevelShift = ClampSigned(toolset.ManualEyeLevelShift),
             ManualEyebrowLevelShift = ClampSigned(toolset.ManualEyebrowLevelShift),
             ManualMouthCornerShift = ClampSigned(toolset.ManualMouthCornerShift),
             ManualNoseCenterShift = ClampSigned(toolset.ManualNoseCenterShift),
             ManualChinCenterShift = ClampSigned(toolset.ManualChinCenterShift),
+            ManualOvalFaceAmount = Clamp01(toolset.ManualOvalFaceAmount),
+            ManualCheekboneSoftenAmount = Clamp01(toolset.ManualCheekboneSoftenAmount),
+            ManualChinWidthShift = ClampSigned(toolset.ManualChinWidthShift),
+            ManualChinLengthShift = ClampSigned(toolset.ManualChinLengthShift),
             NostrilObservationEnabled = true,
             ExperimentalNostrilBalanceAmount = 0
         };

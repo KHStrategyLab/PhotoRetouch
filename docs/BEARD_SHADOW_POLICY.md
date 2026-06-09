@@ -31,6 +31,10 @@ This belongs conceptually inside the SkinRetouch masked correction layer group u
 
 It should behave like a skin-area tone correction mask, not like hair removal.
 
+This is not a male-only feature. It is activated by detected shaving marks, beard shadow, blue or gray cast, and nearby candidate masks, not by gender.
+
+The base engine must not use `GenderDetection` to decide beard-shadow correction.
+
 ## Future BeardToolset Candidate
 
 `BeardToolset` may later be separated from `BlemishToolset`.

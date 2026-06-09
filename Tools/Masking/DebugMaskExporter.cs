@@ -6,6 +6,27 @@ using WpfPoint = System.Windows.Point;
 
 namespace PhotoRetouch;
 
+public sealed record AutoAiMaskPreviewOptions(
+    double SkinSmoothAmount,
+    double BlemishAmount,
+    double ToneEvenAmount,
+    double WrinkleAmount,
+    double TextureAmount)
+{
+    public static AutoAiMaskPreviewOptions Default { get; } = new(0, 0, 0, 0, 0);
+}
+
+public sealed record AutoAiMaskFilterLayers(
+    MaskPlane? BlemishCandidateMask,
+    MaskPlane? BlemishAppliedMask,
+    MaskPlane? WrinkleCandidateMask,
+    MaskPlane? WrinkleAppliedMask,
+    MaskPlane? TextureRestoreMask,
+    MaskPlane? TextureStrengthMap)
+{
+    public static AutoAiMaskFilterLayers Empty { get; } = new(null, null, null, null, null, null);
+}
+
 public static class DebugMaskExporter
 {
     public static void SaveAll(BitmapSource source, PortraitMaskResult result, string outputDirectory)
@@ -27,6 +48,7 @@ public static class DebugMaskExporter
         SaveParsingDebugMasks(result, outputDirectory);
         SaveNostrilDebugMasks(bitmap, result, outputDirectory);
         SaveQualityDebugMasks(bitmap, result, outputDirectory);
+        SaveSkinToneDebugMasks(bitmap, result.Masks, outputDirectory);
 
         SaveMask(result.Masks.SkinMask, Path.Combine(outputDirectory, "debug_skin_mask.png"));
         SaveMask(result.Masks.EyeMask, Path.Combine(outputDirectory, "debug_eye_mask.png"));
@@ -43,6 +65,8 @@ public static class DebugMaskExporter
         SaveMask(result.Masks.SoftProtectMask, Path.Combine(outputDirectory, "debug_soft_protect.png"));
         SaveMask(result.Masks.RetouchAllowMask, Path.Combine(outputDirectory, "debug_retouch_allow.png"));
         SaveBitmap(CreateFinalOverlay(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_final_overlay.png"));
+        SaveBitmap(CreateAutoAiMaskPreview(result.Masks), Path.Combine(outputDirectory, "debug_auto_ai_mask_preview.png"));
+        SaveBitmap(CreateRetouchLayerInspectionPreview(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_retouch_layer_inspection.png"));
         SaveBitmap(CreateFinalOverlay(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_final_overlay_after_parsing.png"));
         SaveBitmap(CreateFinalOverlay(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_final_overlay_with_nostril.png"));
     }
@@ -92,6 +116,165 @@ public static class DebugMaskExporter
         return CreateBitmap(width, height, pixels);
     }
 
+    public static BitmapSource CreateRetouchLayerInspectionPreview(BitmapSource source, FaceMaskSet masks)
+    {
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        int stride = width * 4;
+        byte[] sourcePixels = new byte[stride * height];
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(sourcePixels, stride, 0);
+        Array.Fill<byte>(pixels, 255);
+
+        SkinToneMaskSet skinTone = SkinToneMaskBuilder.Build(masks);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double skin = Math.Max(masks.SkinMask[x, y], Math.Max(masks.NoseSkinMask[x, y] * 0.72, skinTone.SkinToneApplyMask[x, y]));
+                double retouch = masks.RetouchAllowMask[x, y];
+                double softProtect = masks.SoftProtectMask[x, y];
+                double hardProtect = masks.HardProtectMask[x, y];
+                double hair = masks.HairMask[x, y];
+                double beard = Math.Max(masks.BeardMask[x, y], masks.MustacheMask[x, y]);
+                double feature = hardProtect;
+                feature = Math.Max(feature, masks.EyeMask[x, y]);
+                feature = Math.Max(feature, masks.EyebrowMask[x, y]);
+                feature = Math.Max(feature, masks.LipMask[x, y]);
+                feature = Math.Max(feature, masks.InnerMouthMask[x, y]);
+                feature = Math.Max(feature, masks.NostrilMask[x, y]);
+                feature = Math.Max(feature, masks.GlassesMask[x, y]);
+                feature = Math.Max(feature, skinTone.NoseStructureProtectMask[x, y] * 0.78);
+
+                double visible = Math.Max(Math.Max(skin, retouch), Math.Max(softProtect * 0.68, Math.Max(feature, Math.Max(hair * 0.82, beard * 0.58))));
+                if (visible <= 0.001)
+                {
+                    continue;
+                }
+
+                byte sourceBlue = sourcePixels[index];
+                byte sourceGreen = sourcePixels[index + 1];
+                byte sourceRed = sourcePixels[index + 2];
+                double luminance = sourceRed * 0.299 + sourceGreen * 0.587 + sourceBlue * 0.114;
+
+                double skinAmount = Math.Clamp(Math.Max(skin * 0.34, Math.Max(retouch * 0.42, softProtect * 0.20)), 0, 0.46);
+                pixels[index] = Blend(255, sourceBlue, skinAmount);
+                pixels[index + 1] = Blend(255, sourceGreen, skinAmount);
+                pixels[index + 2] = Blend(255, sourceRed, skinAmount);
+                pixels[index + 3] = 255;
+
+                double hairAmount = Math.Clamp(Math.Max(hair * 0.76, beard * 0.42), 0, 1);
+                if (hairAmount > 0)
+                {
+                    byte hairDetail = (byte)Math.Clamp((int)Math.Round(255 - (255 - luminance) * 0.36), 172, 255);
+                    pixels[index] = Blend(pixels[index], hairDetail, hairAmount);
+                    pixels[index + 1] = Blend(pixels[index + 1], hairDetail, hairAmount);
+                    pixels[index + 2] = Blend(pixels[index + 2], hairDetail, hairAmount);
+                }
+
+                double featureAmount = Math.Clamp(Math.Max(feature, hardProtect) * 0.84, 0, 1);
+                if (featureAmount > 0)
+                {
+                    byte protectedDetail = (byte)Math.Clamp((int)Math.Round(255 - (255 - luminance) * 0.20), 204, 255);
+                    pixels[index] = Blend(pixels[index], protectedDetail, featureAmount);
+                    pixels[index + 1] = Blend(pixels[index + 1], protectedDetail, featureAmount);
+                    pixels[index + 2] = Blend(pixels[index + 2], protectedDetail, featureAmount);
+                }
+            }
+        }
+
+        return CreateBitmap(width, height, pixels);
+    }
+
+    public static BitmapSource CreateAutoAiMaskPreview(FaceMaskSet masks)
+    {
+        return CreateAutoAiMaskPreview(masks, AutoAiMaskPreviewOptions.Default, AutoAiMaskFilterLayers.Empty);
+    }
+
+    public static BitmapSource CreateAutoAiMaskPreview(FaceMaskSet masks, AutoAiMaskPreviewOptions options)
+    {
+        return CreateAutoAiMaskPreview(masks, options, AutoAiMaskFilterLayers.Empty);
+    }
+
+    public static BitmapSource CreateAutoAiMaskPreview(FaceMaskSet masks, AutoAiMaskPreviewOptions options, AutoAiMaskFilterLayers layers)
+    {
+        int width = masks.SkinMask.Width;
+        int height = masks.SkinMask.Height;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        SkinToneMaskSet skinTone = SkinToneMaskBuilder.Build(masks);
+        double skinSmooth = Math.Clamp(options.SkinSmoothAmount, 0, 1);
+        double blemish = Math.Clamp(options.BlemishAmount, 0, 1);
+        double tone = Math.Clamp(options.ToneEvenAmount, 0, 1);
+        double wrinkle = Math.Clamp(options.WrinkleAmount, 0, 1);
+        double texture = Math.Clamp(options.TextureAmount, 0, 1);
+        double activeRetouch = Math.Max(
+            Math.Max(skinSmooth, blemish),
+            Math.Max(tone, Math.Max(wrinkle, texture)));
+        double idleLayerOpacity = activeRetouch > 0.001 ? 0.10 : 0.22;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                pixels[index] = 18;
+                pixels[index + 1] = 20;
+                pixels[index + 2] = 22;
+                pixels[index + 3] = 255;
+
+                double retouch = Math.Max(masks.RetouchAllowMask[x, y], skinTone.SkinToneApplyMask[x, y] * 0.82);
+                double skin = Math.Max(masks.SkinMask[x, y] * 0.72, masks.NoseSkinMask[x, y] * 0.45);
+                double softProtect = masks.SoftProtectMask[x, y];
+                double hair = masks.HairMask[x, y];
+                double beard = Math.Max(masks.BeardMask[x, y], masks.MustacheMask[x, y]);
+                double hardProtect = masks.HardProtectMask[x, y];
+                double feature = hardProtect;
+                feature = Math.Max(feature, masks.EyeMask[x, y]);
+                feature = Math.Max(feature, masks.EyebrowMask[x, y]);
+                feature = Math.Max(feature, masks.LipMask[x, y]);
+                feature = Math.Max(feature, masks.InnerMouthMask[x, y]);
+                feature = Math.Max(feature, masks.TeethMask[x, y]);
+                feature = Math.Max(feature, masks.NostrilMask[x, y]);
+                feature = Math.Max(feature, masks.GlassesMask[x, y]);
+                feature = Math.Max(feature, skinTone.NoseStructureProtectMask[x, y] * 0.86);
+
+                double blemishCandidate = layers.BlemishCandidateMask?[x, y] ?? 0;
+                double blemishApplied = layers.BlemishAppliedMask?[x, y] ?? 0;
+                double wrinkleCandidate = layers.WrinkleCandidateMask?[x, y] ?? 0;
+                double wrinkleApplied = layers.WrinkleAppliedMask?[x, y] ?? 0;
+                double textureCandidate = layers.TextureRestoreMask?[x, y] ?? 0;
+                double textureStrength = layers.TextureStrengthMap?[x, y] ?? 0;
+
+                double smoothLayer = retouch * skinSmooth * 0.18;
+                double blemishLayer = Math.Max(blemishCandidate * 0.72, blemishApplied) * blemish;
+                double toneLayer = skinTone.SkinToneApplyMask[x, y] * tone * 0.22;
+                double wrinkleLayer = Math.Max(wrinkleCandidate * 0.62, wrinkleApplied) * wrinkle;
+                double textureLayer = Math.Max(textureCandidate * 0.55, textureStrength) * texture;
+                double activeLayer = Math.Clamp(
+                    Math.Max(
+                        Math.Max(smoothLayer, blemishLayer),
+                        Math.Max(toneLayer, Math.Max(wrinkleLayer, textureLayer))),
+                    0,
+                    1);
+
+                ApplyOverlay(pixels, index, 72, 78, 82, skin * 0.16);
+                ApplyOverlay(pixels, index, 118, 126, 132, retouch * idleLayerOpacity * 0.34);
+                ApplyOverlay(pixels, index, 184, 192, 198, activeLayer * 0.92);
+                ApplyOverlay(pixels, index, 116, 128, 138, softProtect * (0.12 + wrinkle * 0.18));
+                ApplyOverlay(pixels, index, 205, 211, 216, Math.Max(hair * 0.78, beard * 0.46));
+                ApplyOverlay(pixels, index, 242, 245, 247, feature * 0.96);
+            }
+        }
+
+        return CreateBitmap(width, height, pixels);
+    }
+
     private static void SaveMask(MaskPlane mask, string path)
     {
         SaveBitmap(CreateMaskPreview(mask), path);
@@ -125,6 +308,22 @@ public static class DebugMaskExporter
         SaveMask(result.Masks.SkinMask, Path.Combine(outputDirectory, "debug_merged_skin_mask.png"));
         SaveMask(result.Masks.HardProtectMask, Path.Combine(outputDirectory, "debug_hard_protect_after_parsing.png"));
         SaveMask(result.Masks.RetouchAllowMask, Path.Combine(outputDirectory, "debug_retouch_allow_after_parsing.png"));
+    }
+
+    private static void SaveSkinToneDebugMasks(BitmapSource source, FaceMaskSet masks, string outputDirectory)
+    {
+        SkinToneMaskSet skinTone = SkinToneMaskBuilder.Build(masks);
+        SaveMask(skinTone.SkinToneApplyMask, Path.Combine(outputDirectory, "debug_skin_tone_mask.png"));
+        SaveBitmap(CreateMaskOverlayPreview(source, skinTone.SkinToneApplyMask, 70, 220, 120, 0.58), Path.Combine(outputDirectory, "debug_skin_tone_overlay.png"));
+        SaveMask(skinTone.FaceOnlyWarpMask, Path.Combine(outputDirectory, "debug_face_only_warp_mask.png"));
+        SaveMask(skinTone.HairExcludedMask, Path.Combine(outputDirectory, "debug_hair_excluded_mask.png"));
+        SaveMask(skinTone.GlassesExcludedMask, Path.Combine(outputDirectory, "debug_glasses_excluded_mask.png"));
+        SaveMask(skinTone.NostrilExcludedMask, Path.Combine(outputDirectory, "debug_nostril_excluded_mask.png"));
+        SaveMask(skinTone.LipExcludedMask, Path.Combine(outputDirectory, "debug_lip_excluded_mask.png"));
+        SaveMask(skinTone.BeardShadowMask, Path.Combine(outputDirectory, "debug_beard_shadow_mask.png"));
+        SaveMask(skinTone.NoseStructureProtectMask, Path.Combine(outputDirectory, "debug_nose_structure_protect_mask.png"));
+        SaveMask(skinTone.NoseShadowMask, Path.Combine(outputDirectory, "debug_nose_shadow_mask.png"));
+        SaveMask(skinTone.NoseRetouchStrengthMap, Path.Combine(outputDirectory, "debug_nose_retouch_strength_map.png"));
     }
 
     private static void SaveNostrilDebugMasks(BitmapSource source, PortraitMaskResult result, string outputDirectory)

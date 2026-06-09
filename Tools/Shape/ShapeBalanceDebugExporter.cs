@@ -24,10 +24,21 @@ public static class ShapeBalanceDebugExporter
         SaveBitmap(CreateVectorOverlay(source, bundle), Path.Combine(outputDirectory, "debug_shape_map_overlay.png"));
         SaveBitmap(CreateCenterLineOverlay(source, bundle), Path.Combine(outputDirectory, "debug_shape_face_centerline.png"));
         SaveBitmap(CreateSingleVectorOverlay(source, bundle, "left_eye_level", "right_eye_level"), Path.Combine(outputDirectory, "debug_shape_eye_level_delta.png"));
-        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "nose_center"), Path.Combine(outputDirectory, "debug_shape_nose_line.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "yaw_like_nose_center", "yaw_like_nose_axis"), Path.Combine(outputDirectory, "debug_shape_nose_line.png"));
         SaveBitmap(CreateSingleVectorOverlay(source, bundle, "chin_center"), Path.Combine(outputDirectory, "debug_shape_chin_center.png"));
         SaveBitmap(CreatePlaceholderOverlay(source, bundle, "eyebrow_pending"), Path.Combine(outputDirectory, "debug_shape_eyebrow_balance.png"));
         SaveBitmap(CreatePlaceholderOverlay(source, bundle, "mouth_corner_pending"), Path.Combine(outputDirectory, "debug_shape_mouth_corner_balance.png"));
+        SaveBitmap(CreateSymmetryCenterLineOverlay(source, bundle), Path.Combine(outputDirectory, "debug_symmetry_centerline.png"));
+        SaveBitmap(CreateSymmetryRegionOverlay(source, bundle), Path.Combine(outputDirectory, "debug_symmetry_regions.png"));
+        SaveBitmap(CreateSymmetryStrengthMap(bundle), Path.Combine(outputDirectory, "debug_symmetry_strength_map.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "symmetry_mouth_corner_left", "symmetry_mouth_corner_right"), Path.Combine(outputDirectory, "debug_symmetry_mouth_balance.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "symmetry_lower_eye_line_left", "symmetry_lower_eye_line_right"), Path.Combine(outputDirectory, "debug_symmetry_eye_balance.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "symmetry_eyebrow_height_left", "symmetry_eyebrow_height_right"), Path.Combine(outputDirectory, "debug_symmetry_eyebrow_balance.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "symmetry_nostril_observation_left", "symmetry_nostril_observation_right"), Path.Combine(outputDirectory, "debug_symmetry_nostril_balance.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "symmetry_nose_wing_contour_left", "symmetry_nose_wing_contour_right"), Path.Combine(outputDirectory, "debug_symmetry_nosewing_balance.png"));
+        SaveBitmap(CreateSingleVectorOverlay(source, bundle, "symmetry_jawline_contour_left", "symmetry_jawline_contour_right"), Path.Combine(outputDirectory, "debug_symmetry_jawline_balance.png"));
+        SaveBitmap(CreateScoreImage(bundle.ShapeBalanceMap.SymmetryBalanceMap.OvershootApplied ? 1 : 0), Path.Combine(outputDirectory, "debug_symmetry_overshoot_zone.png"));
+        SaveBitmap(CreateBeforeAfterSplit(source, bundle.BalancedImage), Path.Combine(outputDirectory, "debug_symmetry_before_after_compare.png"));
         SaveBitmap(DebugMaskExporter.CreateFinalOverlayPreview(bundle.BalancedImage, bundle.BalancedSnapshot.Masks), Path.Combine(outputDirectory, "debug_shape_balanced_mask_overlay.png"));
         SaveBitmap(CreateLandmarkOverlay(bundle.BalancedImage, bundle.BalancedLandmarks), Path.Combine(outputDirectory, "debug_shape_balanced_landmarks.png"));
         SaveBitmap(CreateBeforeAfterSplit(source, bundle.BalancedImage), Path.Combine(outputDirectory, "debug_shape_before_after_compare.png"));
@@ -35,6 +46,8 @@ public static class ShapeBalanceDebugExporter
         SaveBitmap(CreateMaskBeforeAfter(bundle.SourceSnapshot.Masks.FinalOverlayMask, bundle.BalancedSnapshot.Masks.FinalOverlayMask), Path.Combine(outputDirectory, "debug_shape_mask_before_after.png"));
         SaveBitmap(CreateMaskBeforeAfter(bundle.SourceSnapshot.Masks.HardProtectMask, bundle.BalancedSnapshot.Masks.HardProtectMask), Path.Combine(outputDirectory, "debug_shape_hardprotect_before_after.png"));
         SaveBitmap(CreateMaskBeforeAfter(bundle.SourceSnapshot.Masks.NostrilMask, bundle.BalancedSnapshot.Masks.NostrilMask), Path.Combine(outputDirectory, "debug_shape_nostril_before_after.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskPreview(SkinToneMaskBuilder.Build(bundle.BalancedSnapshot.Masks).SkinToneApplyMask), Path.Combine(outputDirectory, "debug_balanced_skin_tone_mask.png"));
+        SaveBitmap(DebugMaskExporter.CreateMaskOverlayPreview(bundle.BalancedImage, SkinToneMaskBuilder.Build(bundle.BalancedSnapshot.Masks).SkinToneApplyMask, 70, 220, 120, 0.58), Path.Combine(outputDirectory, "debug_skin_tone_before_after_overlay.png"));
         SaveBitmap(CreateScoreImage(bundle.BalancedMaskQualityReport.WarpAlignmentScore), Path.Combine(outputDirectory, "debug_shape_warp_alignment_score.png"));
         SaveBitmap(DebugMaskExporter.CreateMaskOverlayPreview(bundle.BalancedImage, bundle.BalancedSnapshot.Masks.NostrilMask, 70, 180, 255, 0.82), Path.Combine(outputDirectory, "debug_shape_nostril_observation.png"));
 
@@ -60,6 +73,10 @@ public static class ShapeBalanceDebugExporter
         File.WriteAllText(
             Path.Combine(outputDirectory, "debug_balanced_mask_quality_report.json"),
             JsonSerializer.Serialize(bundle.BalancedMaskQualityReport, new JsonSerializerOptions { WriteIndented = true }),
+            System.Text.Encoding.UTF8);
+        File.WriteAllText(
+            Path.Combine(outputDirectory, "debug_symmetry_analysis_report.json"),
+            JsonSerializer.Serialize(bundle.ShapeBalanceMap.SymmetryAnalysisReport, new JsonSerializerOptions { WriteIndented = true }),
             System.Text.Encoding.UTF8);
     }
 
@@ -151,11 +168,43 @@ public static class ShapeBalanceDebugExporter
                     strength = Math.Max(strength, region.WeightAt(x, y));
                 }
 
+                foreach (ShapeBalanceWarpRegion region in bundle.ShapeBalanceMap.SymmetryBalanceMap.SymmetryWarpRegions)
+                {
+                    strength = Math.Max(strength, region.WeightAt(x, y));
+                }
+
                 byte value = (byte)Math.Clamp((int)Math.Round(strength * 255), 0, 255);
                 int index = (y * width + x) * 4;
                 pixels[index] = 40;
                 pixels[index + 1] = value;
                 pixels[index + 2] = (byte)Math.Clamp(value + 30, 0, 255);
+                pixels[index + 3] = 255;
+            }
+        }
+
+        return CreateBitmap(width, height, 96, 96, pixels);
+    }
+
+    private static BitmapSource CreateSymmetryStrengthMap(BalancedImageBundle bundle)
+    {
+        int width = bundle.ShapeBalanceMap.TargetImageWidth;
+        int height = bundle.ShapeBalanceMap.TargetImageHeight;
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                double strength = 0;
+                foreach (ShapeBalanceWarpRegion region in bundle.ShapeBalanceMap.SymmetryBalanceMap.SymmetryWarpRegions)
+                {
+                    strength = Math.Max(strength, region.WeightAt(x, y));
+                }
+
+                byte value = (byte)Math.Clamp((int)Math.Round(strength * 255), 0, 255);
+                int index = (y * width + x) * 4;
+                pixels[index] = (byte)Math.Clamp(value + 20, 0, 255);
+                pixels[index + 1] = value;
+                pixels[index + 2] = 60;
                 pixels[index + 3] = 255;
             }
         }
@@ -199,6 +248,42 @@ public static class ShapeBalanceDebugExporter
             135,
             135,
             135);
+        return CreateBitmap(width, height, bitmap.DpiX, bitmap.DpiY, pixels);
+    }
+
+    private static BitmapSource CreateSymmetryCenterLineOverlay(BitmapSource source, BalancedImageBundle bundle)
+    {
+        BitmapSource bitmap = ToBgra(source);
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+        double centerX = bundle.ShapeBalanceMap.SymmetryBalanceMap.SymmetryCenterLine.X;
+        int top = bundle.ShapeBalanceMap.FaceBox.Y;
+        int bottom = bundle.ShapeBalanceMap.FaceBox.Y + bundle.ShapeBalanceMap.FaceBox.Height;
+        DrawLine(pixels, width, height, stride, new WpfPoint(centerX, top), new WpfPoint(centerX, bottom), 120, 210, 235);
+        foreach (ShapeBalanceDebugVector vector in bundle.ShapeBalanceMap.SymmetryBalanceMap.DebugVectors)
+        {
+            DrawLine(pixels, width, height, stride, vector.From, vector.To, 100, 170, 235);
+        }
+
+        return CreateBitmap(width, height, bitmap.DpiX, bitmap.DpiY, pixels);
+    }
+
+    private static BitmapSource CreateSymmetryRegionOverlay(BitmapSource source, BalancedImageBundle bundle)
+    {
+        BitmapSource bitmap = ToBgra(source);
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+        foreach (ShapeBalanceWarpRegion region in bundle.ShapeBalanceMap.SymmetryBalanceMap.SymmetryWarpRegions)
+        {
+            DrawEllipse(pixels, width, height, stride, region.Center, region.RadiusX, region.RadiusY, 120, 210, 235);
+        }
+
         return CreateBitmap(width, height, bitmap.DpiX, bitmap.DpiY, pixels);
     }
 

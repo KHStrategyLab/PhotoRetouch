@@ -83,10 +83,12 @@ Rules:
 ```text
 ImageLoaded
 -> Clear LowPreview base display with configured preview sizing
--> SnapshotMask preparation from OriginalImage
+
+RightToolPanelOpened
+-> SnapshotMask / mask quality / ShapeBalance analysis preparation from OriginalImage
 
 SliderDragging
--> FastPreview correction-layer composite over the clear base preview
+-> GuideOnlyPreview or FastPreview correction-layer composite over the clear base preview
 
 SliderReleased
 -> QualityPreview correction-layer composite over the clear base preview

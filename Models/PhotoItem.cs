@@ -288,7 +288,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
 
     public void SetLowPreviewImage(int? visibleMaxLongSide)
     {
-        Image = GetEffectPreviewSource(PreviewRenderTier.LowPreview, visibleMaxLongSide);
+        Image = GetEffectPreviewSource(PreviewRenderTier.QualityPreview, visibleMaxLongSide);
     }
 
     public void ResetRetouchWorkState()

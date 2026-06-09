@@ -13,6 +13,8 @@ public sealed class FaceSymmetryAnalyzer
         List<string> warnings = new() { "shape_balance_analysis_v1" };
         Int32Rect faceBox = snapshot.Analysis.FaceBox;
         WpfPoint faceCenter = new(faceBox.X + faceBox.Width / 2d, faceBox.Y + faceBox.Height / 2d);
+        FeatureCenterLine featureCenterLine = FeatureCenterLineEstimator.Estimate(snapshot);
+        warnings.AddRange(featureCenterLine.DebugWarnings);
 
         bool hasLeftEye = TryGetPoint(landmarks, "left_eye", out WpfPoint leftEye);
         bool hasRightEye = TryGetPoint(landmarks, "right_eye", out WpfPoint rightEye);
@@ -24,10 +26,10 @@ public sealed class FaceSymmetryAnalyzer
         double eyeLevelDelta = hasLeftEye && hasRightEye ? rightEye.Y - leftEye.Y : 0;
         double faceWidth = Math.Max(1, faceBox.Width);
         double faceHeight = Math.Max(1, faceBox.Height);
-        double eyeCenterX = hasLeftEye && hasRightEye ? (leftEye.X + rightEye.X) / 2d : faceCenter.X;
-        double noseCenterDelta = hasNose ? noseTip.X - eyeCenterX : 0;
-        double chinCenterDelta = hasChin ? chinPoint.X - eyeCenterX : 0;
-        double faceYawLikeBias = hasNose ? (noseTip.X - faceCenter.X) / faceWidth : 0;
+        double centerLineX = featureCenterLine.Center.X;
+        double noseCenterDelta = hasNose ? noseTip.X - centerLineX : 0;
+        double chinCenterDelta = hasChin ? chinPoint.X - centerLineX : 0;
+        double faceYawLikeBias = hasNose ? (noseTip.X - centerLineX) / faceWidth : 0;
         double facePitchLikeBias = hasMouth && hasNose
             ? ((mouthCenter.Y - noseTip.Y) / faceHeight) - 0.22
             : 0;
@@ -60,7 +62,7 @@ public sealed class FaceSymmetryAnalyzer
             warnings.Add("chin_landmark_missing");
         }
 
-        NostrilBalanceObservation nostrilObservation = CreateNostrilObservation(snapshot, hasNose ? noseTip.X : faceCenter.X, warnings);
+        NostrilBalanceObservation nostrilObservation = CreateNostrilObservation(snapshot, featureCenterLine.NostrilCenter.X, warnings);
         double normalizedEyeDelta = Math.Abs(eyeLevelDelta) / faceHeight;
         double normalizedNoseDelta = Math.Abs(noseCenterDelta) / faceWidth;
         double normalizedChinDelta = Math.Abs(chinCenterDelta) / faceWidth;

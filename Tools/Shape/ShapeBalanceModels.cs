@@ -22,12 +22,17 @@ public sealed record ShapeBalanceOptions(
     double PreserveIdentityStrength,
     bool ProtectHardFeatures,
     bool DebugShapeOverlay,
+    SymmetryBalanceToolset SymmetryToolset,
     double ManualFaceBalanceShift,
     double ManualEyeLevelShift,
     double ManualEyebrowLevelShift,
     double ManualMouthCornerShift,
     double ManualNoseCenterShift,
-    double ManualChinCenterShift)
+    double ManualChinCenterShift,
+    double ManualOvalFaceAmount,
+    double ManualCheekboneSoftenAmount,
+    double ManualChinWidthShift,
+    double ManualChinLengthShift)
 {
     public static ShapeBalanceOptions Default { get; } = Natural();
 
@@ -51,12 +56,26 @@ public sealed record ShapeBalanceOptions(
         MaxAllowedWarpStrength.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         PreserveIdentityStrength.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         ProtectHardFeatures ? "1" : "0",
+        SymmetryToolset.EnableSymmetryBalance ? "1" : "0",
+        SymmetryToolset.SymmetryAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.SymmetryOvershootEnabled ? "1" : "0",
+        SymmetryToolset.MouthCornerBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.LowerEyeLineBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.UpperEyebrowBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.NostrilPositionBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.NoseWingWidthBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.JawlineContourBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        SymmetryToolset.ChinCenterBalanceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         ManualFaceBalanceShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         ManualEyeLevelShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         ManualEyebrowLevelShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         ManualMouthCornerShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
         ManualNoseCenterShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-        ManualChinCenterShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+        ManualChinCenterShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        ManualOvalFaceAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        ManualCheekboneSoftenAmount.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        ManualChinWidthShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+        ManualChinLengthShift.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
 
     public static ShapeBalanceOptions Natural()
     {
@@ -78,6 +97,11 @@ public sealed record ShapeBalanceOptions(
             0.85,
             true,
             false,
+            SymmetryBalanceToolset.Default,
+            0,
+            0,
+            0,
+            0,
             0,
             0,
             0,

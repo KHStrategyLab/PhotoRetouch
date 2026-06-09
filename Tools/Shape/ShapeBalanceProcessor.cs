@@ -47,11 +47,12 @@ public sealed class ShapeBalanceProcessor
                 unchangedQuality);
         }
 
-        BitmapSource balancedImage = WarpImage(source, map);
-        FaceMaskSet balancedMasks = WarpMasks(sourceSnapshot.Masks, map);
+        MaskPlane faceOnlyWarpMask = SkinToneMaskBuilder.Build(sourceSnapshot.Masks).FaceOnlyWarpMask;
+        BitmapSource balancedImage = WarpImage(source, map, faceOnlyWarpMask);
+        FaceMaskSet balancedMasks = WarpMasks(sourceSnapshot.Masks, map, faceOnlyWarpMask);
         FaceMaskSet? balancedWarpedStandardMasks = sourceSnapshot.WarpedStandardMasks is null
             ? null
-            : WarpMasks(sourceSnapshot.WarpedStandardMasks, map);
+            : WarpMasks(sourceSnapshot.WarpedStandardMasks, map, SkinToneMaskBuilder.Build(sourceSnapshot.WarpedStandardMasks).FaceOnlyWarpMask);
         IReadOnlyDictionary<string, WpfPoint> balancedLandmarks = WarpLandmarks(sourceSnapshot.Analysis.FaceLandmarks, map);
         Int32Rect balancedFaceBox = WarpFaceBox(sourceSnapshot.Analysis.FaceBox, map);
         FaceAnalysisResult balancedAnalysis = sourceSnapshot.Analysis with
@@ -126,10 +127,12 @@ public sealed class ShapeBalanceProcessor
             map.EyeLevelDelta.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
             map.NoseCenterDelta.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
             map.ChinCenterDelta.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
-            map.MaxDisplacementPixels.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+            map.MaxDisplacementPixels.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            map.SymmetryAnalysisReport.SuggestedSymmetryAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            map.SymmetryBalanceMap.SymmetryWarpRegions.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    private static BitmapSource WarpImage(BitmapSource source, ShapeBalanceMap map)
+    private static BitmapSource WarpImage(BitmapSource source, ShapeBalanceMap map, MaskPlane faceOnlyWarpMask)
     {
         int width = source.PixelWidth;
         int height = source.PixelHeight;
@@ -137,13 +140,29 @@ public sealed class ShapeBalanceProcessor
         byte[] sourcePixels = new byte[stride * height];
         source.CopyPixels(sourcePixels, stride, 0);
         byte[] outputPixels = new byte[sourcePixels.Length];
+        MaskPlane balancedFaceOnlyWarpMask = WarpMask(faceOnlyWarpMask, map);
 
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
+                int outputIndex = y * stride + x * 4;
+                double faceWeight = Math.Clamp(balancedFaceOnlyWarpMask[x, y], 0, 1);
+                if (faceWeight <= 0.001)
+                {
+                    Array.Copy(sourcePixels, outputIndex, outputPixels, outputIndex, 4);
+                    continue;
+                }
+
                 WpfPoint sourcePoint = map.MapBalancedToSource(x + 0.5, y + 0.5);
-                SampleBgra(sourcePixels, width, height, stride, sourcePoint.X, sourcePoint.Y, outputPixels, y * stride + x * 4);
+                if (faceWeight >= 0.999)
+                {
+                    SampleBgra(sourcePixels, width, height, stride, sourcePoint.X, sourcePoint.Y, outputPixels, outputIndex);
+                }
+                else
+                {
+                    SampleBgraBlended(sourcePixels, width, height, stride, sourcePoint.X, sourcePoint.Y, outputPixels, outputIndex, faceWeight);
+                }
             }
         }
 
@@ -152,25 +171,27 @@ public sealed class ShapeBalanceProcessor
         return output;
     }
 
-    private static FaceMaskSet WarpMasks(FaceMaskSet masks, ShapeBalanceMap map)
+    private static FaceMaskSet WarpMasks(FaceMaskSet masks, ShapeBalanceMap map, MaskPlane faceOnlyWarpMask)
     {
-        MaskPlane skin = WarpMask(masks.SkinMask, map);
+        MaskPlane balancedFaceOnlyWarpMask = WarpMask(faceOnlyWarpMask, map);
+        MaskPlane skin = MaskPlane.Intersect(WarpMask(masks.SkinMask, map), balancedFaceOnlyWarpMask);
         MaskPlane eye = NormalizeHardMask(WarpMask(masks.EyeMask, map), 0.38);
         MaskPlane eyebrow = NormalizeHardMask(WarpMask(masks.EyebrowMask, map), 0.35);
         MaskPlane lip = NormalizeHardMask(WarpMask(masks.LipMask, map), 0.36);
         MaskPlane innerMouth = NormalizeHardMask(WarpMask(masks.InnerMouthMask, map), 0.35);
         MaskPlane teeth = NormalizeHardMask(WarpMask(masks.TeethMask, map), 0.35);
-        MaskPlane nose = WarpMask(masks.NoseMask, map);
+        MaskPlane nose = MaskPlane.Intersect(WarpMask(masks.NoseMask, map), balancedFaceOnlyWarpMask);
         MaskPlane nostril = NormalizeHardMask(WarpMask(masks.NostrilMask, map), 0.30);
-        MaskPlane noseSkin = MaskPlane.Subtract(WarpMask(masks.NoseSkinMask, map), nostril);
+        MaskPlane noseSkin = MaskPlane.Intersect(MaskPlane.Subtract(WarpMask(masks.NoseSkinMask, map), nostril), balancedFaceOnlyWarpMask);
         MaskPlane noseShadow = NormalizeHardMask(WarpMask(masks.NoseShadowMask, map), 0.36);
-        MaskPlane hair = NormalizeHardMask(WarpMask(masks.HairMask, map), 0.34);
+        MaskPlane hair = NormalizeHardMask(masks.HairMask.Clone(), 0.34);
         MaskPlane beard = NormalizeHardMask(WarpMask(masks.BeardMask, map), 0.34);
         MaskPlane mustache = NormalizeHardMask(WarpMask(masks.MustacheMask, map), 0.34);
         MaskPlane glasses = NormalizeHardMask(WarpMask(masks.GlassesMask, map), 0.32);
+        MaskPlane facialHardProtect = NormalizeHardMask(WarpMask(MaskPlane.Subtract(masks.HardProtectMask, masks.HairMask), map), 0.28);
         MaskPlane hardProtect = NormalizeHardMask(
             MaskPlane.Union(
-                WarpMask(masks.HardProtectMask, map),
+                facialHardProtect,
                 eye,
                 eyebrow,
                 lip,
@@ -183,15 +204,15 @@ public sealed class ShapeBalanceProcessor
                 mustache,
                 glasses),
             0.28);
-        MaskPlane softProtect = MaskPlane.Subtract(WarpMask(masks.SoftProtectMask, map), hardProtect);
-        MaskPlane retouchAllow = MaskPlane.Subtract(
+        MaskPlane softProtect = MaskPlane.Intersect(MaskPlane.Subtract(WarpMask(masks.SoftProtectMask, map), hardProtect), balancedFaceOnlyWarpMask);
+        MaskPlane retouchAllow = MaskPlane.Intersect(MaskPlane.Subtract(
             MaskPlane.Union(WarpMask(masks.RetouchAllowMask, map), skin, noseSkin),
-            hardProtect);
+            hardProtect), balancedFaceOnlyWarpMask);
         MaskPlane finalOverlay = MaskPlane.Subtract(
             MaskPlane.Union(retouchAllow, MaskPlane.Multiply(softProtect, 0.45)),
             hardProtect);
 
-        return new FaceMaskSet(
+        FaceMaskSet warpedMasks = new(
             skin,
             eye,
             eyebrow,
@@ -210,6 +231,8 @@ public sealed class ShapeBalanceProcessor
             softProtect,
             retouchAllow,
             finalOverlay);
+
+        return SkinToneMaskBuilder.ApplyToFaceMaskSet(warpedMasks);
     }
 
     private static MaskPlane WarpMask(MaskPlane source, ShapeBalanceMap map)
@@ -336,6 +359,20 @@ public sealed class ShapeBalanceProcessor
             double top = pixels[i00 + channel] * (1 - tx) + pixels[i10 + channel] * tx;
             double bottom = pixels[i01 + channel] * (1 - tx) + pixels[i11 + channel] * tx;
             output[outputIndex + channel] = (byte)Math.Clamp((int)Math.Round(top * (1 - ty) + bottom * ty), 0, 255);
+        }
+    }
+
+    private static void SampleBgraBlended(byte[] pixels, int width, int height, int stride, double x, double y, byte[] output, int outputIndex, double amount)
+    {
+        Span<byte> warped = stackalloc byte[4];
+        byte[] warpedArray = new byte[4];
+        SampleBgra(pixels, width, height, stride, x, y, warpedArray, 0);
+        for (int channel = 0; channel < 4; channel++)
+        {
+            warped[channel] = warpedArray[channel];
+            double original = pixels[outputIndex + channel];
+            double blended = original * (1 - amount) + warped[channel] * amount;
+            output[outputIndex + channel] = (byte)Math.Clamp((int)Math.Round(blended), 0, 255);
         }
     }
 

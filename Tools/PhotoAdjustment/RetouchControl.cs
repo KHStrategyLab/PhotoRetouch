@@ -70,6 +70,7 @@ public sealed class RetouchControl : INotifyPropertyChanged
     public bool IsActionButton { get; }
     public bool IsBackgroundLibrary { get; }
     public bool IsCurveEditor { get; }
+    public bool IsHeader { get; }
     public string? ColorValue { get; }
     public string? ActionText { get; }
     public IReadOnlyList<BackgroundOption> BackgroundOptions { get; } = Array.Empty<BackgroundOption>();
@@ -213,9 +214,14 @@ public sealed class RetouchControl : INotifyPropertyChanged
 
     public static RetouchControl CreateCurve(string id, string label)
     {
-        RetouchControl control = new(id, label, 0, 100, 100, isCurveEditor: true);
+        RetouchControl control = new(id, label, 0, 100, 100, isCurveEditor: true, isHeader: false);
         control.InitializeCurvePoints();
         return control;
+    }
+
+    public static RetouchControl CreateHeader(string id, string label)
+    {
+        return new RetouchControl(id, label, 0, 0, 0, isCurveEditor: false, isHeader: true);
     }
 
     public static RetouchControl CreateExposure(string id, string label)
@@ -285,10 +291,11 @@ public sealed class RetouchControl : INotifyPropertyChanged
         BackgroundOptions = backgroundOptions;
     }
 
-    private RetouchControl(string id, string label, double minimum, double maximum, double value, bool isCurveEditor)
+    private RetouchControl(string id, string label, double minimum, double maximum, double value, bool isCurveEditor, bool isHeader)
         : this(id, label, minimum, maximum, value)
     {
         IsCurveEditor = isCurveEditor;
+        IsHeader = isHeader;
     }
 
     public void SetCurveHistogramSource(BitmapSource? source)

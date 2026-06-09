@@ -18,8 +18,8 @@ public sealed record PreviewRenderTierPolicy(
     {
         return tier switch
         {
-            PreviewRenderTier.LowPreview => new PreviewRenderTierPolicy(tier, null, false, false),
-            PreviewRenderTier.FastPreview => new PreviewRenderTierPolicy(tier, ClampVisibleLongSide(visibleMaxLongSide, 720, 1400), false, false),
+            PreviewRenderTier.LowPreview => new PreviewRenderTierPolicy(tier, ClampVisibleLongSide(visibleMaxLongSide, 1200, PreviewSettings.MaximumMaxLongSidePixels), true, false),
+            PreviewRenderTier.FastPreview => new PreviewRenderTierPolicy(tier, ClampVisibleLongSide(visibleMaxLongSide, 1200, PreviewSettings.MaximumMaxLongSidePixels), true, false),
             PreviewRenderTier.QualityPreview => new PreviewRenderTierPolicy(tier, ClampVisibleLongSide(visibleMaxLongSide, 1200, PreviewSettings.MaximumMaxLongSidePixels), true, false),
             PreviewRenderTier.ExportRender => new PreviewRenderTierPolicy(tier, null, true, true),
             _ => new PreviewRenderTierPolicy(tier, visibleMaxLongSide, false, false)
