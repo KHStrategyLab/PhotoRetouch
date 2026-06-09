@@ -25,7 +25,16 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
         (-25, 0), (25, 0), (0, -25), (0, 25),
         (-21, -21), (-21, 21), (21, -21), (21, 21)
     };
-    private readonly record struct SkinReference(double Red, double Green, double Blue, double Luminance);
+    private readonly record struct SkinReference(
+        double Red,
+        double Green,
+        double Blue,
+        double Luminance,
+        bool HasAddedRange = false,
+        double AddedRed = 0,
+        double AddedGreen = 0,
+        double AddedBlue = 0,
+        double AddedLuminance = 0);
 
     public BitmapSource Render(BitmapSource source, PreviewAdjustment adjustment)
     {
@@ -62,9 +71,11 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
             pixels[index + 2] = ClampToByte(red);
         }
 
-        SkinReference skinReference = adjustment.HasManualSkinReference
-            ? CreateSkinReference(adjustment.ManualSkinReferenceColor)
-            : CreateSkinReference(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.FaceWorkArea);
+        SkinReference skinReference = CreateSkinReference(pixels, bitmap.PixelWidth, bitmap.PixelHeight, stride, adjustment.FaceWorkArea);
+        if (adjustment.HasManualSkinReference)
+        {
+            skinReference = AddSkinReferenceRange(skinReference, adjustment.ManualSkinReferenceColor);
+        }
 
         if (Math.Abs(adjustment.ToneEven) >= AdjustmentEpsilon)
         {
@@ -1406,6 +1417,18 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
         return new SkinReference(color.R, color.G, color.B, GetLuminance(color.R, color.G, color.B));
     }
 
+    private static SkinReference AddSkinReferenceRange(SkinReference baseReference, System.Windows.Media.Color color)
+    {
+        return baseReference with
+        {
+            HasAddedRange = true,
+            AddedRed = color.R,
+            AddedGreen = color.G,
+            AddedBlue = color.B,
+            AddedLuminance = GetLuminance(color.R, color.G, color.B)
+        };
+    }
+
     private static double GetSkinProcessingWeight(
         byte[] source,
         byte[] localAverage,
@@ -1520,14 +1543,53 @@ public sealed class CSharpPreviewEngine : IPreviewEngine
 
     private static double GetSkinToneSimilarity(byte red, byte green, byte blue, double luminance, SkinReference skinReference, double skinMaskRange)
     {
+        double baseSimilarity = GetSingleSkinToneSimilarity(
+            red,
+            green,
+            blue,
+            luminance,
+            skinReference.Red,
+            skinReference.Green,
+            skinReference.Blue,
+            skinReference.Luminance,
+            skinMaskRange);
+        if (!skinReference.HasAddedRange)
+        {
+            return baseSimilarity;
+        }
+
+        double addedSimilarity = GetSingleSkinToneSimilarity(
+            red,
+            green,
+            blue,
+            luminance,
+            skinReference.AddedRed,
+            skinReference.AddedGreen,
+            skinReference.AddedBlue,
+            skinReference.AddedLuminance,
+            skinMaskRange);
+        return Math.Max(baseSimilarity, addedSimilarity);
+    }
+
+    private static double GetSingleSkinToneSimilarity(
+        byte red,
+        byte green,
+        byte blue,
+        double luminance,
+        double referenceRed,
+        double referenceGreen,
+        double referenceBlue,
+        double referenceLuminance,
+        double skinMaskRange)
+    {
         double range = Math.Clamp(skinMaskRange, 0, 100) / 100;
         double rangeScale = 0.68 + range * 0.92;
-        double redDelta = red - skinReference.Red;
-        double greenDelta = green - skinReference.Green;
-        double blueDelta = blue - skinReference.Blue;
+        double redDelta = red - referenceRed;
+        double greenDelta = green - referenceGreen;
+        double blueDelta = blue - referenceBlue;
         double colorDistance = Math.Sqrt(redDelta * redDelta * 0.65 + greenDelta * greenDelta * 0.85 + blueDelta * blueDelta * 0.55);
         double colorWeight = 1 - SmoothStep(34 * rangeScale, 96 * rangeScale, colorDistance);
-        double luminanceWeight = 1 - SmoothStep(54 * rangeScale, 132 * rangeScale, Math.Abs(luminance - skinReference.Luminance));
+        double luminanceWeight = 1 - SmoothStep(54 * rangeScale, 132 * rangeScale, Math.Abs(luminance - referenceLuminance));
         return Math.Clamp(Math.Max(GetSkinColorWeight(red, green, blue) * 0.65, colorWeight) * luminanceWeight, 0, 1);
     }
 

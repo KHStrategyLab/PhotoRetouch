@@ -67,6 +67,15 @@ public static class DebugMaskExporter
         SaveMask(result.Masks.SoftProtectMask, Path.Combine(outputDirectory, "debug_soft_protect.png"));
         SaveMask(result.Masks.RetouchAllowMask, Path.Combine(outputDirectory, "debug_retouch_allow.png"));
         SaveBitmap(CreateFinalOverlay(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_final_overlay.png"));
+        SaveBitmap(
+            CreateMaskOnSolidBackgroundPreview(
+                result.Masks.EyeMask,
+                GetPreviewBackgroundColor(),
+                90,
+                170,
+                255,
+                0.92),
+            Path.Combine(outputDirectory, "debug_eye_mask_on_preview_background.png"));
         SaveBitmap(CreateAutoAiMaskPreview(result.Masks), Path.Combine(outputDirectory, "debug_average_skin_mask_preview.png"));
         SaveBitmap(CreateRetouchLayerInspectionPreview(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_retouch_layer_inspection.png"));
         SaveBitmap(CreateFinalOverlay(bitmap, result.Masks), Path.Combine(outputDirectory, "debug_final_overlay_after_parsing.png"));
@@ -149,6 +158,43 @@ public static class DebugMaskExporter
         return CreateBitmap(width, height, pixels);
     }
 
+    public static BitmapSource CreateSourceColorMaskOnBackgroundPreview(BitmapSource source, MaskPlane mask, double opacity, System.Windows.Media.Color backgroundColor)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        if (width != mask.Width || height != mask.Height)
+        {
+            return CreateMaskOnSolidBackgroundPreview(mask, backgroundColor, 80, 180, 255, opacity);
+        }
+
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        bitmap.Freeze();
+
+        int stride = width * 4;
+        byte[] sourcePixels = new byte[stride * height];
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(sourcePixels, stride, 0);
+        double maskOpacity = Math.Clamp(opacity, 0, 1);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double sourceAlpha = sourcePixels[index + 3] / 255d;
+                double amount = Math.Clamp(mask[x, y] * maskOpacity * sourceAlpha, 0, 1);
+                pixels[index] = Blend(backgroundColor.B, sourcePixels[index], amount);
+                pixels[index + 1] = Blend(backgroundColor.G, sourcePixels[index + 1], amount);
+                pixels[index + 2] = Blend(backgroundColor.R, sourcePixels[index + 2], amount);
+                pixels[index + 3] = 255;
+            }
+        }
+
+        return CreateBitmap(width, height, pixels);
+    }
+
     public static BitmapSource CreateFinalOverlayPreview(BitmapSource source, FaceMaskSet masks)
     {
         return CreateFinalOverlay(source, masks);
@@ -172,6 +218,91 @@ public static class DebugMaskExporter
         }
 
         return CreateBitmap(width, height, pixels);
+    }
+
+    public static BitmapSource CreateFeatureMeshOverlayPreview(BitmapSource source, FaceFeatureMeshSet meshes)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        source.CopyPixels(pixels, stride, 0);
+
+        DrawMesh(pixels, width, height, stride, meshes.EyeMesh, 90, 170, 255);
+        DrawMesh(pixels, width, height, stride, meshes.BrowMesh, 230, 170, 70);
+        DrawMesh(pixels, width, height, stride, meshes.NoseMesh, 255, 215, 70);
+        DrawMesh(pixels, width, height, stride, meshes.LipMesh, 235, 80, 130);
+
+        return CreateBitmap(width, height, pixels);
+    }
+
+    public static BitmapSource CreateMaskOverlayOnBackgroundPreview(
+        BitmapSource source,
+        MaskPlane mask,
+        System.Windows.Media.Color backgroundColor,
+        byte red,
+        byte green,
+        byte blue,
+        double opacity)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        if (width != mask.Width || height != mask.Height)
+        {
+            return CreateMaskPreview(mask);
+        }
+
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        bitmap.Freeze();
+
+        int stride = width * 4;
+        byte[] sourcePixels = new byte[stride * height];
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(sourcePixels, stride, 0);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double sourceAlpha = sourcePixels[index + 3] / 255d;
+                pixels[index] = Blend(backgroundColor.B, sourcePixels[index], sourceAlpha);
+                pixels[index + 1] = Blend(backgroundColor.G, sourcePixels[index + 1], sourceAlpha);
+                pixels[index + 2] = Blend(backgroundColor.R, sourcePixels[index + 2], sourceAlpha);
+                pixels[index + 3] = 255;
+                ApplyOverlay(pixels, index, red, green, blue, mask[x, y] * opacity);
+            }
+        }
+
+        return CreateBitmap(width, height, pixels);
+    }
+
+    public static BitmapSource CreateMaskOnSolidBackgroundPreview(
+        MaskPlane mask,
+        System.Windows.Media.Color backgroundColor,
+        byte red,
+        byte green,
+        byte blue,
+        double opacity)
+    {
+        int stride = mask.Width * 4;
+        byte[] pixels = new byte[stride * mask.Height];
+        for (int y = 0; y < mask.Height; y++)
+        {
+            for (int x = 0; x < mask.Width; x++)
+            {
+                int index = y * stride + x * 4;
+                pixels[index] = backgroundColor.B;
+                pixels[index + 1] = backgroundColor.G;
+                pixels[index + 2] = backgroundColor.R;
+                pixels[index + 3] = 255;
+                ApplyOverlay(pixels, index, red, green, blue, mask[x, y] * opacity);
+            }
+        }
+
+        return CreateBitmap(mask.Width, mask.Height, pixels);
     }
 
     public static BitmapSource CreateRetouchLayerInspectionPreview(BitmapSource source, FaceMaskSet masks)
@@ -685,6 +816,37 @@ public static class DebugMaskExporter
         return CreateBitmap(width, height, pixels);
     }
 
+    private static void DrawMesh(byte[] pixels, int width, int height, int stride, FaceFeatureMesh mesh, byte red, byte green, byte blue)
+    {
+        foreach (IGrouping<string, FeatureMeshPoint> group in mesh.Points.GroupBy(point => point.Role))
+        {
+            FeatureMeshPoint[] points = group.OrderBy(point => point.Index).ToArray();
+            if (points.Length == 0)
+            {
+                continue;
+            }
+
+            for (int index = 0; index < points.Length; index++)
+            {
+                FeatureMeshPoint current = points[index];
+                FeatureMeshPoint next = points[(index + 1) % points.Length];
+                DrawLine(
+                    pixels,
+                    width,
+                    height,
+                    stride,
+                    (int)Math.Round(current.X),
+                    (int)Math.Round(current.Y),
+                    (int)Math.Round(next.X),
+                    (int)Math.Round(next.Y),
+                    red,
+                    green,
+                    blue);
+                DrawPoint(pixels, width, height, stride, (int)Math.Round(current.X), (int)Math.Round(current.Y), red, green, blue);
+            }
+        }
+    }
+
     private static void DrawRectangle(byte[] pixels, int width, int height, int stride, Int32Rect rect, byte red, byte green, byte blue)
     {
         for (int x = rect.X; x < rect.X + rect.Width; x++)
@@ -777,6 +939,28 @@ public static class DebugMaskExporter
     private static byte Blend(byte source, byte target, double amount)
     {
         return (byte)Math.Clamp((int)Math.Round(source + (target - source) * amount), 0, 255);
+    }
+
+    private static System.Windows.Media.Color GetPreviewBackgroundColor()
+    {
+        string colorText = PreviewBackgroundSettings.BackgroundColor.Trim();
+        if (!colorText.StartsWith('#') && colorText.Length is 6 or 8)
+        {
+            colorText = "#" + colorText;
+        }
+
+        try
+        {
+            if (System.Windows.Media.ColorConverter.ConvertFromString(colorText) is System.Windows.Media.Color color)
+            {
+                return color;
+            }
+        }
+        catch (FormatException)
+        {
+        }
+
+        return System.Windows.Media.Color.FromRgb(16, 17, 18);
     }
 
     private static byte ToByte(double value)

@@ -9,6 +9,8 @@ public sealed record FaceAnalyzerResult(
     WpfPoint LeftEyeCenter,
     WpfPoint RightEyeCenter,
     WpfPoint NoseTip,
+    WpfPoint MouthLeft,
+    WpfPoint MouthRight,
     WpfPoint MouthCenter,
     WpfPoint ChinPoint,
     double Confidence,
@@ -21,6 +23,8 @@ public sealed record FaceAnalyzerResult(
             ["left_eye"] = LeftEyeCenter,
             ["right_eye"] = RightEyeCenter,
             ["nose_tip"] = NoseTip,
+            ["mouth_left"] = MouthLeft,
+            ["mouth_right"] = MouthRight,
             ["mouth_center"] = MouthCenter,
             ["chin"] = ChinPoint
         };

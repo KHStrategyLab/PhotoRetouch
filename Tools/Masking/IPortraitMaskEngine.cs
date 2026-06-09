@@ -15,4 +15,5 @@ public sealed record PortraitMaskResult(
     MaskQualityReport QualityReport,
     ParsingMaskSet? ParsingMasks = null,
     FaceMaskSet? WarpedStandardMasks = null,
-    NostrilDetectorResult? NostrilDetection = null);
+    NostrilDetectorResult? NostrilDetection = null,
+    FaceFeatureMeshSet? FeatureMeshes = null);

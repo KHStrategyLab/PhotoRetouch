@@ -115,7 +115,8 @@ public sealed class SnapshotMaskBuilder
             DateTime.UtcNow,
             result.ParsingMasks,
             result.WarpedStandardMasks,
-            result.NostrilDetection);
+            result.NostrilDetection,
+            result.FeatureMeshes);
     }
 
     public static FaceWorkArea CreateFaceWorkAreaFromFaceBox(Int32Rect faceBox, int imageWidth, int imageHeight)

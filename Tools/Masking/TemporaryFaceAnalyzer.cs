@@ -18,6 +18,8 @@ public sealed class TemporaryFaceAnalyzer : IFaceAnalyzer
         WpfPoint leftEye = ToFaceBoxPoint(faceBox, 0.35, 0.38);
         WpfPoint rightEye = ToFaceBoxPoint(faceBox, 0.65, 0.38);
         WpfPoint noseTip = ToFaceBoxPoint(faceBox, 0.50, 0.56);
+        WpfPoint mouthLeft = ToFaceBoxPoint(faceBox, 0.40, 0.72);
+        WpfPoint mouthRight = ToFaceBoxPoint(faceBox, 0.60, 0.72);
         WpfPoint mouthCenter = ToFaceBoxPoint(faceBox, 0.50, 0.72);
         WpfPoint chin = ToFaceBoxPoint(faceBox, 0.50, 0.92);
         double faceAngle = CalculateFaceAngle(leftEye, rightEye);
@@ -35,6 +37,8 @@ public sealed class TemporaryFaceAnalyzer : IFaceAnalyzer
             leftEye,
             rightEye,
             noseTip,
+            mouthLeft,
+            mouthRight,
             mouthCenter,
             chin,
             confidence,

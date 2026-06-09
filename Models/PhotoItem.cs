@@ -378,7 +378,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         }
     }
 
-    public bool TryGetAverageFaceColorMaskPreview(double skinMaskRange, out AverageFaceColorMaskPreviewCache cache)
+    public bool TryGetAverageFaceColorMaskPreview(double skinMaskRange, System.Windows.Media.Color? manualSkinReferenceColor, out AverageFaceColorMaskPreviewCache cache)
     {
         AverageFaceColorMaskPreviewCache? cached = _averageFaceColorMaskPreviewCache;
         (DateTime lastWriteTimeUtc, long length) = GetSourceVersion();
@@ -387,7 +387,9 @@ public sealed class PhotoItem : INotifyPropertyChanged
             cached.SourceLength == length &&
             cached.Width == BaseImage.PixelWidth &&
             cached.Height == BaseImage.PixelHeight &&
-            Math.Abs(cached.SkinMaskRange - skinMaskRange) < 0.0005)
+            Math.Abs(cached.SkinMaskRange - skinMaskRange) < 0.0005 &&
+            cached.HasManualSkinReference == manualSkinReferenceColor.HasValue &&
+            (!manualSkinReferenceColor.HasValue || cached.ManualSkinReferenceColor == manualSkinReferenceColor.Value))
         {
             cache = cached;
             return true;
@@ -397,11 +399,18 @@ public sealed class PhotoItem : INotifyPropertyChanged
         return false;
     }
 
-    public void CacheAverageFaceColorMaskPreview(double skinMaskRange, AverageFaceColorMaskResult result, FaceSnapshotMaskSet snapshot, BitmapSource previewImage)
+    public void CacheAverageFaceColorMaskPreview(
+        double skinMaskRange,
+        System.Windows.Media.Color? manualSkinReferenceColor,
+        AverageFaceColorMaskResult result,
+        FaceSnapshotMaskSet snapshot,
+        BitmapSource previewImage)
     {
         (DateTime lastWriteTimeUtc, long length) = GetSourceVersion();
         _averageFaceColorMaskPreviewCache = new AverageFaceColorMaskPreviewCache(
             skinMaskRange,
+            manualSkinReferenceColor.HasValue,
+            manualSkinReferenceColor ?? Colors.Transparent,
             result,
             snapshot,
             previewImage,
@@ -614,6 +623,8 @@ public sealed class PhotoItem : INotifyPropertyChanged
 
 public sealed record AverageFaceColorMaskPreviewCache(
     double SkinMaskRange,
+    bool HasManualSkinReference,
+    System.Windows.Media.Color ManualSkinReferenceColor,
     AverageFaceColorMaskResult Result,
     FaceSnapshotMaskSet Snapshot,
     BitmapSource PreviewImage,

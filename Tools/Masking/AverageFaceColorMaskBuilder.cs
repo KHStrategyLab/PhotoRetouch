@@ -15,10 +15,21 @@ public static class AverageFaceColorMaskBuilder
 {
     public static AverageFaceColorMaskResult Build(BitmapSource source, FaceAnalysisResult analysis, FaceMaskSet? masks = null, CancellationToken cancellationToken = default)
     {
-        return Build(source, analysis, masks, 0.45, cancellationToken);
+        return Build(source, analysis, masks, 0.45, null, cancellationToken);
     }
 
     public static AverageFaceColorMaskResult Build(BitmapSource source, FaceAnalysisResult analysis, FaceMaskSet? masks, double rangeAmount, CancellationToken cancellationToken)
+    {
+        return Build(source, analysis, masks, rangeAmount, null, cancellationToken);
+    }
+
+    public static AverageFaceColorMaskResult Build(
+        BitmapSource source,
+        FaceAnalysisResult analysis,
+        FaceMaskSet? masks,
+        double rangeAmount,
+        MediaColor? manualReferenceColor,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(analysis);
@@ -42,7 +53,8 @@ public static class AverageFaceColorMaskBuilder
             return CreateEmptyResult(width, height);
         }
 
-        FaceColorReference[] references = CreateDefaultSkinColorReferences();
+        FaceColorReference[] defaultReferences = CreateDefaultSkinColorReferences();
+        FaceColorReference[] references = CreateSkinColorReferences(defaultReferences, manualReferenceColor);
         if (references.Length == 0)
         {
             return CreateEmptyResult(width, height);
@@ -54,13 +66,27 @@ public static class AverageFaceColorMaskBuilder
         skinRangeMask = FillEnclosedMaskHoles(skinRangeMask, featureBlockMask, rangeAmount, cancellationToken);
         skinRangeMask = ApplyFeatureBlockMask(skinRangeMask, featureBlockMask);
         double average = skinRangeMask.Average();
-        FaceColorReference displayReference = BlendReferences(references);
+        FaceColorReference displayReference = BlendReferences(defaultReferences);
         MediaColor color = MediaColor.FromRgb(
             (byte)Math.Clamp((int)Math.Round(displayReference.Red), 0, 255),
             (byte)Math.Clamp((int)Math.Round(displayReference.Green), 0, 255),
             (byte)Math.Clamp((int)Math.Round(displayReference.Blue), 0, 255));
 
         return new AverageFaceColorMaskResult(skinRangeMask, color, average);
+    }
+
+    private static FaceColorReference[] CreateSkinColorReferences(FaceColorReference[] defaultReferences, MediaColor? manualReferenceColor)
+    {
+        if (manualReferenceColor is not { A: > 0 } color)
+        {
+            return defaultReferences;
+        }
+
+        FaceColorReference manualReference = CreateReference(color.R, color.G, color.B, 1.0);
+        FaceColorReference[] references = new FaceColorReference[defaultReferences.Length + 1];
+        references[0] = manualReference;
+        Array.Copy(defaultReferences, 0, references, 1, defaultReferences.Length);
+        return references;
     }
 
     private static FaceColorReference[] CreateDefaultSkinColorReferences()
@@ -368,123 +394,7 @@ public static class AverageFaceColorMaskBuilder
             AddMask(block, masks.GlassesMask);
         }
 
-        PaintEstimatedFeaturePaths(block, analysis);
         return block;
-    }
-
-    private static void PaintEstimatedFeaturePaths(MaskPlane block, FaceAnalysisResult analysis)
-    {
-        Int32Rect face = ClampRect(analysis.FaceBox, block.Width, block.Height);
-        double faceWidth = Math.Max(1, face.Width);
-        double faceHeight = Math.Max(1, face.Height);
-        bool hasLeftEye = TryGetPoint(analysis, "left_eye", out WpfPoint leftEye);
-        bool hasRightEye = TryGetPoint(analysis, "right_eye", out WpfPoint rightEye);
-        bool hasNose = TryGetPoint(analysis, "nose_tip", out WpfPoint noseTip);
-        bool hasMouth = TryGetPoint(analysis, "mouth_center", out WpfPoint mouthCenter);
-
-        if (hasLeftEye)
-        {
-            PaintSoftEllipse(block, leftEye.X, leftEye.Y, faceWidth * 0.105, faceHeight * 0.052, 1);
-            PaintSoftEllipse(block, leftEye.X, leftEye.Y - faceHeight * 0.075, faceWidth * 0.12, faceHeight * 0.035, 0.86);
-        }
-
-        if (hasRightEye)
-        {
-            PaintSoftEllipse(block, rightEye.X, rightEye.Y, faceWidth * 0.105, faceHeight * 0.052, 1);
-            PaintSoftEllipse(block, rightEye.X, rightEye.Y - faceHeight * 0.075, faceWidth * 0.12, faceHeight * 0.035, 0.86);
-        }
-
-        if (hasLeftEye && hasRightEye)
-        {
-            double eyeDistance = Math.Max(1, Math.Abs(rightEye.X - leftEye.X));
-            PaintSoftLine(block, leftEye, rightEye, Math.Max(3, eyeDistance * 0.035), 0.72);
-            PaintSoftLine(
-                block,
-                new WpfPoint(leftEye.X - eyeDistance * 0.22, leftEye.Y),
-                new WpfPoint(rightEye.X + eyeDistance * 0.22, rightEye.Y),
-                Math.Max(3, eyeDistance * 0.024),
-                0.58);
-        }
-
-        if (hasNose)
-        {
-            double bridgeY = hasLeftEye && hasRightEye
-                ? (leftEye.Y + rightEye.Y) * 0.5 + faceHeight * 0.035
-                : noseTip.Y - faceHeight * 0.17;
-            PaintSoftLine(block, new WpfPoint(noseTip.X, bridgeY), noseTip, faceWidth * 0.035, 0.92);
-            PaintSoftEllipse(block, noseTip.X, noseTip.Y + faceHeight * 0.035, faceWidth * 0.095, faceHeight * 0.055, 0.88);
-        }
-
-        if (hasMouth)
-        {
-            PaintSoftEllipse(block, mouthCenter.X, mouthCenter.Y, faceWidth * 0.175, faceHeight * 0.052, 1);
-        }
-    }
-
-    private static void PaintSoftEllipse(MaskPlane mask, double centerX, double centerY, double radiusX, double radiusY, double opacity)
-    {
-        if (radiusX <= 0 || radiusY <= 0)
-        {
-            return;
-        }
-
-        int left = Math.Max(0, (int)Math.Floor(centerX - radiusX));
-        int right = Math.Min(mask.Width - 1, (int)Math.Ceiling(centerX + radiusX));
-        int top = Math.Max(0, (int)Math.Floor(centerY - radiusY));
-        int bottom = Math.Min(mask.Height - 1, (int)Math.Ceiling(centerY + radiusY));
-        for (int y = top; y <= bottom; y++)
-        {
-            double dy = (y - centerY) / radiusY;
-            for (int x = left; x <= right; x++)
-            {
-                double dx = (x - centerX) / radiusX;
-                double distance = Math.Sqrt(dx * dx + dy * dy);
-                if (distance > 1)
-                {
-                    continue;
-                }
-
-                double amount = opacity * (1 - SmoothStep(0.62, 1, distance));
-                int index = y * mask.Width + x;
-                mask.Values[index] = Math.Max(mask.Values[index], amount);
-            }
-        }
-    }
-
-    private static void PaintSoftLine(MaskPlane mask, WpfPoint start, WpfPoint end, double radius, double opacity)
-    {
-        double dx = end.X - start.X;
-        double dy = end.Y - start.Y;
-        double lengthSquared = dx * dx + dy * dy;
-        if (lengthSquared <= 0.0001 || radius <= 0)
-        {
-            PaintSoftEllipse(mask, start.X, start.Y, radius, radius, opacity);
-            return;
-        }
-
-        int left = Math.Max(0, (int)Math.Floor(Math.Min(start.X, end.X) - radius));
-        int right = Math.Min(mask.Width - 1, (int)Math.Ceiling(Math.Max(start.X, end.X) + radius));
-        int top = Math.Max(0, (int)Math.Floor(Math.Min(start.Y, end.Y) - radius));
-        int bottom = Math.Min(mask.Height - 1, (int)Math.Ceiling(Math.Max(start.Y, end.Y) + radius));
-        for (int y = top; y <= bottom; y++)
-        {
-            for (int x = left; x <= right; x++)
-            {
-                double t = ((x - start.X) * dx + (y - start.Y) * dy) / lengthSquared;
-                t = Math.Clamp(t, 0, 1);
-                double closestX = start.X + dx * t;
-                double closestY = start.Y + dy * t;
-                double distance = Math.Sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
-                if (distance > radius)
-                {
-                    continue;
-                }
-
-                double amount = opacity * (1 - SmoothStep(0.55, 1, distance / radius));
-                int index = y * mask.Width + x;
-                mask.Values[index] = Math.Max(mask.Values[index], amount);
-            }
-        }
     }
 
     private static void AddMask(MaskPlane target, MaskPlane source)

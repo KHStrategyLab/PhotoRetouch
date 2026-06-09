@@ -171,6 +171,7 @@ public sealed class SnapshotMaskDiskCache
             document.Analysis.DebugWarnings);
         MaskQualityReport quality = document.QualityReport.ToReport();
         SnapshotMaskCacheKey cacheKey = document.CacheKey.ToCacheKey();
+        FaceFeatureMeshSet featureMeshes = FeatureMeshGenerator.Generate(masks.SkinMask.Width, masks.SkinMask.Height, analysis);
         return new FaceSnapshotMaskSet(
             cacheKey.ImageId,
             cacheKey,
@@ -180,7 +181,8 @@ public sealed class SnapshotMaskDiskCache
             analysis,
             masks,
             quality,
-            document.CreatedAtUtc);
+            document.CreatedAtUtc,
+            FeatureMeshes: featureMeshes);
     }
 
     private static void SaveMasks(FaceMaskSet masks, string directory)

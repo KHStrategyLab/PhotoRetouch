@@ -37,15 +37,13 @@ public sealed class NostrilDetector
         }
 
         MaskPlane selectedComponentMask = BuildSelectedComponentMask(width, height, rawComponents, selectedComponents);
-        MaskPlane standardFallback = MaskPlane.Multiply(input.WarpedStandardNostrilMask, selectedComponents.Count == 0 ? 1.0 : 0.42);
-        MaskPlane finalMask = MaskPlane.Union(selectedComponentMask, standardFallback);
+        MaskPlane finalMask = selectedComponentMask;
         finalMask = Dilate(finalMask, 2);
         finalMask = Feather(finalMask);
-        double confidence = CalculateConfidence(selectedComponents, input.WarpedStandardNostrilMask, selectedComponentMask, roi, warnings);
+        double confidence = CalculateConfidence(selectedComponents, selectedComponentMask, roi, warnings);
         if (confidence < 0.45)
         {
             warnings.Add("nostril_detection_low_confidence");
-            finalMask = MaskPlane.Union(finalMask, MaskPlane.Multiply(CreateRoiMask(width, height, roi), 0.25));
         }
 
         return new NostrilDetectorResult(
@@ -254,9 +252,6 @@ public sealed class NostrilDetector
                 score += 0.12;
             }
 
-            double standardOverlap = component.Pixels.Average(pixel => input.WarpedStandardNostrilMask[pixel.X, pixel.Y]);
-            score += Math.Clamp(standardOverlap, 0, 1) * 0.24;
-
             bool isLeft = centerX < input.NoseTip.X;
             components.Add(new NostrilCandidateComponent(
                 component.Id,
@@ -347,7 +342,6 @@ public sealed class NostrilDetector
 
     private static double CalculateConfidence(
         IReadOnlyList<NostrilCandidateComponent> selectedComponents,
-        MaskPlane warpedStandardMask,
         MaskPlane selectedComponentMask,
         Int32Rect roi,
         List<string> warnings)
@@ -359,7 +353,6 @@ public sealed class NostrilDetector
             _ => 0.20
         };
 
-        double overlap = 0;
         double selectedSum = 0;
         for (int y = roi.Y; y < roi.Y + roi.Height; y++)
         {
@@ -367,17 +360,12 @@ public sealed class NostrilDetector
             {
                 double selected = selectedComponentMask[x, y];
                 selectedSum += selected;
-                overlap += Math.Min(selected, warpedStandardMask[x, y]);
             }
         }
 
-        if (selectedSum > 0)
+        if (selectedSum <= 0)
         {
-            confidence += Math.Clamp(overlap / selectedSum, 0, 1) * 0.22;
-        }
-        else
-        {
-            warnings.Add("nostril_using_warped_standard_fallback");
+            warnings.Add("nostril_actual_candidate_empty_no_dummy_fallback");
         }
 
         if (selectedComponents.Count >= 2)
@@ -386,20 +374,6 @@ public sealed class NostrilDetector
         }
 
         return Math.Clamp(confidence, 0, 1);
-    }
-
-    private static MaskPlane CreateRoiMask(int width, int height, Int32Rect roi)
-    {
-        MaskPlane mask = MaskPlane.Empty(width, height);
-        for (int y = roi.Y; y < roi.Y + roi.Height; y++)
-        {
-            for (int x = roi.X; x < roi.X + roi.Width; x++)
-            {
-                mask[x, y] = 1;
-            }
-        }
-
-        return mask;
     }
 
     private static MaskPlane Dilate(MaskPlane source, int radius)

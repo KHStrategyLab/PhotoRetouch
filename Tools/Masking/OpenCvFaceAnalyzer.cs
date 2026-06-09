@@ -60,6 +60,8 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
             selectedFace.LeftEyeCenter,
             selectedFace.RightEyeCenter,
             selectedFace.NoseTip,
+            selectedFace.MouthLeft,
+            selectedFace.MouthRight,
             selectedFace.MouthCenter,
             selectedFace.ChinPoint,
             selectedFace.Confidence,
@@ -136,7 +138,9 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
 
         WpfPoint leftEye = eyeA.X <= eyeB.X ? eyeA : eyeB;
         WpfPoint rightEye = eyeA.X <= eyeB.X ? eyeB : eyeA;
-        WpfPoint mouthCenter = new((mouthA.X + mouthB.X) / 2d, (mouthA.Y + mouthB.Y) / 2d);
+        WpfPoint mouthLeft = mouthA.X <= mouthB.X ? mouthA : mouthB;
+        WpfPoint mouthRight = mouthA.X <= mouthB.X ? mouthB : mouthA;
+        WpfPoint mouthCenter = new((mouthLeft.X + mouthRight.X) / 2d, (mouthLeft.Y + mouthRight.Y) / 2d);
         Int32Rect faceBox = ClampRect(x, y, width, height, imageWidth, imageHeight);
         WpfPoint chinPoint = new(faceBox.X + faceBox.Width * 0.5, faceBox.Y + faceBox.Height * 0.92);
         double faceAngle = Math.Atan2(rightEye.Y - leftEye.Y, rightEye.X - leftEye.X) * 180d / Math.PI;
@@ -148,6 +152,8 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
             ClampPoint(leftEye, imageWidth, imageHeight),
             ClampPoint(rightEye, imageWidth, imageHeight),
             ClampPoint(noseTip, imageWidth, imageHeight),
+            ClampPoint(mouthLeft, imageWidth, imageHeight),
+            ClampPoint(mouthRight, imageWidth, imageHeight),
             ClampPoint(mouthCenter, imageWidth, imageHeight),
             ClampPoint(chinPoint, imageWidth, imageHeight),
             confidence);
@@ -248,6 +254,8 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         WpfPoint LeftEyeCenter,
         WpfPoint RightEyeCenter,
         WpfPoint NoseTip,
+        WpfPoint MouthLeft,
+        WpfPoint MouthRight,
         WpfPoint MouthCenter,
         WpfPoint ChinPoint,
         double Confidence);

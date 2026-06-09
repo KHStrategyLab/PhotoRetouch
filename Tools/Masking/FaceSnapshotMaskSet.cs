@@ -12,7 +12,8 @@ public sealed record FaceSnapshotMaskSet(
     DateTime CreatedAtUtc,
     ParsingMaskSet? ParsingMasks = null,
     FaceMaskSet? WarpedStandardMasks = null,
-    NostrilDetectorResult? NostrilDetection = null)
+    NostrilDetectorResult? NostrilDetection = null,
+    FaceFeatureMeshSet? FeatureMeshes = null)
 {
     public int MaxAllowedStage => QualityReport.MaxAllowedStage;
 

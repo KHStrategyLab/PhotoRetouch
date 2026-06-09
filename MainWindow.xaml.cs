@@ -227,7 +227,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(DebugMaskStatusText));
             if (_isMaskDebugPreviewEnabled)
             {
-                _ = RefreshMaskDebugPreviewAsync(saveDebugImages: false);
+                _ = RefreshMaskDebugPreviewAsync(saveDebugImages: value?.Id is "eye_bg");
             }
         }
     }
@@ -1111,8 +1111,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _isAutoAiMaskPreviewRendering = true;
         AutoAiMaskPreviewStatusText = "평균색 계산 중";
         double skinMaskRange = CaptureSkinMaskRange();
+        System.Windows.Media.Color? manualSkinReferenceColor = _manualSkinReferenceColor;
         AutoAiMaskPreviewOptions previewOptions = CaptureAutoAiMaskPreviewOptions();
-        if (photo.TryGetAverageFaceColorMaskPreview(skinMaskRange, out AverageFaceColorMaskPreviewCache cachedMask))
+        if (photo.TryGetAverageFaceColorMaskPreview(skinMaskRange, manualSkinReferenceColor, out AverageFaceColorMaskPreviewCache cachedMask))
         {
             AutoAiMaskPreviewImage = cachedMask.PreviewImage;
             AutoAiMaskPreviewStatusText = "평균색 마스크";
@@ -1163,6 +1164,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     effectiveSnapshot.Analysis,
                     effectiveSnapshot.Masks,
                     skinMaskRange,
+                    manualSkinReferenceColor,
                     cancellationToken);
                 if (cancellationToken.IsCancellationRequested || colorMask.AverageSignal <= 0.000001)
                 {
@@ -1181,7 +1183,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 colorMask is not null &&
                 effectiveSnapshot is not null)
             {
-                photo.CacheAverageFaceColorMaskPreview(skinMaskRange, colorMask, effectiveSnapshot, maskPreview);
+                photo.CacheAverageFaceColorMaskPreview(skinMaskRange, manualSkinReferenceColor, colorMask, effectiveSnapshot, maskPreview);
                 if (_pendingAutoAiMaskSaveOnComplete)
                 {
                     _pendingAutoAiMaskSaveOnComplete = false;
@@ -1258,6 +1260,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RetouchStageProcessorOutput? output = ReferenceEquals(_lastRetouchOutputPhoto, SelectedPhoto)
             ? _lastRetouchStageOutput
             : null;
+        System.Windows.Media.Color previewBackgroundColor = GetCurrentPreviewBackgroundColor();
 
         if (output is not null)
         {
@@ -1296,6 +1299,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "soft_protect" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.SoftProtectMask, 255, 210, 50, 0.68),
             "retouch_allow" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.RetouchAllowMask, 50, 210, 90, 0.60),
             "eye" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.EyeMask, 90, 170, 255, 0.76),
+            "eye_bg" => DebugMaskExporter.CreateMaskOverlayOnBackgroundPreview(source, masks.EyeMask, previewBackgroundColor, 90, 170, 255, 0.92),
             "eyebrow" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.EyebrowMask, 180, 150, 80, 0.76),
             "lip" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.LipMask, 230, 80, 120, 0.76),
             "inner_mouth" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.InnerMouthMask, 130, 40, 70, 0.78),
@@ -1798,7 +1802,63 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         MaskPlane opacityMask = ApplyMaskOpacity(colorMask.ColorDifferenceMask, skinMaskRange);
         SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(opacityMask), Path.Combine(outputDirectory, "debug_average_skin_mask_bw.png"));
         SaveDebugBitmap(DebugMaskExporter.CreateSourceColorMaskPreview(photo.BaseImage, colorMask.ColorDifferenceMask, skinMaskRange), Path.Combine(outputDirectory, "debug_average_skin_mask_color.png"));
-        string[] lines =
+        SaveDebugBitmap(
+            DebugMaskExporter.CreateMaskOnSolidBackgroundPreview(
+                opacityMask,
+                GetCurrentPreviewBackgroundColor(),
+                80,
+                180,
+                255,
+                0.92),
+            Path.Combine(outputDirectory, "debug_average_skin_mask_on_preview_background.png"));
+        SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.EyeMask), Path.Combine(outputDirectory, "debug_eye_mask.png"));
+        SaveDebugBitmap(
+            DebugMaskExporter.CreateMaskOnSolidBackgroundPreview(
+                snapshot.Masks.EyeMask,
+                GetCurrentPreviewBackgroundColor(),
+                90,
+                170,
+                255,
+                0.92),
+            Path.Combine(outputDirectory, "debug_eye_mask_on_preview_background.png"));
+        SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.LipMask), Path.Combine(outputDirectory, "debug_lip_mask.png"));
+        SaveDebugBitmap(
+            DebugMaskExporter.CreateMaskOnSolidBackgroundPreview(
+                snapshot.Masks.LipMask,
+                GetCurrentPreviewBackgroundColor(),
+                230,
+                80,
+                120,
+                0.90),
+            Path.Combine(outputDirectory, "debug_lip_mask_on_preview_background.png"));
+        SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.NostrilMask), Path.Combine(outputDirectory, "debug_nostril_mask.png"));
+        SaveDebugBitmap(
+            DebugMaskExporter.CreateMaskOnSolidBackgroundPreview(
+                snapshot.Masks.NostrilMask,
+                GetCurrentPreviewBackgroundColor(),
+                255,
+                120,
+                40,
+                0.92),
+            Path.Combine(outputDirectory, "debug_nostril_mask_on_preview_background.png"));
+        SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(snapshot.Masks.SoftProtectMask), Path.Combine(outputDirectory, "debug_nose_soft_protect_shield.png"));
+        SaveDebugBitmap(
+            DebugMaskExporter.CreateMaskOnSolidBackgroundPreview(
+                snapshot.Masks.SoftProtectMask,
+                GetCurrentPreviewBackgroundColor(),
+                255,
+                210,
+                50,
+                0.88),
+            Path.Combine(outputDirectory, "debug_nose_soft_protect_shield_on_preview_background.png"));
+        if (snapshot.FeatureMeshes is not null)
+        {
+            SaveDebugBitmap(
+                DebugMaskExporter.CreateFeatureMeshOverlayPreview(photo.BaseImage, snapshot.FeatureMeshes),
+                Path.Combine(outputDirectory, "debug_feature_mesh_50_overlay.png"));
+        }
+
+        List<string> lines = new()
         {
             "Average Skin Color Mask",
             "Mode: selected_skin_color_only",
@@ -1806,9 +1866,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "ColorPreview: source_pixel_color_mask",
             "DisplayReferenceColor: " + colorMask.ReferenceColor.R + "," + colorMask.ReferenceColor.G + "," + colorMask.ReferenceColor.B,
             "AverageSignal: " + colorMask.AverageSignal.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "LipMask: landmark_path_from_mouth_left_right",
+            "NoseSoftProtect: flat_top_shield_between_upper_brow_area_and_nose_sides",
+            "NoseSoftProtectOpacity: 0.5",
             "ImageId: " + snapshot.ImageId,
             "CacheKey: " + snapshot.CacheKey.StableId
         };
+        if (snapshot.FeatureMeshes is not null)
+        {
+            lines.Add("FeatureMeshMode: black_white_mask_contour_sampling");
+            lines.Add("LipMesh: " + snapshot.FeatureMeshes.LipMesh.Source + " points=" + snapshot.FeatureMeshes.LipMesh.Points.Count);
+            lines.Add("EyeMesh: " + snapshot.FeatureMeshes.EyeMesh.Source + " points=" + snapshot.FeatureMeshes.EyeMesh.Points.Count);
+            lines.Add("NoseMesh: " + snapshot.FeatureMeshes.NoseMesh.Source + " points=" + snapshot.FeatureMeshes.NoseMesh.Points.Count);
+            lines.Add("BrowMesh: " + snapshot.FeatureMeshes.BrowMesh.Source + " points=" + snapshot.FeatureMeshes.BrowMesh.Points.Count);
+        }
+
         File.WriteAllLines(Path.Combine(outputDirectory, "debug_average_skin_mask_report.txt"), lines, System.Text.Encoding.UTF8);
     }
 
@@ -1818,7 +1890,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             "debug_auto_ai_mask_bw.png",
             "debug_auto_ai_mask_color.png",
-            "debug_auto_ai_mask_bw_report.txt"
+            "debug_auto_ai_mask_bw_report.txt",
+            "debug_nose_soft_protect_triangle.png",
+            "debug_nose_soft_protect_triangle_on_preview_background.png"
         };
 
         foreach (string oldName in oldNames)
@@ -4998,6 +5072,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         PushRetouchHistory(before, after);
         photo.RetouchState = after;
         await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+        await RefreshAutoAiMaskPreviewAsync();
         return true;
     }
 
@@ -6096,6 +6171,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         OnPropertyChanged(nameof(PreviewBackgroundBrush));
     }
 
+    private static System.Windows.Media.Color GetCurrentPreviewBackgroundColor()
+    {
+        return TryParsePreviewBackgroundColor(PreviewBackgroundSettings.BackgroundColor, out System.Windows.Media.Color color)
+            ? color
+            : System.Windows.Media.Colors.Black;
+    }
+
     private static SolidColorBrush CreatePreviewBackgroundBrush(string colorText)
     {
         if (!TryParsePreviewBackgroundColor(colorText, out System.Windows.Media.Color color))
@@ -6174,6 +6256,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new("soft_protect", "SoftProtect"),
             new("retouch_allow", "RetouchAllow"),
             new("eye", "Eye"),
+            new("eye_bg", "EyeBg"),
             new("eyebrow", "Eyebrow"),
             new("lip", "Lip"),
             new("inner_mouth", "InnerMouth"),
