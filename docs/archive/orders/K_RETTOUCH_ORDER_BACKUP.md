@@ -505,8 +505,8 @@ Hold 처리된 오더:
 
 추가 문서:
 
-* `docs/orders/ORDER_SEQUENCE_AUDIT_2026-06-09.md`
-* `docs/orders/ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION.md`
+* `docs/archive/orders/ORDER_SEQUENCE_AUDIT_2026-06-09.md`
+* `docs/archive/orders/ORDER_30_HIGH_RES_PERFORMANCE_OPTIMIZATION.md`
 
 현재 주의:
 

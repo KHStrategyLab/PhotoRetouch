@@ -8,6 +8,8 @@ The current priority is not maximum theoretical speed. The priority is stable be
 
 Customization is a product requirement. Do not remove or merge useful photographer controls simply to make the code smaller or the current engine faster. Optimize the preview and engine path instead.
 
+Current source code is the source of truth. When this document conflicts with the application code, update this document to match the code before using it as an engine reference.
+
 ## Current Engine
 
 The current preview engine is a C# CPU engine behind `IPreviewEngine`.
@@ -17,6 +19,7 @@ The current preview engine is a C# CPU engine behind `IPreviewEngine`.
 - `PreviewEngineFactory` chooses the active preview engine.
 - `CSharpPreviewEngine` contains the current managed pixel loop.
 - `PreviewSourceFactory` creates screen-sized effect preview sources.
+- `PreviewRenderTier` separates `LowPreview`, `FastPreview`, `QualityPreview`, and `ExportRender`.
 - App settings state lives in `Settings/` classes, separate from `SettingsWindow.xaml.cs`.
 - Pixel adjustments are calculated on a background thread.
 - Input is blocked while a preview render is running.
@@ -48,6 +51,7 @@ The preview is for judging the edit, not final export quality.
 - Low performance users can also set a maximum long side size.
 - Current allowed settings preview long side range is 800px to 4000px.
 - The settings preview limit is an upper bound; it should not force effect previews to render larger than the visible preview needs.
+- `ExportRender` uses the original-resolution source rather than the display-sized preview source.
 - This policy applies to all interactive tool categories, not only photo adjustment: curves, skin, face shape, eyes, nose, mouth, hair, clothing, and background.
 - Multi-select split preview is for choosing and comparing photos. It should show original/lightweight views and avoid applying retouch effects to all selected images.
 - Original comparison should continue to show the original source image.
@@ -74,7 +78,8 @@ Face shape, eyes, nose, mouth, hair volume, clothing shape, and other geometry t
 - The current UI can show and edit a face work area guide when the Face Shape section is active.
 - The first oval-face pass uses the editable face work area as its explicit target region.
 - Jawline clarity currently uses the editable face work area for a localized lower-side edge pass.
-- Broader geometry rendering should move behind a dedicated warp engine as controls grow.
+- Broader geometry rendering is now first-pass wired through `ShapeBalanceProcessor`, `ShapeBalanceMapBuilder`, and `ShapeBalanceMap`.
+- ShapeBalance is a geometry module, not a skin filter. It can reuse SnapshotMask, landmarks, and HardProtect as reference data, but it must keep its geometry map separate from skin-retouch filters.
 
 ## Skin Filter Policy
 
@@ -105,7 +110,8 @@ Core rules:
 - If AI confidence is weak, widen protection and reduce retouch strength inside the snapshot rather than rebuilding repeatedly.
 - Treat the completed `FaceSnapshotMaskSet` as the shared face backbone for all V1 skin filters. SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, Debug Overlay, Before/After, Preset application, and Batch processing must all read the same per-photo SnapshotMask instead of creating their own face masks.
 - Do not share one SnapshotMask across different photos. Each photo owns its own SnapshotMask; only that photo's filters and debug views reuse it.
-- Keep V2 geometry modules, including `ShapeBalance`, separate from the V1 skin retouch pipeline. After V1, ShapeBalance may reuse SnapshotMask, FaceLandmark, and HardProtect as reference data, but it must apply geometry through its own TransformMap rather than becoming a skin filter.
+- `ShapeBalance` is first-pass code in the current source. It reuses SnapshotMask, landmarks, and HardProtect as geometry reference data, builds a ShapeBalance map, warps image/masks/landmarks together, and then the skin pipeline runs against the balanced image and balanced masks.
+- ShapeBalance remains separate from skin retouch. It is not SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, or TextureRestore.
 
 `FaceSnapshotMaskSet` carries:
 
@@ -133,8 +139,8 @@ Snapshot creation flow:
 11. Apply retouch using the snapshot
 
 The current verification implementation uses `SnapshotMaskBuilder` with `StandardMaskWarpEngine`.
-This stage intentionally does not connect real AI models. It verifies `StandardMaskSet` loading or generation, affine warping, temporary FaceParsing merge, snapshot creation, cache reuse, debug overlay output, and hard-protect behavior first.
-`TemporaryFaceParsingDetector` implements the `IFaceParsingDetector` contract as a fallback scaffold. Real AI detection, landmark, parsing, nostril detection, and triangle mesh warping must keep the same snapshot contract.
+The current implementation connects real FaceBox detection through OpenCV YuNet, uses generated or loaded standard masks, merges the current fallback parsing output, runs NostrilDetector, creates/reuses SnapshotMask, and exports debug overlays.
+`NoFaceParsingDetector` implements the current fallback `IFaceParsingDetector` contract. Real pixel-level FaceParsing AI is still not connected, but future parsing models must keep the same snapshot contract.
 
 Current Standard Mask resources:
 
@@ -181,7 +187,7 @@ Current FaceParsing scaffold:
 - `FaceParsingInput`
 - `ParsingMaskSet`
 - `ParsingLabelMapper`
-- `TemporaryFaceParsingDetector`
+- `NoFaceParsingDetector`
 
 The current merge rule is conservative: protect masks are widened with parsing output, while retouch-allow skin remains constrained by the warped standard mask and hard protection.
 
@@ -237,11 +243,13 @@ Debug outputs include symmetry centerline, regions, strength map, per-part vecto
 
 Current first-pass retouch pipeline:
 
+- If ShapeBalance controls are active, `ShapeBalanceProcessor` first creates or reuses a per-photo `BalancedImageBundle` and the skin pipeline uses `BalancedImage` plus `BalancedMaskSet`.
 - `StagePresetMapper` maps Stage `1-10` to skin smooth, blemish reduce, tone even, texture restore, soft protect opacity, and retouch allow opacity.
 - `BlemishReduceFilter` now provides the first local mask-based blemish pass. It detects small candidates inside `RetouchAllowMask`, avoids `HardProtectMask`, applies weaker handling in `SoftProtectMask`, samples a surrounding skin ring, and caches candidate analysis by Snapshot cache key so Stage changes only change strength.
 - `WrinkleSoftReduceFilter` now provides the first line-based wrinkle softening pass. It detects dark linear candidates from `SoftProtectMask` plus weak `RetouchAllowMask`, separates under-eye, glabella, forehead, nasolabial, mouth-corner, neck, and nose-shadow masks, samples surrounding skin, preserves facial structure with low correction caps, and caches candidate analysis by Snapshot cache key so Stage/toolset changes only change strength.
 - `ToneEven` currently runs as a simple mask-aware processor stage after wrinkle reduction and before texture restoration. The full `ORDER_13_TONE_EVEN` dedicated filter, candidate masks, reports, and slider/toolset binding still need follow-up.
 - `TextureRestoreFilter` now provides the final skin texture restoration pass. It extracts a high-frequency detail preview from the original image, restores limited detail through RetouchAllow and weak SoftProtect masks, lowers restore strength over blemish and wrinkle repair masks, applies PlasticSkinGuard when texture loss is high, restores HardProtect from the original image, and caches analysis by Snapshot cache key so Stage/toolset changes only change strength.
+- `AverageFaceColorMaskBuilder` and `SkinToneMaskBuilder` are available for average face-color/skin-tone mask support and debug previews. They are helper mask builders, not replacements for SnapshotMask.
 - `MaskQualityReport.MaxAllowedStage` gates the requested stage.
 - `RetouchStageProcessor` creates a mask-aware edge-preserving smooth base, applies local blemish and wrinkle passes, applies ToneEven, restores texture, and then runs `HardProtectFinalRestoreFilter`.
 - `RetouchToolset` and `AppliedRetouchOptions` now sit between UI slider values and `RetouchStageProcessor`. Stage presets provide defaults, while changed sliders are treated as user overrides without rebuilding SnapshotMask.

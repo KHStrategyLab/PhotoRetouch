@@ -9,7 +9,7 @@ Sources checked:
 
 - `C:\Users\beint\Downloads\K_RETOUCH_ENGINE_ORDER_BLUEPRINT.md`
 - Recent pasted order attachments in `C:\Users\beint\.codex\attachments`
-- Current project docs under `docs/orders/`
+- Archived project order docs under `docs/archive/orders/`
 - Current code state in `Tools/Masking`
 
 ## Result
@@ -34,7 +34,7 @@ Important caveat:
 | ORDER_04 | FaceBox / keypoint automation | Implemented with analyzer structure and fallback. |
 | ORDER_05 | FaceDetection / FaceLandmark | Implemented first-pass OpenCV YuNet analyzer. |
 | ORDER_06 | Nostril protect mask | Implemented first-pass `NostrilDetector`. |
-| ORDER_07 | FaceParsing | Scaffolded with `TemporaryFaceParsingDetector`; real model still pending. |
+| ORDER_07 | FaceParsing | Scaffolded with current `NoFaceParsingDetector` fallback; real pixel-level model still pending. |
 | ORDER_08 | MaskQualityValidator + Stage Gate | Implemented first-pass quality gate. |
 | ORDER_09 | Retouch Pipeline 1 + StagePresetMapper | Implemented first-pass pipeline. |
 | ORDER_10 | SkinSmooth quality pass | Implemented first-pass mask-aware smoothing. |

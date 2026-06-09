@@ -10,13 +10,15 @@ The application should feel stable, calm, and predictable. Avoid surprising UI m
 
 The current work is not a stage for adding tempting new features.
 
+Current source code is the source of truth. If design documents disagree with code, inspect code first and update the documents before using them as planning references.
+
 `ORDER_01` through `ORDER_30` are the V1 single-face skin retouch engine stabilization flow. Keep the order sequence intact and finish only the current active order.
 
 Stage and Slider changes must not regenerate SnapshotMask. SnapshotMask regeneration is only for image changes, ReAnalyze, and later manual face-keypoint adjustment.
 
 HardProtect outranks every filter. Eyes, eyebrows, lips, inner mouth, teeth, nostrils, hair, beard, mustache, and glasses remain original even at Stage 10.
 
-Multi-face, left/right ShapeBalance, generative AI retouching, background replacement, and clothing retouch are not discarded. They are Hold / After V1.
+ShapeBalance is now first-pass code in the current source, but it remains a geometry module, not a skin filter. Multi-face, generative AI retouching, background replacement, and clothing retouch are still Hold / After V1.
 
 The current goal is not feature expansion. The current goal is to finish the V1 engine reliably.
 
@@ -126,7 +128,7 @@ PhotoRetouch is a professional ID photo retouching tool for photo studio work. I
 - Preserve the subject's original identity and impression.
 - Do not alter eye, nose, mouth, eyebrow, jaw, or face shape from skin filters.
 - Geometry changes belong only in explicit face-shape/feature tools, not in skin cleanup filters.
-- Left/right balance and symmetry correction are not part of the V1 skin retouch engine. Keep them for a separate V2 `ShapeBalance` geometry-warp module that reuses SnapshotMask, FaceLandmark, and HardProtect.
+- Left/right balance and symmetry correction are handled by explicit `ShapeBalance` geometry code when those controls are active. ShapeBalance reuses SnapshotMask, FaceLandmark, and HardProtect, but it must stay separate from the V1 skin filter pipeline.
 - Skin filters should remove or reduce only the intended flaw, such as blemishes, acne, moles, or age spots.
 - Skin texture must remain usable for ID photos. If a filter smears pores, wrinkles, or natural male skin texture, it is too broad.
 - Use narrow masks, skin-tone targeting, optional manual wide-average skin-tone sampling, local edge protection, and feathered protection around eyes, nose, and mouth.
@@ -140,9 +142,11 @@ Skin retouching is now mask-first.
 - Use a Snapshot Mask model: analyze one photo once, save a `FaceSnapshotMaskSet`, and reuse it while retouch strengths or Stage presets change.
 - Current verification stage uses `StandardMaskWarpEngine`: load or generate `StandardMaskSet`, run `IFaceAnalyzer`, affine-warp it to `MaskWarpInput`, run `IFaceParsingDetector`, then merge warped standard masks with parsing masks before building the snapshot.
 - The current default `IFaceAnalyzer` implementation is `OpenCvFaceAnalyzer`; it uses OpenCV YuNet (`Assets/AiModels/face_detection_yunet_2023mar.onnx`) to detect a real FaceBox plus eye, nose, and mouth anchors. `ChinPoint` is still estimated from the detected FaceBox.
-- The current `IFaceParsingDetector` implementation is `TemporaryFaceParsingDetector`; it is a fallback scaffold, not a real AI model. `NostrilDetector` is now implemented as an image-analysis module, but real FaceParsing and triangle mesh model connections remain deferred until debug masks prove stable.
+- The current `IFaceParsingDetector` implementation is `NoFaceParsingDetector`; it is a fallback scaffold, not a real AI model. `NostrilDetector` is implemented as an image-analysis module, but real pixel-level FaceParsing is still not connected.
 - `SnapshotMaskCacheKey` includes image id, image size, face box, face angle, crop version, and mask version. Stage values are never part of the mask cache key.
+- ShapeBalance controls may rebuild the cached ShapeBalance map/balanced bundle, but they must not recreate SnapshotMask unless the image, face work area, manual mask, source file, or explicit ReAnalyze condition requires it.
 - `RetouchStageProcessor` is the current first-pass retouch pipeline. It maps requested Stage `1-10` through `StagePresetMapper`, gates it by `MaskQualityReport.MaxAllowedStage`, and applies retouch only through masks.
+- If ShapeBalance controls are active, `ShapeBalanceProcessor` runs before `RetouchStageProcessor`; the skin pipeline then uses `BalancedImage` and `BalancedMaskSet`.
 - `MaskQualityValidator` now calculates overall, face, landmark, parsing, skin, eye, eyebrow, lip, nostril, hair, hard-protect, and retouch-allow quality scores, plus warnings, fatal errors, strong-retouch safety, and max allowed stage.
 - Fail-safe opacity rules lower retouch strength when mask quality is weak, while HardProtect remains dominant over RetouchAllow.
 - Current SkinSmooth quality pass creates a mask-aware edge-preserving smooth base, extracts a detail layer, restores texture by stage, applies RetouchAllow/SoftProtect blends separately, and finally restores HardProtect pixels from the original.

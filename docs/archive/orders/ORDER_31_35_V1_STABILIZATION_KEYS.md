@@ -13,7 +13,7 @@ Core decision:
 After `ORDER_30`, do not keep adding new core filters or AI features. Move into stabilization, product polish, settings persistence, packaging, and final review.
 
 Current highest-priority note:
-Do not let attractive future features interrupt the current order. Stage and Slider changes are not SnapshotMask regeneration conditions. HardProtect outranks every filter. Hold / After V1 items stay recorded, but they are not part of the current V1 scope.
+Do not let attractive future features interrupt the current order. Stage and Slider changes are not SnapshotMask regeneration conditions. HardProtect outranks every filter. Hold / After V1 items stay recorded, but they are not part of the current V1 scope. Current source code is the source of truth when this document conflicts with implementation.
 
 Shared mask backbone:
 The completed per-photo `FaceSnapshotMaskSet` is the common reference for the V1 skin pipeline. SkinSmooth, BlemishReduce, WrinkleSoftReduce, ToneEven, TextureRestore, Debug Overlay, Preset application, and Batch processing must reuse the same SnapshotMask for that photo. A SnapshotMask is never shared across different photos.
@@ -46,7 +46,6 @@ These items are not discarded, but they are outside the current V1 engine scope:
 - Advanced generative AI retouching.
 - Background replacement.
 - Clothing retouch.
-- Face left/right balance and symmetry correction as `ShapeBalance`.
 - Advanced manual editing tools.
 - Multi-person batch.
 - GPU optimization.
@@ -64,11 +63,11 @@ Rules:
 - `ORDER_31` to `ORDER_35`: V1 stabilization / productization / distribution readiness.
 - Hold items: review after V1.
 
-## V2 ShapeBalance Hold Rule
+## ShapeBalance Current Source Rule
 
 Left/right balance and symmetry correction must not be mixed directly into the V1 skin retouch engine.
 
-After V1, add it as a separate V2 `ShapeBalance` module.
+Current source already has first-pass `ShapeBalance` code. Treat it as an explicit geometry module that can run before skin retouch when shape controls are active, not as a skin filter.
 
 Principles:
 
@@ -78,6 +77,7 @@ Principles:
 - Use HardProtect to prevent excessive deformation of eyes, lips, nostrils, and hairline.
 - Keep Skin Stage and ShapeBalance Stage separate.
 - Start with weak/default-safe values.
+- ShapeBalance can rebuild its own cached map/balanced bundle when shape controls change, but it must not recreate SnapshotMask unless the normal SnapshotMask regeneration conditions are met.
 
 ## Codex Working Rules
 
