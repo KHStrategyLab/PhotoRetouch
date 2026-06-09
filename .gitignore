@@ -16,6 +16,10 @@ TestResults/
 cache/
 *.maskcache
 *.analysiscache
+batch_outputs/
+batch_reports/
+presets/user/
+*.retouchpreset.local.json
 
 test_assets/portraits/original/*
 test_assets/portraits/stage_outputs/*

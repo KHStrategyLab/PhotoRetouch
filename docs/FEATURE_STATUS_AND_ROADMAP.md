@@ -20,7 +20,7 @@ This document tracks what exists now, what is partly implemented, and what still
 ### Needs Work
 
 - App-level project/session persistence.
-- Save/export workflow.
+- Full save/export options UI.
 - File missing status when external delete or rename happens.
 - Better separation between UI layer and preview engine.
 - Undo/redo model.
@@ -254,6 +254,11 @@ Required test image set:
 - `StageCompareReportRunner` is added for ORDER_23. It runs Stage `1`, `5`, and `10` from one SnapshotMask, saves comparison sheets, HardProtect diff images, and JSON/Markdown reports.
 - `SnapshotMaskDiskCache` is added for ORDER_24. Snapshot masks are persisted under local AppData as JSON metadata plus grayscale mask PNGs, and `SnapshotMaskBuilder` now checks memory cache, disk cache, then rebuild.
 - ORDER_25 core manual mask override is added. `ManualMaskOverride`, brush modes, brush painting engine, and final mask composition exist, and the preview pipeline applies manual override layers over SnapshotMask before processing.
+- ORDER_26 core face manual adjustment override is added. Existing face work area edits are persisted as `FaceManualAdjustOverride`, loaded per photo, and included in SnapshotMask cache versioning.
+- ORDER_27 core export service is added. `ExportService` saves JPG/PNG without overwriting the source, auto-renames duplicates, uses highest JPG quality by default, and can write sidecar export reports.
+- ORDER_28 core preset service is added. `RetouchPresetService` stores retouch toolset values only, separates default/user presets, and never stores photo-specific masks or paths.
+- ORDER_29 core batch processing service is added. Batch runs sequentially, applies shared Preset/Toolset values, creates per-photo SnapshotMasks, applies per-photo StageGate, saves through `ExportService`, and writes a batch report.
+- ORDER_30 core high-resolution policy is added. `HighResolutionProcessingPolicy` separates preview downscale decisions from original-resolution export, and batch clears transient per-photo preview caches.
 - `ORDER_SEQUENCE_AUDIT_2026-06-09.md` records that orders `00-30` are accounted for.
 - `ORDER_28_PRESET_SAVE_LOAD.md` is recorded as queued/planned. It must wait until export/save quality options are complete.
 - `NostrilDetector` is added. It creates a lower-nose ROI, finds dark candidate pixels, runs connected component analysis, scores nostril candidates, merges them with the warped standard nostril fallback, and forces the final mask into HardProtect.
@@ -300,6 +305,11 @@ Required test image set:
 - ORDER_24 real reload test to confirm disk cache hits after app restart.
 - Separate AnalysisCache persistence for Blemish, Wrinkle, ToneEven, and TextureRestore candidates.
 - ORDER_25 UI brush cursor, mouse stroke capture, reset button, override persistence, and debug entries for manual masks.
+- ORDER_26 eye/nose/mouth/chin draggable handles and face-adjust debug overlays.
+- ORDER_27 full export options UI and Save As flow.
+- ORDER_28 preset select/save/load/delete UI binding.
+- ORDER_29 batch file list/progress/cancel UI.
+- ORDER_30 full per-filter timing integration in the live pipeline.
 - Stage `1-10` preset mapping with hard protection always preserved.
 - Brush/manual target mode for precise blemish removal.
 - Texture-preserving smoothing.
@@ -358,6 +368,7 @@ Filter implementation order after mask validation:
 ### Needs Work
 
 - Persist editable face work area across app restarts.
+- Individual face keypoint handles for mask alignment.
 - Face landmark detection.
 - Dedicated warp engine with stronger quality controls.
 - Bounds to prevent unrealistic edits.

@@ -33,7 +33,7 @@ public sealed class SnapshotMaskDiskCache
         {
             (DateTime lastWriteTimeUtc, long sourceLength) = photo.GetSourceVersion();
             string imageId = SnapshotMaskBuilder.CreateImageId(photo.Path, lastWriteTimeUtc, sourceLength);
-            string cropVersion = SnapshotMaskBuilder.CreateCropVersion(photo.FaceWorkArea.Clamp());
+            string cropVersion = SnapshotMaskBuilder.CreateCropVersion(photo.FaceWorkArea.Clamp(), photo.FaceManualAdjustOverride);
             foreach (string directory in FindCandidateDirectories(imageId))
             {
                 string metaPath = Path.Combine(directory, "snapshot_meta.json");

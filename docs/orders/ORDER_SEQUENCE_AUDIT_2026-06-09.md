@@ -53,11 +53,11 @@ Important caveat:
 | ORDER_23 | Stage 1/5/10 compare report | Implemented / Needs local image run. |
 | ORDER_24 | SnapshotMask cache persistence | Implemented / Needs real reload test. |
 | ORDER_25 | Manual Mask Brush | InProgress / Core engine implemented. |
-| ORDER_26 | Face position / keypoint manual adjust | Queued/Planned. |
-| ORDER_27 | Export / save options | Queued/Planned. |
-| ORDER_28 | Preset save/load | Queued/Planned. Existing doc created. |
-| ORDER_29 | Batch processing | Queued/Planned. |
-| ORDER_30 | High-res performance optimization | Queued/Planned. Full order stored. |
+| ORDER_26 | Face position / keypoint manual adjust | InProgress / Core implemented; keypoint UI pending. |
+| ORDER_27 | Export / save options | InProgress / Core implemented; full export UI pending. |
+| ORDER_28 | Preset save/load | InProgress / Core implemented; preset UI pending. |
+| ORDER_29 | Batch processing | InProgress / Core implemented; batch UI pending. |
+| ORDER_30 | High-res performance optimization | InProgress / Core implemented; full timing integration pending. |
 | ORDER_31 | Cache / memory cleanup | Queued/Planned as V1 stabilization key. |
 | ORDER_32 | UI product polish | Queued/Planned as V1 stabilization key. |
 | ORDER_33 | User settings persistence | Queued/Planned as V1 stabilization key. |
@@ -74,8 +74,8 @@ Important caveat:
 
 1. Finish build verification for the current `ORDER_16` integration changes.
 2. Backup/commit current state.
-3. Continue with `ORDER_17_PROJECT_STRUCTURE_TOOLSET_SLIDER`.
-4. During `ORDER_17/18`, explicitly connect the skin tone slider path so `ORDER_13_TONE_EVEN` is not forgotten.
+3. Continue with `ORDER_31_CACHE_MEMORY_CLEANUP` after ORDER_30 verification.
+4. Keep ORDER_25-30 UI completion notes visible during product polish.
 
 ## Current Risk Notes
 

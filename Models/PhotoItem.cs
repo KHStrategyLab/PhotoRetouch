@@ -74,6 +74,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
     public RetouchAdjustmentState? RetouchState { get; set; }
     public FaceSnapshotMaskSet? SnapshotMaskSet { get; set; }
     public ManualMaskOverride? ManualMaskOverride { get; set; }
+    public FaceManualAdjustOverride? FaceManualAdjustOverride { get; private set; }
     public FaceWorkArea FaceWorkArea
     {
         get => _faceWorkArea;
@@ -198,7 +199,9 @@ public sealed class PhotoItem : INotifyPropertyChanged
         BitmapSource image = LoadBitmap(path, null);
         BitmapSource thumbnail = LoadBitmap(path, 96);
         (DateTime lastWriteTimeUtc, long length) = GetFileVersion(path);
-        return new PhotoItem(path, image, thumbnail, lastWriteTimeUtc, length);
+        PhotoItem photo = new(path, image, thumbnail, lastWriteTimeUtc, length);
+        photo.LoadManualFaceAdjustOverride();
+        return photo;
     }
 
     public void ReloadImage()
@@ -208,6 +211,8 @@ public sealed class PhotoItem : INotifyPropertyChanged
         _neutralPreviewImage = null;
         SnapshotMaskSet = null;
         ManualMaskOverride = null;
+        FaceManualAdjustOverride = null;
+        LoadManualFaceAdjustOverride();
         Image = _baseImage;
         Thumbnail = LoadBitmap(Path, 96);
         UpdateFileVersion(Path);
@@ -296,11 +301,49 @@ public sealed class PhotoItem : INotifyPropertyChanged
         UpdateFileVersion(newPath);
         SnapshotMaskSet = null;
         ManualMaskOverride = null;
+        FaceManualAdjustOverride = null;
     }
 
     public void ResetManualMaskOverride()
     {
         ManualMaskOverride = null;
+    }
+
+    public void ClearTransientPreviewCache()
+    {
+        _effectPreviewCache.Clear();
+        _neutralPreviewImage = null;
+    }
+
+    public void ApplyManualFaceAdjustOverride(FaceWorkArea faceWorkArea, string snapshotMaskCacheKey)
+    {
+        FaceManualAdjustOverride = (FaceManualAdjustOverride ?? FaceManualAdjustOverride.Create(this, snapshotMaskCacheKey, faceWorkArea))
+            .WithFaceBox(faceWorkArea);
+        FaceManualAdjustStore.Default.Save(this, FaceManualAdjustOverride);
+        FaceWorkArea clampedValue = faceWorkArea.Clamp();
+        if (_faceWorkArea != clampedValue)
+        {
+            _faceWorkArea = clampedValue;
+            OnPropertyChanged(nameof(FaceWorkArea));
+        }
+
+        SnapshotMaskSet = null;
+    }
+
+    public void ResetManualFaceAdjustOverride()
+    {
+        FaceManualAdjustOverride = null;
+        FaceManualAdjustStore.Default.Delete(this);
+        FaceWorkArea = FaceWorkArea.Default;
+    }
+
+    private void LoadManualFaceAdjustOverride()
+    {
+        FaceManualAdjustOverride = FaceManualAdjustStore.Default.TryLoad(this);
+        if (FaceManualAdjustOverride?.FaceBoxOverride is { } faceBoxOverride)
+        {
+            _faceWorkArea = faceBoxOverride.Clamp();
+        }
     }
 
     public void ResetPreviewPan()

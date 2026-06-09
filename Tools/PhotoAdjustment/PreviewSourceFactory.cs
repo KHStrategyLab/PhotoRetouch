@@ -9,7 +9,10 @@ public static class PreviewSourceFactory
     {
         if (PreviewSettings.UseOriginalSize && visibleMaxLongSide is null)
         {
-            return source;
+            ImageProcessingDecision decision = HighResolutionProcessingPolicy.Decide(source, null);
+            return decision.MemoryWarning
+                ? HighResolutionProcessingPolicy.CreatePreviewSource(source, HighResolutionProcessingPolicy.CurrentProfile.PreviewMaxLongSide)
+                : source;
         }
 
         int longestSide = Math.Max(source.PixelWidth, source.PixelHeight);
@@ -29,9 +32,6 @@ public static class PreviewSourceFactory
             return source;
         }
 
-        double scale = (double)maxLongSide / longestSide;
-        TransformedBitmap preview = new(source, new ScaleTransform(scale, scale));
-        preview.Freeze();
-        return preview;
+        return HighResolutionProcessingPolicy.CreatePreviewSource(source, maxLongSide);
     }
 }

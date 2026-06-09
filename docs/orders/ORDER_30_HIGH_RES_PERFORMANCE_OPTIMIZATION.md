@@ -3,7 +3,7 @@
 # High-Resolution Image Processing / Performance Optimization
 
 Status:
-Queued / Planned
+InProgress / Core implemented
 
 Prerequisite:
 ORDER_29_BATCH_PROCESSING
@@ -164,6 +164,17 @@ Preferred `MaskCoordinateSpace`:
 - High-resolution images do not freeze the app or grow memory excessively.
 - Build has no errors.
 
+## Current Implementation Notes
+
+- Added `ImageProcessingProfile`.
+- Added `HighResolutionProcessingPolicy`.
+- Added `ImageProcessingDecision`.
+- Added `PipelinePerformanceTimer` and `PipelinePerformanceReport` scaffolding.
+- `PreviewSourceFactory` now delegates high-resolution preview creation through the high-resolution policy when a downscaled preview is needed.
+- The default profile keeps preview long side near `1600` while export remains allowed at original resolution.
+- Batch processing clears per-photo transient preview cache after each item.
+- Full per-filter timing integration is still pending.
+
 ## Branch Signals
 
 If complete and build is clean:
@@ -183,4 +194,3 @@ Block debug generation when debug mode is off.
 
 If Stage changes rerun analysis:
 Return to ORDER_16 / ORDER_18 event flow review.
-

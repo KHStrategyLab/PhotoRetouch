@@ -8,7 +8,7 @@ Preset save / load
 
 ## Status
 
-Queued / Planned
+InProgress / Core implemented
 
 ## Prerequisite
 
@@ -136,3 +136,21 @@ AppliedStage = min(Preset.Stage, Current MaskQualityReport.MaxAllowedStage)
 - PresetVersion exists.
 - Corrupt preset files do not crash the app.
 - Build passes.
+
+## Current Implementation Notes
+
+- Added `RetouchPreset`.
+- Added `RetouchPresetService`.
+- Default and user preset directories are separated under local AppData:
+  - `PhotoRetouch/presets/default/`
+  - `PhotoRetouch/presets/user/`
+- Default presets are generated:
+  - Natural
+  - Studio
+  - Beauty
+  - Strong
+- Preset JSON extension:
+  - `.retouchpreset.json`
+- Presets store only toolset values and stage.
+- Presets do not store SnapshotMask, FaceBox, FaceLandmarks, image hash, or private image path.
+- UI binding for preset select/save/load is still pending.

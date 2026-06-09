@@ -53,7 +53,8 @@ public sealed class SnapshotMaskBuilder
             lastWriteTimeUtc,
             sourceLength,
             photo.BaseImage,
-            photo.FaceWorkArea);
+            photo.FaceWorkArea,
+            photo.FaceManualAdjustOverride);
         photo.SnapshotMaskSet = snapshot;
         _diskCache.Save(snapshot);
         Interlocked.Increment(ref _createdCount);
@@ -65,7 +66,8 @@ public sealed class SnapshotMaskBuilder
         DateTime sourceLastWriteTimeUtc,
         long sourceLength,
         BitmapSource source,
-        FaceWorkArea faceWorkArea)
+        FaceWorkArea faceWorkArea,
+        FaceManualAdjustOverride? faceManualAdjustOverride)
     {
         PortraitMaskResult result = _maskEngine.Analyze(source, faceWorkArea);
         SnapshotMaskCacheKey cacheKey = CreateCacheKey(
@@ -74,6 +76,7 @@ public sealed class SnapshotMaskBuilder
             sourceLength,
             source,
             faceWorkArea,
+            faceManualAdjustOverride,
             result.Analysis.FaceBox,
             result.Analysis.FaceAngle,
             _maskEngine.MaskVersion);
@@ -99,7 +102,7 @@ public sealed class SnapshotMaskBuilder
                snapshot.SourceLength == sourceLength &&
                snapshot.CacheKey.ImageWidth == photo.BaseImage.PixelWidth &&
                snapshot.CacheKey.ImageHeight == photo.BaseImage.PixelHeight &&
-               snapshot.CacheKey.CropVersion == CreateCropVersion(photo.FaceWorkArea.Clamp()) &&
+               snapshot.CacheKey.CropVersion == CreateCropVersion(photo.FaceWorkArea.Clamp(), photo.FaceManualAdjustOverride) &&
                snapshot.CacheKey.MaskVersion == _maskEngine.MaskVersion;
     }
 
@@ -117,6 +120,7 @@ public sealed class SnapshotMaskBuilder
         long sourceLength,
         BitmapSource source,
         FaceWorkArea faceWorkArea,
+        FaceManualAdjustOverride? faceManualAdjustOverride,
         System.Windows.Int32Rect faceBox,
         double faceAngle,
         string maskVersion)
@@ -128,17 +132,25 @@ public sealed class SnapshotMaskBuilder
             source.PixelHeight,
             faceBox,
             faceAngle,
-            CreateCropVersion(faceWorkArea.Clamp()),
+            CreateCropVersion(faceWorkArea.Clamp(), faceManualAdjustOverride),
             maskVersion);
     }
 
     public static string CreateCropVersion(FaceWorkArea area)
     {
-        return string.Join(
+        return CreateCropVersion(area, null);
+    }
+
+    public static string CreateCropVersion(FaceWorkArea area, FaceManualAdjustOverride? faceManualAdjustOverride)
+    {
+        string faceWorkAreaVersion = string.Join(
             ",",
             area.CenterX.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
             area.CenterY.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
             area.Width.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
             area.Height.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture));
+        return faceManualAdjustOverride is { HasOverrides: true }
+            ? faceWorkAreaVersion + "|manual:" + faceManualAdjustOverride.StableVersion
+            : faceWorkAreaVersion;
     }
 }

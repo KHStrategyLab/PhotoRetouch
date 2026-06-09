@@ -1562,10 +1562,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             BitmapSource adjustedImage = await Task.Run(() =>
                 _previewEngine.Render(photo.BaseImage, adjustment));
 
-            await Task.Run(() => SaveBitmapToFile(adjustedImage, savePath));
+            ExportService exportService = new();
+            ExportResult exportResult = await Task.Run(() => exportService.Save(new ExportRequest(
+                photo.BaseImage,
+                adjustedImage,
+                photo.Path,
+                RequestedStage: 1,
+                AppliedStage: 1,
+                photo.SnapshotMaskSet?.QualityReport,
+                null,
+                new ExportOptions(OutputDirectory: Path.GetDirectoryName(savePath), SaveSidecarReport: true),
+                Array.Empty<string>())));
             System.Windows.MessageBox.Show(
                 this,
-                $"\uC800\uC7A5\uD588\uC5B4.\n{savePath}",
+                $"\uC800\uC7A5\uD588\uC5B4.\n{exportResult.SavedFilePath}",
                 "\uC800\uC7A5",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -2446,7 +2456,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
             if (section.Id == "face_shape" && SelectedPhoto is not null)
             {
-                SelectedPhoto.FaceWorkArea = FaceWorkArea.Default;
+                SelectedPhoto.ResetManualFaceAdjustOverride();
                 OnFaceWorkAreaOverlayPropertiesChanged();
             }
         }
@@ -3613,6 +3623,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _isDraggingFaceWorkArea = false;
         _faceWorkAreaDragMode = FaceWorkAreaDragMode.None;
         PushRetouchHistory(_faceWorkAreaDragUndoBeforeState, CaptureRetouchState());
+        if (SelectedPhoto is not null)
+        {
+            string snapshotKey = SelectedPhoto.SnapshotMaskSet?.CacheKey.StableId ?? string.Empty;
+            SelectedPhoto.ApplyManualFaceAdjustOverride(SelectedPhoto.FaceWorkArea, snapshotKey);
+        }
+
         _faceWorkAreaDragUndoBeforeState = null;
         if (Mouse.Captured == sender)
         {
