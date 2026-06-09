@@ -10,6 +10,20 @@ public sealed class AnchorMeshResult
 
     public AnchorMeshFeatureSet Features { get; set; } = new();
 
+    public AnchorFaceMeasurements? Measurements { get; set; }
+
+    public AnchorOvalProfileMetrics? OvalProfile { get; set; }
+
+    public FaceFitBox? FitBox { get; set; }
+
+    public AnchorPoseInfo? Pose { get; set; }
+
+    public List<AnchorMeshEdge> TopologyEdges { get; } = new();
+
+    public AnchorMorphGroupSet MorphGroups { get; set; } = new();
+
+    public AnchorWarpHandleGroupSet WarpHandleGroups { get; set; } = new();
+
     public bool IsValid { get; set; }
 
     public float Confidence { get; set; }

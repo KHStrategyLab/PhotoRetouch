@@ -41,6 +41,26 @@ public sealed class AnchorMeshDebugOverlayRenderer
         SaveFeatureOverlay(source, result.Features, path, "K-AnchorMesh snapped");
     }
 
+    public void SaveTopologyOverlay(BitmapSource source, AnchorMeshResult result, string path)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        DrawingVisual visual = new();
+        using (DrawingContext context = visual.RenderOpen())
+        {
+            context.DrawImage(source, new WpfRect(0, 0, width, height));
+            DrawFitBoxes(context, result);
+            DrawTopologyEdges(context, result.Features, result.TopologyEdges);
+            DrawFeatures(context, result.Features, 1.0, 1.0);
+            DrawLabel(context, "K-AnchorMesh topology");
+        }
+
+        RenderTargetBitmap bitmap = new(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        SaveBitmap(path, bitmap);
+    }
+
     public void SaveAlignedVsSnappedOverlay(BitmapSource source, AnchorMeshResult result, string path)
     {
         if (result.YuNetAlignedFeatures is null)
@@ -55,6 +75,7 @@ public sealed class AnchorMeshDebugOverlayRenderer
         using (DrawingContext context = visual.RenderOpen())
         {
             context.DrawImage(source, new WpfRect(0, 0, width, height));
+            DrawFitBoxes(context, result);
             DrawGhostFeatures(context, result.YuNetAlignedFeatures);
             DrawSnapVectors(context, result.YuNetAlignedFeatures, result.Features);
             DrawFeatures(context, result.Features, 1.0, 1.0);
@@ -190,6 +211,83 @@ public sealed class AnchorMeshDebugOverlayRenderer
                 context.DrawLine(vectorPen, new WpfPoint(before.SnappedX, before.SnappedY), new WpfPoint(after.SnappedX, after.SnappedY));
             }
         }
+    }
+
+    private static void DrawTopologyEdges(DrawingContext context, AnchorMeshFeatureSet features, IReadOnlyList<AnchorMeshEdge> edges)
+    {
+        Dictionary<string, AnchorMeshPoint> points = features.GetAll()
+            .SelectMany(feature => feature.Points)
+            .ToDictionary(point => point.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (AnchorMeshEdge edge in edges)
+        {
+            if (!edge.IsDebugVisible ||
+                !points.TryGetValue(edge.From, out AnchorMeshPoint? from) ||
+                !points.TryGetValue(edge.To, out AnchorMeshPoint? to))
+            {
+                continue;
+            }
+
+            MediaColor color = edge.Kind switch
+            {
+                AnchorMeshEdgeKind.Contour => MediaColor.FromArgb(115, 255, 255, 255),
+                AnchorMeshEdgeKind.Structural => MediaColor.FromArgb(165, 220, 220, 225),
+                AnchorMeshEdgeKind.MorphControl => MediaColor.FromArgb(210, 185, 105, 255),
+                _ => MediaColor.FromArgb(125, 255, 255, 255)
+            };
+            double thickness = edge.Kind == AnchorMeshEdgeKind.MorphControl ? 2.2 : 1.2;
+            MediaPen pen = new(new MediaSolidColorBrush(color), thickness);
+            context.DrawLine(pen, new WpfPoint(from.SnappedX, from.SnappedY), new WpfPoint(to.SnappedX, to.SnappedY));
+        }
+    }
+
+    private static void DrawFitBoxes(DrawingContext context, AnchorMeshResult result)
+    {
+        if (result.YuNetAnchors is not null)
+        {
+            System.Drawing.RectangleF box = result.YuNetAnchors.FaceBox;
+            MediaPen yuNetPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(220, 80, 170, 255)), 2.0);
+            context.DrawRectangle(null, yuNetPen, new WpfRect(box.X, box.Y, box.Width, box.Height));
+        }
+
+        if (result.FitBox is not null)
+        {
+            DrawRotatedRect(
+                context,
+                result.FitBox.CenterX,
+                result.FitBox.CenterY,
+                result.FitBox.Width,
+                result.FitBox.Height,
+                result.FitBox.RotationRad,
+                new MediaPen(new MediaSolidColorBrush(MediaColor.FromArgb(235, 80, 255, 135)), 2.4));
+        }
+    }
+
+    private static void DrawRotatedRect(DrawingContext context, float centerX, float centerY, float width, float height, float angle, MediaPen pen)
+    {
+        float halfWidth = width * 0.5f;
+        float halfHeight = height * 0.5f;
+        WpfPoint[] points =
+        [
+            RotatePoint(-halfWidth, -halfHeight, centerX, centerY, angle),
+            RotatePoint(halfWidth, -halfHeight, centerX, centerY, angle),
+            RotatePoint(halfWidth, halfHeight, centerX, centerY, angle),
+            RotatePoint(-halfWidth, halfHeight, centerX, centerY, angle)
+        ];
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            context.DrawLine(pen, points[i], points[(i + 1) % points.Length]);
+        }
+    }
+
+    private static WpfPoint RotatePoint(float x, float y, float centerX, float centerY, float angle)
+    {
+        float cos = MathF.Cos(angle);
+        float sin = MathF.Sin(angle);
+        return new WpfPoint(
+            x * cos - y * sin + centerX,
+            x * sin + y * cos + centerY);
     }
 
     private static void DrawFeatureLines(DrawingContext context, AnchorMeshFeature feature, MediaPen pen, double scaleX, double scaleY)

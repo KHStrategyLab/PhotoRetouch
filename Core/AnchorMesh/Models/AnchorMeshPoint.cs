@@ -16,6 +16,16 @@ public sealed class AnchorMeshPoint
 
     public float TemplateZ { get; init; }
 
+    public float PoseX { get; set; }
+
+    public float PoseY { get; set; }
+
+    public float PoseZ { get; set; }
+
+    public float ProjectedX { get; set; }
+
+    public float ProjectedY { get; set; }
+
     public float ImageX { get; set; }
 
     public float ImageY { get; set; }
@@ -36,6 +46,12 @@ public sealed class AnchorMeshPoint
 
     public bool IsLocked { get; set; }
 
+    public AnchorPointVisibility Visibility { get; set; } = AnchorPointVisibility.Active;
+
+    public float VisibilityWeight { get; set; } = 1.0f;
+
+    public bool IsOccluded { get; set; }
+
     public string Source { get; set; } = "Template";
 
     public AnchorMeshPoint Clone()
@@ -49,6 +65,11 @@ public sealed class AnchorMeshPoint
             TemplateX = TemplateX,
             TemplateY = TemplateY,
             TemplateZ = TemplateZ,
+            PoseX = PoseX,
+            PoseY = PoseY,
+            PoseZ = PoseZ,
+            ProjectedX = ProjectedX,
+            ProjectedY = ProjectedY,
             ImageX = ImageX,
             ImageY = ImageY,
             SnappedX = SnappedX,
@@ -59,6 +80,9 @@ public sealed class AnchorMeshPoint
             SnapWeight = SnapWeight,
             IsAnchor = IsAnchor,
             IsLocked = IsLocked,
+            Visibility = Visibility,
+            VisibilityWeight = VisibilityWeight,
+            IsOccluded = IsOccluded,
             Source = Source
         };
     }

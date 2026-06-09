@@ -55,7 +55,9 @@ public sealed class AnchorMeshSoftSnapper
                 if (feature.Name.Equals("FaceOutline", StringComparison.OrdinalIgnoreCase))
                 {
                     ConstrainClosedFeatureSpacing(feature, originalPositions, 0.72f, 1.42f, 4);
+                    ConstrainFaceOutlineToEggShape(feature, 0.68f);
                     SmoothClosedFeature(feature, 0.28f);
+                    ConstrainFaceOutlineToEggShape(feature, 0.36f);
                     ConstrainClosedFeatureSpacing(feature, originalPositions, 0.76f, 1.36f, 2);
                 }
 
@@ -191,6 +193,79 @@ public sealed class AnchorMeshSoftSnapper
             "Hairline" => 18,
             _ => 6
         };
+    }
+
+    private static void ConstrainFaceOutlineToEggShape(AnchorMeshFeature feature, float amount)
+    {
+        if (!feature.IsClosedLoop || feature.Points.Count < 8)
+        {
+            return;
+        }
+
+        float cos = MathF.Cos(feature.AngleRad);
+        float sin = MathF.Sin(feature.AngleRad);
+        float minY = float.MaxValue;
+        float maxY = float.MinValue;
+        float maxAbsX = 0;
+        Span<(float X, float Y)> localPoints = stackalloc (float X, float Y)[feature.Points.Count];
+
+        for (int i = 0; i < feature.Points.Count; i++)
+        {
+            AnchorMeshPoint point = feature.Points[i];
+            float dx = point.SnappedX - feature.CenterX;
+            float dy = point.SnappedY - feature.CenterY;
+            float localX = dx * cos + dy * sin;
+            float localY = -dx * sin + dy * cos;
+            localPoints[i] = (localX, localY);
+            minY = MathF.Min(minY, localY);
+            maxY = MathF.Max(maxY, localY);
+            maxAbsX = MathF.Max(maxAbsX, MathF.Abs(localX));
+        }
+
+        float midY = (minY + maxY) * 0.5f;
+        float halfHeight = MathF.Max(1, (maxY - minY) * 0.5f);
+        float baseHalfWidth = MathF.Max(1, maxAbsX);
+        for (int i = 0; i < feature.Points.Count; i++)
+        {
+            AnchorMeshPoint point = feature.Points[i];
+            float localX = localPoints[i].X;
+            float localY = localPoints[i].Y;
+            float yNorm = Math.Clamp((localY - midY) / halfHeight, -1.0f, 1.0f);
+            float profileWidth = GetEggProfileHalfWidth(yNorm, baseHalfWidth);
+            float targetX = MathF.Sign(localX) * profileWidth;
+            if (MathF.Abs(targetX) > MathF.Abs(localX))
+            {
+                targetX = localX;
+            }
+
+            if (MathF.Abs(localX) < 0.75f)
+            {
+                targetX = localX;
+            }
+
+            float newLocalX = Lerp(localX, targetX, amount);
+            point.SnappedX = feature.CenterX + newLocalX * cos - localY * sin;
+            point.SnappedY = feature.CenterY + newLocalX * sin + localY * cos;
+            point.ImageX = point.SnappedX;
+            point.ImageY = point.SnappedY;
+        }
+
+        AnchorMeshMetrics.Update(feature, feature.AngleRad);
+    }
+
+    private static float GetEggProfileHalfWidth(float yNorm, float baseHalfWidth)
+    {
+        float ellipse = MathF.Sqrt(MathF.Max(0, 1.0f - yNorm * yNorm));
+        float cheekBoost = 1.0f + 0.16f * MathF.Exp(-MathF.Pow((yNorm + 0.08f) / 0.38f, 2));
+        float jawTaper = 1.0f - 0.30f * SmoothStep(0.42f, 0.98f, yNorm);
+        float foreheadTaper = 1.0f - 0.16f * SmoothStep(0.62f, 1.0f, -yNorm);
+        return baseHalfWidth * ellipse * cheekBoost * jawTaper * foreheadTaper;
+    }
+
+    private static float SmoothStep(float edge0, float edge1, float value)
+    {
+        float t = Math.Clamp((value - edge0) / Math.Max(0.0001f, edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
     }
 
     private static float GetMinimumSnapWeight(string featureName)

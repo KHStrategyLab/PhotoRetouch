@@ -171,6 +171,66 @@ Skin retouching is now mask-first.
 - Prepare a real test image set before judging mask quality: age/gender coverage, acne, blemishes, freckles, redness, wrinkles, pores, beard shadow, large nostrils, strong under-nose shadow, thick eyebrows, clear eyelashes, strong lip edge, glasses, beard, hair touching the face, smiling/open-mouth images, near-side faces, strong lighting, and strong shadows.
 - The first UI surface for this work should include mask debug viewing before stronger retouch controls.
 
+## K-AnchorMesh And K-AnchorMorph Purpose
+
+K-AnchorMesh and K-AnchorMorph are not automatic AI beautification or automatic cosmetic-surgery engines.
+
+Their purpose is to provide photographer-controlled shape correction handles that the user can adjust while watching the image.
+
+The engine should only:
+
+- Locate face feature positions.
+- Build reference points for eyes, nose, mouth, chin, jaw, and face outline.
+- Measure lengths, ratios, symmetry, width profiles, and guide scores.
+- Provide weak, local MorphGroups that sliders can use when the relevant control is active.
+
+The final judgment belongs to the user.
+
+- Do not let AI decide whether a face is beautiful or not.
+- Do not automatically force a face into an oval shape.
+- Do not significantly change the subject's original identity or impression.
+- Use oval scores, symmetry values, ratios, and mesh data as guides for controls, not as automatic correction commands.
+- ShapeBalance and K-AnchorMorph must stay separate from skin filters.
+- Image pixels and masks should be transformed together only when an explicit geometry tool is active.
+
+Core goal: make shape correction possible for the human operator by providing reliable handles, measurements, and weak controllable morph groups.
+
+## K-AnchorWarp Direction
+
+The shape-correction direction is moving from slider-centered edits to direct 2.5D handle-based local warp.
+
+K-AnchorWarp is not an automatic beautification engine. It is a controlled geometry tool that lets the user drag handles on top of the face while watching the image.
+
+Implementation order:
+
+1. Separate real handle groups from the mesh.
+2. Let handle dragging preview mesh movement first, without changing pixels.
+3. Define `WarpGroup` with control, falloff, and locked points.
+4. Implement an ROI-based MLS Similarity or MLS Affine warp solver.
+5. Add local preview warp for eyes, mouth, chin, jawline, and face outline first.
+6. Add final high-quality render after the preview path is stable.
+
+Rules:
+
+- Keep K-AnchorWarp separate from the existing retouch engine.
+- Do not replace skin filters with geometry warp.
+- Do not automatically beautify or force oval shape.
+- Use limited safe zones, local ROI warp, and handle-based interaction.
+- Mesh movement preview comes before pixel warp.
+- Image pixels and masks must be warped together only when the explicit geometry tool is active.
+- Final quality render must be separate from fast interactive preview.
+
+Initial handle targets: `LeftEye`, `RightEye`, `LeftBrow`, `RightBrow`, `Nose`, `Mouth`, `Philtrum`, `Chin`, `Jawline`, and `FaceOutline`.
+
+K-AnchorWarp should expose workflow modes instead of one intimidating free-transform surface:
+
+- Easy Liquify mode: show only simple, safe handles for common photographer adjustments.
+- Advanced Liquify mode: expose more detailed local handles, falloff controls, and debug guides.
+- Auto Assist mode: use measurements and guide scores only to propose or initialize weak adjustments; the user still approves and controls the result.
+- Full AUTO mode, if ever added, must remain optional and conservative. It must not replace the user as the final judge.
+
+Default should be Easy Liquify. Advanced and Auto modes should be separate surfaces or tabs if they do not fit cleanly into the existing tool panels.
+
 ## Engine Roadmap
 
 Already completed before adding C++:
