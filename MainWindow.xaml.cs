@@ -127,9 +127,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             ? $"Mask {SelectedDebugMaskOption.Name} / pipeline first"
             : $"Mask {SelectedDebugMaskOption.Name}"
         : "Mask off";
-    public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "파이프라인 끄기" : "파이프라인 보정";
+    public string DummyMaskRetouchButtonText => _isDummyMaskRetouchPreviewEnabled ? "피부 보정 끄기" : "피부 보정";
     public string SnapshotMaskStatusText => $"Snapshot {_snapshotMaskBuilder.CreatedCount} / reuse {_snapshotMaskBuilder.CacheHitCount} / disk {_snapshotMaskBuilder.DiskCacheHitCount} {RetouchStageStatusText}";
     public string RetouchBindingStatusText => _lastRetouchBindingReport.ToStatusText();
+    public Visibility DeveloperStatusVisibility => _isMaskDebugPreviewEnabled || _isDummyMaskRetouchPreviewEnabled
+        ? Visibility.Visible
+        : Visibility.Collapsed;
 
     public double DummyMaskStageValue
     {
@@ -179,6 +182,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ? string.Empty
         : $"req {_lastRetouchProcessReport.RequestedStage} / app {_lastRetouchProcessReport.AppliedStage} / max {_lastRetouchProcessReport.MaxAllowedStage}";
 
+    private void OnDeveloperStatusPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SnapshotMaskStatusText));
+        OnPropertyChanged(nameof(DebugMaskStatusText));
+        OnPropertyChanged(nameof(RetouchBindingStatusText));
+        OnPropertyChanged(nameof(DeveloperStatusVisibility));
+    }
+
     public bool IsSectionOrderEditMode
     {
         get => _isSectionOrderEditMode;
@@ -209,6 +220,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(MaskDebugButtonText));
             OnPropertyChanged(nameof(DebugMaskPanelVisibility));
             OnPropertyChanged(nameof(DebugMaskStatusText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             _selectedPhoto = value;
             ResetPreviewPan();
             ZoomPercent = 100;
@@ -219,6 +231,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(MockPreviewVisibility));
             OnPropertyChanged(nameof(PreviewRows));
             OnPropertyChanged(nameof(PreviewColumns));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             OnPreviewTransformPropertiesChanged();
         }
     }
@@ -512,6 +525,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 OnPropertyChanged(nameof(MaskDebugButtonText));
                 OnPropertyChanged(nameof(DebugMaskPanelVisibility));
                 OnPropertyChanged(nameof(DebugMaskStatusText));
+                OnPropertyChanged(nameof(DeveloperStatusVisibility));
             }
 
             OnPropertyChanged(nameof(PhotoSelectionText));
@@ -874,6 +888,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(MaskDebugButtonText));
             OnPropertyChanged(nameof(DebugMaskPanelVisibility));
             OnPropertyChanged(nameof(DebugMaskStatusText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             RestoreMaskDebugPreviousPreview();
             return;
         }
@@ -893,6 +908,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         OnPropertyChanged(nameof(MaskDebugButtonText));
         OnPropertyChanged(nameof(DebugMaskPanelVisibility));
         OnPropertyChanged(nameof(DebugMaskStatusText));
+        OnPropertyChanged(nameof(DeveloperStatusVisibility));
         await RefreshMaskDebugPreviewAsync(saveDebugImages: true);
     }
 
@@ -910,6 +926,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(MaskDebugButtonText));
             OnPropertyChanged(nameof(DebugMaskPanelVisibility));
             OnPropertyChanged(nameof(DebugMaskStatusText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             return;
         }
 
@@ -937,6 +954,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(MaskDebugButtonText));
             OnPropertyChanged(nameof(DebugMaskPanelVisibility));
             OnPropertyChanged(nameof(DebugMaskStatusText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             System.Windows.MessageBox.Show(
                 this,
                 ex.Message,
@@ -1032,6 +1050,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isDummyMaskRetouchPreviewEnabled = false;
             OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             await ApplyPhotoAdjustmentsAsync(showOverlay: false);
             return;
         }
@@ -1040,8 +1059,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             System.Windows.MessageBox.Show(
                 this,
-                "더미 마스크 보정은 사진 한 장을 선택했을 때 확인할 수 있어.",
-                "더미 보정",
+                "피부 보정은 사진 한 장을 선택했을 때 확인할 수 있어.",
+                "피부 보정",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
             return;
@@ -1054,10 +1073,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(MaskDebugButtonText));
             OnPropertyChanged(nameof(DebugMaskPanelVisibility));
             OnPropertyChanged(nameof(DebugMaskStatusText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
         }
 
         _isDummyMaskRetouchPreviewEnabled = true;
         OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+        OnPropertyChanged(nameof(DeveloperStatusVisibility));
         SetPendingRetouchBindingEvent("PipelineEnabled", null, null);
         await ApplyDummyMaskRetouchAsync();
     }
@@ -1115,10 +1136,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isDummyMaskRetouchPreviewEnabled = false;
             OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             System.Windows.MessageBox.Show(
                 this,
                 ex.Message,
-                "더미 보정",
+                "피부 보정",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
@@ -1219,6 +1241,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 {
                     _isDummyMaskRetouchPreviewEnabled = true;
                     OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+                    OnPropertyChanged(nameof(DeveloperStatusVisibility));
                     photo.SetAdjustedImage(output.FinalImage);
                     SaveRetouchDebugImages(photo, snapshot, output);
                 }
@@ -2826,6 +2849,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isMaskDebugPreviewEnabled = false;
             OnPropertyChanged(nameof(MaskDebugButtonText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             previousSelectedPhoto?.ResetAdjustedImage();
         }
 
@@ -2833,6 +2857,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             _isDummyMaskRetouchPreviewEnabled = false;
             OnPropertyChanged(nameof(DummyMaskRetouchButtonText));
+            OnPropertyChanged(nameof(DeveloperStatusVisibility));
             previousSelectedPhoto?.ResetAdjustedImage();
         }
 

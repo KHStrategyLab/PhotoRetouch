@@ -266,10 +266,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="PhotoRetouch Studio" FontSize="20" FontWeight="SemiBold" Margin="0,0,14,0"/>
-                    <Border Background="#353A3F" BorderBrush="#596169" BorderThickness="1" Padding="8,3">
-                        <TextBlock Text="UI REVIEW" Foreground="#D4DADE" FontSize="11" FontWeight="SemiBold"/>
-                    </Border>
+                    <TextBlock Text="K Retouch Pro" FontSize="20" FontWeight="SemiBold" Margin="0,0,14,0"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -293,16 +290,15 @@
                             IsSnapToTickEnabled="True"
                             Value="{Binding DummyMaskStageValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                             VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding SnapshotMaskStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                    <TextBlock Text="{Binding DebugMaskStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                    <TextBlock Text="{Binding RetouchBindingStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    <TextBlock Text="{Binding SnapshotMaskStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="{Binding DeveloperStatusVisibility}"/>
+                    <TextBlock Text="{Binding DebugMaskStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="{Binding DeveloperStatusVisibility}"/>
+                    <TextBlock Text="{Binding RetouchBindingStatusText}" Foreground="{StaticResource TextSub}" VerticalAlignment="Center" Margin="10,0,0,0" Visibility="{Binding DeveloperStatusVisibility}"/>
                     <Button Content="재분석" Click="ReAnalyzeButton_Click"/>
-                    <Button Content="&#xCD08;&#xAE30;&#xD654;"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="1920 x 1280" Foreground="{StaticResource TextSub}" Margin="0,0,16,0"/>
-                    <TextBlock Text="100%" Foreground="{StaticResource TextSub}"/>
+                    <TextBlock Text="{Binding SelectedPhoto.DisplayInfo}" Foreground="{StaticResource TextSub}" Margin="0,0,16,0"/>
+                    <TextBlock Text="{Binding ZoomPercent, StringFormat={}{0:0}%}" Foreground="{StaticResource TextSub}"/>
                 </StackPanel>
             </Grid>
         </Border>
