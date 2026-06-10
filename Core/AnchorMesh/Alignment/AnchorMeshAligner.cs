@@ -414,7 +414,7 @@ public sealed class AnchorMeshAligner
         AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
     }
 
-    public bool ConstrainFaceOutlineChinToEyeNoseDistanceLimit(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
+    public bool ConstrainFaceOutlineChinToNostrilCompassLimit(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
     {
         AnchorMeshFeature? outline = features.FaceOutline;
         if (outline is null || outline.Points.Count < 8)
@@ -422,8 +422,10 @@ public sealed class AnchorMeshAligner
             return false;
         }
 
-        float eyeToNoseDistance = Distance(anchors.EyeCenter.X, anchors.EyeCenter.Y, anchors.NoseTip.X, anchors.NoseTip.Y);
-        if (eyeToNoseDistance <= 1)
+        PointF browCenter = EstimateBrowCenter(features, anchors);
+        PointF nostrilCenter = EstimateNostrilCenter(features, anchors);
+        float compassRadius = Distance(browCenter.X, browCenter.Y, nostrilCenter.X, nostrilCenter.Y);
+        if (compassRadius <= 1)
         {
             return false;
         }
@@ -432,8 +434,6 @@ public sealed class AnchorMeshAligner
         float axisY = MathF.Sin(anchors.FaceAngleRad);
         float downX = -axisY;
         float downY = axisX;
-        float limitX = anchors.NoseTip.X + downX * eyeToNoseDistance;
-        float limitY = anchors.NoseTip.Y + downY * eyeToNoseDistance;
         bool moved = false;
 
         foreach (AnchorMeshPoint point in outline.Points)
@@ -443,34 +443,110 @@ public sealed class AnchorMeshAligner
                 continue;
             }
 
-            float distanceFromLimit = (point.SnappedX - limitX) * downX + (point.SnappedY - limitY) * downY;
-            if (distanceFromLimit >= 0)
+            float dx = point.SnappedX - nostrilCenter.X;
+            float dy = point.SnappedY - nostrilCenter.Y;
+            float distance = MathF.Sqrt(dx * dx + dy * dy);
+            if (distance >= compassRadius)
             {
                 continue;
             }
 
-            point.SnappedX += downX * -distanceFromLimit;
-            point.SnappedY += downY * -distanceFromLimit;
+            float ux;
+            float uy;
+            if (distance <= 0.001f)
+            {
+                ux = downX;
+                uy = downY;
+            }
+            else
+            {
+                ux = dx / distance;
+                uy = dy / distance;
+            }
+
+            point.SnappedX = nostrilCenter.X + ux * compassRadius;
+            point.SnappedY = nostrilCenter.Y + uy * compassRadius;
             point.ImageX = point.SnappedX;
             point.ImageY = point.SnappedY;
-            point.Source = "ChinEyeNoseDistanceLimited";
+            point.Source = "ChinNostrilCompassLimited";
             point.Confidence = MathF.Max(point.Confidence, anchors.Score * 0.82f);
             moved = true;
         }
 
         if (moved)
         {
-            outline.SnapMode = "ChinEyeNoseDistanceLimited";
+            outline.SnapMode = "ChinNostrilCompassLimited";
             AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
         }
 
         return moved;
     }
 
+    private static PointF EstimateNostrilCenter(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
+    {
+        AnchorMeshFeature? nose = features.Nose;
+        if (nose is null || nose.Points.Count == 0)
+        {
+            return anchors.NoseTip;
+        }
+
+        List<AnchorMeshPoint> nostrils = nose.Points
+            .Where(point => point.Role.Contains("Nostril", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (nostrils.Count == 0)
+        {
+            return anchors.NoseTip;
+        }
+
+        float x = 0;
+        float y = 0;
+        foreach (AnchorMeshPoint point in nostrils)
+        {
+            x += point.SnappedX;
+            y += point.SnappedY;
+        }
+
+        return new PointF(x / nostrils.Count, y / nostrils.Count);
+    }
+
+    private static PointF EstimateBrowCenter(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
+    {
+        List<AnchorMeshFeature> brows = new();
+        if (features.LeftBrow is { Points.Count: > 0 } leftBrow)
+        {
+            brows.Add(leftBrow);
+        }
+
+        if (features.RightBrow is { Points.Count: > 0 } rightBrow)
+        {
+            brows.Add(rightBrow);
+        }
+
+        if (brows.Count == 0)
+        {
+            return anchors.EyeCenter;
+        }
+
+        float x = 0;
+        float y = 0;
+        float weight = 0;
+        foreach (AnchorMeshFeature brow in brows)
+        {
+            float browWeight = MathF.Max(1.0f, brow.Points.Count);
+            x += brow.CenterX * browWeight;
+            y += brow.CenterY * browWeight;
+            weight += browWeight;
+        }
+
+        return weight <= 0
+            ? anchors.EyeCenter
+            : new PointF(x / weight, y / weight);
+    }
+
     private static bool IsChinLimitPoint(AnchorMeshPoint point)
     {
         if (point.FeatureName.Equals("FaceOutline", StringComparison.OrdinalIgnoreCase) &&
-            point.Index is >= 13 and <= 17)
+            point.Index is >= 10 and <= 16)
         {
             return true;
         }

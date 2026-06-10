@@ -25,11 +25,11 @@ public static class AnchorMeshTopologyBuilder
 
     private static void AddFaceCenterAndWidthMeasurements(List<AnchorMeshEdge> edges)
     {
-        AddChain(edges, AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceCenterAlignment, "Nose_00", "Nose_08", "Nose_23", "LipOuter_18", "FaceOutline_15");
+        AddChain(edges, AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceCenterAlignment, "Nose_00", "Nose_08", "Nose_23", "LipOuter_18", "FaceOutline_13");
         Add(edges, "LeftEye_00", "RightEye_08", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
-        Add(edges, "FaceOutline_26", "FaceOutline_34", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
-        Add(edges, "FaceOutline_22", "FaceOutline_08", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
-        Add(edges, "FaceOutline_17", "FaceOutline_13", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
+        Add(edges, "FaceOutline_22", "FaceOutline_28", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
+        Add(edges, "FaceOutline_18", "FaceOutline_07", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
+        Add(edges, "FaceOutline_14", "FaceOutline_11", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.FaceWidthMeasurements);
     }
 
     private static void AddEyeBrowMeasurements(List<AnchorMeshEdge> edges)
@@ -66,16 +66,16 @@ public static class AnchorMeshTopologyBuilder
 
     private static void AddCheekJawTopology(List<AnchorMeshEdge> edges)
     {
-        AddLoop(edges, AnchorMeshEdgeKind.Surface, AnchorMeshEdgeGroup.LeftCheekRegionLoop, "LeftEye_08", "FaceOutline_27", "FaceOutline_23", "FaceOutline_20", "LipOuter_00", "Nose_10", "LeftEye_00");
-        AddLoop(edges, AnchorMeshEdgeKind.Surface, AnchorMeshEdgeGroup.RightCheekRegionLoop, "RightEye_00", "FaceOutline_33", "FaceOutline_37", "FaceOutline_40", "LipOuter_12", "Nose_15", "RightEye_08");
-        AddChain(edges, AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.LeftJawlineEdge, "FaceOutline_23", "FaceOutline_22", "FaceOutline_21", "FaceOutline_20", "FaceOutline_19", "FaceOutline_18", "FaceOutline_17", "FaceOutline_16", "FaceOutline_15");
-        AddChain(edges, AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.RightJawlineEdge, "FaceOutline_07", "FaceOutline_08", "FaceOutline_09", "FaceOutline_10", "FaceOutline_11", "FaceOutline_12", "FaceOutline_13", "FaceOutline_14", "FaceOutline_15");
-        AddChain(edges, AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.ChinContourEdge, "FaceOutline_17", "FaceOutline_16", "FaceOutline_15", "FaceOutline_14", "FaceOutline_13");
+        AddLoop(edges, AnchorMeshEdgeKind.Surface, AnchorMeshEdgeGroup.LeftCheekRegionLoop, "LeftEye_08", "FaceOutline_23", "FaceOutline_19", "FaceOutline_17", "LipOuter_00", "Nose_10", "LeftEye_00");
+        AddLoop(edges, AnchorMeshEdgeKind.Surface, AnchorMeshEdgeGroup.RightCheekRegionLoop, "RightEye_00", "FaceOutline_28", "FaceOutline_31", "FaceOutline_33", "LipOuter_12", "Nose_15", "RightEye_08");
+        AddChain(edges, AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.LeftJawlineEdge, "FaceOutline_20", "FaceOutline_19", "FaceOutline_18", "FaceOutline_17", "FaceOutline_16", "FaceOutline_15", "FaceOutline_14", "FaceOutline_13");
+        AddChain(edges, AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.RightJawlineEdge, "FaceOutline_06", "FaceOutline_07", "FaceOutline_08", "FaceOutline_09", "FaceOutline_10", "FaceOutline_11", "FaceOutline_12", "FaceOutline_13");
+        AddChain(edges, AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.ChinContourEdge, "FaceOutline_15", "FaceOutline_14", "FaceOutline_13", "FaceOutline_12", "FaceOutline_11");
 
-        Add(edges, "LeftEye_08", "FaceOutline_26", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
-        Add(edges, "RightEye_00", "FaceOutline_34", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
-        Add(edges, "FaceOutline_23", "FaceOutline_15", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
-        Add(edges, "FaceOutline_37", "FaceOutline_15", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "LeftEye_08", "FaceOutline_22", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "RightEye_00", "FaceOutline_28", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "FaceOutline_19", "FaceOutline_13", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "FaceOutline_31", "FaceOutline_13", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
     }
 
     private static void AddFeatureEdges(
@@ -88,7 +88,7 @@ public static class AnchorMeshTopologyBuilder
     {
         int count = featureName switch
         {
-            "FaceOutline" => 60,
+            "FaceOutline" => 50,
             "LeftEye" or "RightEye" => 16,
             "LeftPupil" or "RightPupil" => 12,
             "LeftBrow" or "RightBrow" => 12,

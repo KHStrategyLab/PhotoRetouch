@@ -81,11 +81,11 @@ public static class AnchorWarpHandleGroupBuilder
         }
 
         AnchorWarpHandleGroup group = CreateGroup("ChinWarpGroup", AnchorWarpHandleTarget.Chin, 58, 20);
-        string[] chinPoints = ["FaceOutline_12", "FaceOutline_13", "FaceOutline_14", "FaceOutline_15", "FaceOutline_16", "FaceOutline_17", "FaceOutline_18"];
+        string[] chinPoints = ["FaceOutline_10", "FaceOutline_11", "FaceOutline_12", "FaceOutline_13", "FaceOutline_14", "FaceOutline_15", "FaceOutline_16"];
         group.ControlPointNames.AddRange(chinPoints);
-        group.FalloffPointNames.AddRange(["FaceOutline_09", "FaceOutline_10", "FaceOutline_11", "FaceOutline_19", "FaceOutline_20", "FaceOutline_21"]);
+        group.FalloffPointNames.AddRange(["FaceOutline_07", "FaceOutline_08", "FaceOutline_09", "FaceOutline_17", "FaceOutline_18", "FaceOutline_19"]);
         group.LockedPointNames.AddRange(["Nose_08", "LipOuter_18"]);
-        AnchorMeshPoint? chin = faceOutline.Points.FirstOrDefault(point => point.Name == "FaceOutline_15");
+        AnchorMeshPoint? chin = faceOutline.Points.FirstOrDefault(point => point.Name == "FaceOutline_13");
         if (chin is not null)
         {
             group.Handles.Add(CreateHandle("ChinBottom", AnchorWarpHandleKind.Bottom, chinPoints, chin.SnappedX, chin.SnappedY, group.SafeZoneRadius));
@@ -102,12 +102,12 @@ public static class AnchorWarpHandleGroupBuilder
         }
 
         AnchorWarpHandleGroup group = CreateGroup("JawlineWarpGroup", AnchorWarpHandleTarget.Jawline, 72, 22);
-        string[] jawPoints = ["FaceOutline_08", "FaceOutline_09", "FaceOutline_10", "FaceOutline_11", "FaceOutline_19", "FaceOutline_20", "FaceOutline_21", "FaceOutline_22"];
+        string[] jawPoints = ["FaceOutline_07", "FaceOutline_08", "FaceOutline_09", "FaceOutline_10", "FaceOutline_16", "FaceOutline_17", "FaceOutline_18", "FaceOutline_19"];
         group.ControlPointNames.AddRange(jawPoints);
-        group.FalloffPointNames.AddRange(["FaceOutline_06", "FaceOutline_07", "FaceOutline_14", "FaceOutline_16", "FaceOutline_23", "FaceOutline_24"]);
+        group.FalloffPointNames.AddRange(["FaceOutline_05", "FaceOutline_06", "FaceOutline_12", "FaceOutline_14", "FaceOutline_20", "FaceOutline_21"]);
         group.LockedPointNames.AddRange(["Nose_08", "LipOuter_18"]);
-        AddNamedPointHandle(group, faceOutline, "JawLeft", AnchorWarpHandleKind.Left, ["FaceOutline_08", "FaceOutline_09", "FaceOutline_10", "FaceOutline_11"], "FaceOutline_10");
-        AddNamedPointHandle(group, faceOutline, "JawRight", AnchorWarpHandleKind.Right, ["FaceOutline_19", "FaceOutline_20", "FaceOutline_21", "FaceOutline_22"], "FaceOutline_20");
+        AddNamedPointHandle(group, faceOutline, "JawLeft", AnchorWarpHandleKind.Left, ["FaceOutline_07", "FaceOutline_08", "FaceOutline_09", "FaceOutline_10"], "FaceOutline_08");
+        AddNamedPointHandle(group, faceOutline, "JawRight", AnchorWarpHandleKind.Right, ["FaceOutline_16", "FaceOutline_17", "FaceOutline_18", "FaceOutline_19"], "FaceOutline_17");
         set.Groups.Add(group);
     }
 

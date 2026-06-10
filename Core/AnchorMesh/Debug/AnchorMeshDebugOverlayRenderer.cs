@@ -44,6 +44,7 @@ public sealed class AnchorMeshDebugOverlayRenderer
         using (DrawingContext context = visual.RenderOpen())
         {
             context.DrawImage(source, new WpfRect(0, 0, width, height));
+            DrawFitBoxes(context, result);
             DrawEyeCenterAxisGuide(context, result, width);
             DrawEyeCenterPerpendicularGuide(context, result, width, height);
             DrawJawStartGuide(context, result, width);
@@ -109,34 +110,87 @@ public sealed class AnchorMeshDebugOverlayRenderer
             return;
         }
 
-        System.Drawing.PointF eyeCenter = result.YuNetAnchors.EyeCenter;
-        System.Drawing.PointF noseTip = result.YuNetAnchors.NoseTip;
-        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
-        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
-        float axisX = rightEye.X - leftEye.X;
-        float axisY = rightEye.Y - leftEye.Y;
-        float axisLength = MathF.Sqrt(axisX * axisX + axisY * axisY);
-        if (axisLength < 0.001f)
+        WpfPoint browCenter = EstimateBrowCenter(result);
+        WpfPoint nostrilCenter = EstimateNostrilCenter(result);
+        float guideDistance = Distance((float)browCenter.X, (float)browCenter.Y, (float)nostrilCenter.X, (float)nostrilCenter.Y);
+        if (guideDistance <= 1)
         {
             return;
         }
 
-        axisX /= axisLength;
-        axisY /= axisLength;
-        float eyeToNoseDistance = Distance(eyeCenter.X, eyeCenter.Y, noseTip.X, noseTip.Y);
-        float centerX = noseTip.X + downX * eyeToNoseDistance;
-        float centerY = noseTip.Y + downY * eyeToNoseDistance;
-        float halfLength = MathF.Min(width * 0.20f, MathF.Max(32.0f, result.YuNetAnchors.EyeDistance * 0.74f));
-        WpfPoint start = new(centerX - axisX * halfLength, centerY - axisY * halfLength);
-        WpfPoint end = new(centerX + axisX * halfLength, centerY + axisY * halfLength);
-        WpfPoint center = new(centerX, centerY);
-        MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(170, 0, 0, 0)), 4.0);
-        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 210, 70, 255)), 2.0);
-        MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 210, 70, 255));
+        WpfPoint guidePoint = new(nostrilCenter.X + downX * guideDistance, nostrilCenter.Y + downY * guideDistance);
+        MediaPen crossPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105)), 1.0);
+        MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105));
+        float crossHalfLength = MathF.Max(24.0f, result.YuNetAnchors.EyeDistance * 0.22f);
+        WpfPoint crossStart = new(guidePoint.X - downX * crossHalfLength, guidePoint.Y - downY * crossHalfLength);
+        WpfPoint crossEnd = new(guidePoint.X + downX * crossHalfLength, guidePoint.Y + downY * crossHalfLength);
+        WpfPoint sideStart = new(guidePoint.X - downY * crossHalfLength, guidePoint.Y + downX * crossHalfLength);
+        WpfPoint sideEnd = new(guidePoint.X + downY * crossHalfLength, guidePoint.Y - downX * crossHalfLength);
 
-        context.DrawLine(shadowPen, start, end);
-        context.DrawLine(guidePen, start, end);
-        context.DrawEllipse(guideBrush, null, center, 4.0, 4.0);
+        context.DrawLine(crossPen, crossStart, crossEnd);
+        context.DrawLine(crossPen, sideStart, sideEnd);
+        context.DrawEllipse(guideBrush, null, guidePoint, 4.0, 4.0);
+    }
+
+    private static WpfPoint EstimateBrowCenter(AnchorMeshResult result)
+    {
+        List<AnchorMeshFeature> brows = new();
+        if (result.Features?.LeftBrow is { Points.Count: > 0 } leftBrow)
+        {
+            brows.Add(leftBrow);
+        }
+
+        if (result.Features?.RightBrow is { Points.Count: > 0 } rightBrow)
+        {
+            brows.Add(rightBrow);
+        }
+
+        if (brows.Count == 0)
+        {
+            System.Drawing.PointF eyeCenter = result.YuNetAnchors?.EyeCenter ?? default;
+            return new WpfPoint(eyeCenter.X, eyeCenter.Y);
+        }
+
+        double x = 0;
+        double y = 0;
+        double weight = 0;
+        foreach (AnchorMeshFeature brow in brows)
+        {
+            double browWeight = Math.Max(1, brow.Points.Count);
+            x += brow.CenterX * browWeight;
+            y += brow.CenterY * browWeight;
+            weight += browWeight;
+        }
+
+        return weight <= 0 ? default : new WpfPoint(x / weight, y / weight);
+    }
+
+    private static WpfPoint EstimateNostrilCenter(AnchorMeshResult result)
+    {
+        AnchorMeshFeature? nose = result.Features?.Nose;
+        if (nose is null || nose.Points.Count == 0)
+        {
+            System.Drawing.PointF noseTip = result.YuNetAnchors?.NoseTip ?? default;
+            return new WpfPoint(noseTip.X, noseTip.Y);
+        }
+
+        List<AnchorMeshPoint> nostrils = nose.Points
+            .Where(point => point.Role.Contains("Nostril", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (nostrils.Count == 0)
+        {
+            return new WpfPoint(nose.CenterX, nose.CenterY);
+        }
+
+        double x = 0;
+        double y = 0;
+        foreach (AnchorMeshPoint point in nostrils)
+        {
+            x += point.SnappedX;
+            y += point.SnappedY;
+        }
+
+        return new WpfPoint(x / nostrils.Count, y / nostrils.Count);
     }
 
     private static void DrawFirstDarkThickSegmentGuide(DrawingContext context, BitmapSource source, AnchorMeshResult result, int height)
@@ -209,9 +263,9 @@ public sealed class AnchorMeshDebugOverlayRenderer
         WpfPoint start = new(eyeCenter.X - downX * guideLength, eyeCenter.Y - downY * guideLength);
         WpfPoint end = new(eyeCenter.X + downX * guideLength, eyeCenter.Y + downY * guideLength);
         WpfPoint center = new(eyeCenter.X, eyeCenter.Y);
-        MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(180, 0, 0, 0)), 5.0);
-        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 155, 235)), 2.8);
-        MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 155, 235));
+        MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(150, 0, 0, 0)), 4.0);
+        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105)), 2.0);
+        MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105));
 
         context.DrawLine(shadowPen, start, end);
         context.DrawLine(guidePen, start, end);

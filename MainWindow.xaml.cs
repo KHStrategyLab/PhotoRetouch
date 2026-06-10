@@ -1857,7 +1857,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 snapshot.Masks.RetouchAllowMask);
             AnchorMeshDebugOverlayRenderer renderer = new();
             renderer.SaveSnappedOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_overlay.png"));
-            renderer.SaveTopologyOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_topology.png"));
+            DeleteDebugFileIfExists(outputDirectory, "debug_anchor_mesh_topology.png");
 
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1866,6 +1866,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 Path.Combine(outputDirectory, "debug_anchor_mesh_error.txt"),
                 "AnchorMesh debug export failed: " + ex.GetType().Name + Environment.NewLine + ex.Message,
                 System.Text.Encoding.UTF8);
+        }
+    }
+
+    private static void DeleteDebugFileIfExists(string outputDirectory, string fileName)
+    {
+        string path = Path.Combine(outputDirectory, fileName);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
         }
     }
 

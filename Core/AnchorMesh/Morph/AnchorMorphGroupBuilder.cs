@@ -10,8 +10,8 @@ public static class AnchorMorphGroupBuilder
         set.Groups.Add(Create("BrowMorphGroup", "vertical", "brow_height", 42, Points("LeftBrow", 30).Concat(Points("RightBrow", 30)), Points("LeftEye", 16).Concat(Points("RightEye", 16)), ["Nose_00"]));
         set.Groups.Add(Create("NoseAnchorGroup", "center", "nose_balance", 48, Points("Nose", 24), Points("LeftEye", 16).Concat(Points("RightEye", 16)), ["LeftEye_04", "RightEye_12"]));
         set.Groups.Add(Create("MouthMorphGroup", "scale", "mouth_shape", 46, Points("LipOuter", 24).Concat(Points("LipInner", 16)), Points("Nose", 24), ["Nose_08"]));
-        set.Groups.Add(Create("ChinMorphGroup", "vertical", "chin_length", 70, ["FaceOutline_14", "FaceOutline_15", "FaceOutline_16"], ["LipOuter_18"], ["Nose_08", "LipOuter_18"]));
-        set.Groups.Add(Create("FaceOutlineMorphGroup", "inward", "face_outline", 90, Points("FaceOutline", 60), Points("Nose", 24).Concat(Points("LipOuter", 24)), ["LeftEye_04", "RightEye_12", "Nose_08"]));
+        set.Groups.Add(Create("ChinMorphGroup", "vertical", "chin_length", 70, ["FaceOutline_12", "FaceOutline_13", "FaceOutline_14"], ["LipOuter_18"], ["Nose_08", "LipOuter_18"]));
+        set.Groups.Add(Create("FaceOutlineMorphGroup", "inward", "face_outline", 90, Points("FaceOutline", 50), Points("Nose", 24).Concat(Points("LipOuter", 24)), ["LeftEye_04", "RightEye_12", "Nose_08"]));
         return set;
     }
 

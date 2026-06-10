@@ -54,11 +54,9 @@ public sealed class AnchorMeshSoftSnapper
             {
                 if (feature.Name.Equals("FaceOutline", StringComparison.OrdinalIgnoreCase))
                 {
-                    ConstrainClosedFeatureSpacing(feature, originalPositions, 0.72f, 1.42f, 4);
-                    ConstrainFaceOutlineToEggShape(feature, 0.68f);
-                    SmoothClosedFeature(feature, 0.28f);
-                    ConstrainFaceOutlineToEggShape(feature, 0.36f);
-                    ConstrainClosedFeatureSpacing(feature, originalPositions, 0.76f, 1.36f, 2);
+                    ConstrainClosedFeatureSpacing(feature, originalPositions, 0.64f, 1.58f, 2);
+                    SmoothClosedFeature(feature, 0.08f);
+                    ConstrainClosedFeatureSpacing(feature, originalPositions, 0.64f, 1.58f, 1);
                 }
 
                 feature.SnapMode = "SoftSnap";

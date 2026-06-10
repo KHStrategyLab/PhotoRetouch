@@ -49,7 +49,7 @@ public sealed class AnchorMeshTemplateFactory
 
     private static AnchorMeshFeature CreateFaceOutline()
     {
-        const int count = 60;
+        const int count = 50;
         const float centerX = 0.0f;
         const float centerY = 0.04f;
         const float radiusX = 0.43f;
@@ -70,14 +70,14 @@ public sealed class AnchorMeshTemplateFactory
     {
         return index switch
         {
-            15 => "ChinTip",
-            13 or 14 => "RightChinLine",
-            16 or 17 => "LeftChinLine",
-            8 or 9 or 10 or 11 or 12 => "RightJawLine",
-            18 or 19 or 20 or 21 or 22 => "LeftJawLine",
-            23 or 24 or 25 or 26 or 27 or 28 or 29 or 30 => "LeftCheekContour",
-            0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 => "RightCheekContour",
-            31 or 32 or 33 or 34 or 35 or 36 or 37 or 38 or 39 or 40 or 41 or 42 or 43 or 44 => "LeftUpperFaceContour",
+            13 => "ChinTip",
+            11 or 12 => "RightChinLine",
+            14 or 15 => "LeftChinLine",
+            7 or 8 or 9 or 10 => "RightJawLine",
+            16 or 17 or 18 or 19 => "LeftJawLine",
+            20 or 21 or 22 or 23 or 24 or 25 => "LeftCheekContour",
+            0 or 1 or 2 or 3 or 4 or 5 or 6 => "RightCheekContour",
+            26 or 27 or 28 or 29 or 30 or 31 or 32 or 33 or 34 or 35 or 36 or 37 => "LeftUpperFaceContour",
             _ => "RightUpperFaceContour"
         };
     }
