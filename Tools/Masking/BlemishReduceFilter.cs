@@ -33,13 +33,24 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         double strengthSum = 0;
 
         double qualityScale = GetQualityScale(input.MaskQualityReport);
-        double baseAmount = Math.Clamp(input.StagePreset.BlemishReduceAmount * 1.25 * qualityScale, 0, 1);
+        bool isMaximumBlemishReduce = input.StagePreset.BlemishReduceAmount >= 0.98;
+        double baseBoost = isMaximumBlemishReduce ? 1.65 : 1.25;
+        double strengthLimit = isMaximumBlemishReduce ? 1.0 : 0.92;
+        double baseAmount = Math.Clamp(input.StagePreset.BlemishReduceAmount * baseBoost * qualityScale, 0, 1);
         double softProtectScale = Math.Clamp(input.StagePreset.BlemishSearchSoftProtectOpacity, 0, 0.25);
-        int applyFeatherRadius = Math.Max(1, (int)Math.Round(input.StagePreset.BlemishFeatherRadius * Math.Max(width, height) / 1200d));
+        double blemishFeatherRadius = isMaximumBlemishReduce
+            ? Math.Max(input.StagePreset.BlemishFeatherRadius * 2.4, 4.8)
+            : input.StagePreset.BlemishFeatherRadius;
+        int applyFeatherRadius = Math.Max(1, (int)Math.Round(blemishFeatherRadius * Math.Max(width, height) / 1200d));
 
         foreach (BlemishCandidate candidate in analysis.Candidates)
         {
-            double candidateStrength = Math.Clamp(baseAmount * candidate.Score, 0, 0.92);
+            double effectiveCandidateScore = isMaximumBlemishReduce
+                ? Math.Max(candidate.Score, 0.72)
+                : candidate.Score;
+            double candidateStrength = Math.Clamp(baseAmount * effectiveCandidateScore, 0, strengthLimit);
+            candidateStrength *= GetCandidateKindStrengthScale(candidate.Kind, isMaximumBlemishReduce);
+            candidateStrength = Math.Clamp(candidateStrength, 0, strengthLimit);
             if (candidate.IsSoftProtect)
             {
                 candidateStrength *= Math.Max(0.08, softProtectScale);
@@ -56,35 +67,65 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
                 continue;
             }
 
-            for (int y = Math.Max(0, candidate.MinY - applyFeatherRadius); y <= Math.Min(height - 1, candidate.MaxY + applyFeatherRadius); y++)
+            if (isMaximumBlemishReduce)
             {
-                for (int x = Math.Max(0, candidate.MinX - applyFeatherRadius); x <= Math.Min(width - 1, candidate.MaxX + applyFeatherRadius); x++)
+                target = AdjustMaximumBlemishTarget(target, candidate.Kind);
+            }
+
+            HealingStampResult stampResult = HealingStampEngine.Apply(new HealingStampInput(
+                originalPixels,
+                currentPixels,
+                correctedPixels,
+                width,
+                height,
+                analysis.CandidateMask,
+                input.RetouchAllowMask,
+                input.SoftProtectMask,
+                input.HardProtectMask,
+                blemishMask,
+                candidate.MinX,
+                candidate.MinY,
+                candidate.MaxX,
+                candidate.MaxY,
+                candidateStrength,
+                softProtectScale,
+                applyFeatherRadius,
+                candidate.IsSoftProtect));
+
+            if (stampResult.ChangedPixelCount == 0 || isMaximumBlemishReduce)
+            {
+                for (int y = Math.Max(0, candidate.MinY - applyFeatherRadius); y <= Math.Min(height - 1, candidate.MaxY + applyFeatherRadius); y++)
                 {
-                    double hardProtect = input.HardProtectMask[x, y];
-                    if (hardProtect >= 0.05)
+                    for (int x = Math.Max(0, candidate.MinX - applyFeatherRadius); x <= Math.Min(width - 1, candidate.MaxX + applyFeatherRadius); x++)
                     {
-                        continue;
-                    }
+                        double hardProtect = input.HardProtectMask[x, y];
+                        if (hardProtect >= 0.05)
+                        {
+                            continue;
+                        }
 
-                    double localMask = Math.Clamp(input.RetouchAllowMask[x, y], 0, 1);
-                    if (candidate.IsSoftProtect)
-                    {
-                        localMask = Math.Max(localMask, input.SoftProtectMask[x, y] * softProtectScale);
-                    }
+                        double localMask = Math.Clamp(input.RetouchAllowMask[x, y], 0, 1);
+                        if (candidate.IsSoftProtect)
+                        {
+                            localMask = Math.Max(localMask, input.SoftProtectMask[x, y] * softProtectScale);
+                        }
 
-                    double feather = Math.Clamp(analysis.CandidateMask[x, y], 0, 1);
-                    double amount = Math.Clamp(candidateStrength * localMask * feather, 0, 0.92);
-                    if (amount <= 0)
-                    {
-                        continue;
-                    }
+                        double feather = Math.Clamp(analysis.CandidateMask[x, y], 0, 1);
+                        double effectiveFeather = isMaximumBlemishReduce ? Math.Pow(feather, 0.35) : feather;
+                        double settleScale = stampResult.ChangedPixelCount == 0 ? 1.0 : 1.35;
+                        double amount = Math.Clamp(candidateStrength * localMask * effectiveFeather * settleScale, 0, strengthLimit);
+                        if (amount <= 0)
+                        {
+                            continue;
+                        }
 
-                    int index = y * stride + x * 4;
-                    correctedPixels[index] = BlendChannel(correctedPixels[index], target.Blue, amount);
-                    correctedPixels[index + 1] = BlendChannel(correctedPixels[index + 1], target.Green, amount);
-                    correctedPixels[index + 2] = BlendChannel(correctedPixels[index + 2], target.Red, amount);
-                    correctedPixels[index + 3] = currentPixels[index + 3];
-                    blemishMask[x, y] = Math.Max(blemishMask[x, y], amount);
+                        int index = y * stride + x * 4;
+                        correctedPixels[index] = BlendChannel(correctedPixels[index], target.Blue, amount);
+                        correctedPixels[index + 1] = BlendChannel(correctedPixels[index + 1], target.Green, amount);
+                        correctedPixels[index + 2] = BlendChannel(correctedPixels[index + 2], target.Red, amount);
+                        correctedPixels[index + 3] = currentPixels[index + 3];
+                        blemishMask[x, y] = Math.Max(blemishMask[x, y], amount);
+                    }
                 }
             }
 
@@ -99,7 +140,8 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
             Math.Max(0, analysis.Candidates.Count - appliedCount),
             baseAmount,
             appliedCount == 0 ? 0 : strengthSum / appliedCount,
-            analysis.DebugWarnings);
+            analysis.DebugWarnings,
+            analysis.CandidatePoints);
 
         return new BlemishReduceResult(
             CreateBitmap(width, height, correctedPixels),
@@ -136,6 +178,7 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         int stride = width * 4;
         byte[] localAverage = BoxBlur(originalPixels, width, height, GetAnalysisBlurRadius(width, height));
         bool[] candidateMap = new bool[width * height];
+        BlemishCandidateKind[] candidateKindMap = new BlemishCandidateKind[width * height];
         MaskPlane searchMask = BuildSearchMask(input, width, height);
         MaskPlane candidatePreview = MaskPlane.Empty(width, height);
         List<string> warnings = new() { "blemish_reduce_filter_v1" };
@@ -175,6 +218,13 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
                 if (score > 0.24)
                 {
                     candidateMap[pixelIndex] = true;
+                    candidateKindMap[pixelIndex] = ClassifyCandidateKind(
+                        darkScore,
+                        redScore,
+                        colorScore,
+                        darkDetail,
+                        redDetail,
+                        chromaDifference);
                     candidatePreview[x, y] = score;
                 }
             }
@@ -182,6 +232,7 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
 
         List<BlemishCandidate> candidates = ExtractCandidates(
             candidateMap,
+            candidateKindMap,
             candidatePreview,
             searchMask,
             input,
@@ -189,12 +240,28 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
             height,
             scale,
             warnings);
-        MaskPlane featheredCandidateMask = BuildCandidateMask(candidates, width, height, Math.Max(1, (int)Math.Round(input.StagePreset.BlemishFeatherRadius * scale)));
-        return new BlemishAnalysisCache(input.Snapshot.CacheKey.StableId, featheredCandidateMask, candidates, warnings);
+        double blemishFeatherRadius = input.StagePreset.BlemishReduceAmount >= 0.98
+            ? Math.Max(input.StagePreset.BlemishFeatherRadius * 2.4, 4.8)
+            : input.StagePreset.BlemishFeatherRadius;
+        MaskPlane featheredCandidateMask = BuildCandidateMask(candidates, width, height, Math.Max(1, (int)Math.Round(blemishFeatherRadius * scale)));
+        IReadOnlyList<BlemishCandidatePoint> candidatePoints = candidates
+            .Select(candidate => new BlemishCandidatePoint(
+                candidate.Kind,
+                candidate.CenterX,
+                candidate.CenterY,
+                candidate.MinX,
+                candidate.MinY,
+                candidate.MaxX,
+                candidate.MaxY,
+                candidate.Score,
+                candidate.IsSoftProtect))
+            .ToArray();
+        return new BlemishAnalysisCache(input.Snapshot.CacheKey.StableId, featheredCandidateMask, candidates, candidatePoints, warnings);
     }
 
     private static List<BlemishCandidate> ExtractCandidates(
         bool[] candidateMap,
+        BlemishCandidateKind[] candidateKindMap,
         MaskPlane candidatePreview,
         MaskPlane searchMask,
         BlemishReduceInput input,
@@ -262,7 +329,8 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
                 stats.CenterX,
                 stats.CenterY,
                 score,
-                isSoftProtect));
+                isSoftProtect,
+                ResolveCandidateKind(pixels, candidateKindMap)));
         }
 
         if (candidates.Count == 0)
@@ -271,6 +339,55 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         }
 
         return candidates;
+    }
+
+    private static BlemishCandidateKind ClassifyCandidateKind(
+        double darkScore,
+        double redScore,
+        double colorScore,
+        double darkDetail,
+        double redDetail,
+        double chromaDifference)
+    {
+        if (redScore >= darkScore && redScore >= colorScore * 0.72 && redDetail > 7)
+        {
+            return BlemishCandidateKind.Redness;
+        }
+
+        if (darkScore >= redScore && darkScore >= colorScore * 0.62 && darkDetail > 15)
+        {
+            return darkDetail > 34 && chromaDifference < 82
+                ? BlemishCandidateKind.DarkSpot
+                : BlemishCandidateKind.Freckle;
+        }
+
+        if (colorScore > 0.35)
+        {
+            return chromaDifference > 78
+                ? BlemishCandidateKind.SmallBlob
+                : BlemishCandidateKind.Freckle;
+        }
+
+        return BlemishCandidateKind.SmallBlob;
+    }
+
+    private static BlemishCandidateKind ResolveCandidateKind(IReadOnlyList<int> pixels, BlemishCandidateKind[] candidateKindMap)
+    {
+        Dictionary<BlemishCandidateKind, int> counts = new();
+        foreach (int index in pixels)
+        {
+            BlemishCandidateKind kind = candidateKindMap[index];
+            if (kind == BlemishCandidateKind.None)
+            {
+                continue;
+            }
+
+            counts[kind] = counts.TryGetValue(kind, out int count) ? count + 1 : 1;
+        }
+
+        return counts.Count == 0
+            ? BlemishCandidateKind.SmallBlob
+            : counts.OrderByDescending(pair => pair.Value).First().Key;
     }
 
     private static List<int> FloodFill(bool[] map, bool[] visited, int width, int height, int startIndex)
@@ -421,10 +538,7 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         int componentWidth = candidate.MaxX - candidate.MinX + 1;
         int componentHeight = candidate.MaxY - candidate.MinY + 1;
         int radius = Math.Clamp(Math.Max(componentWidth, componentHeight) * 2 + 5, 5, 28);
-        double blueSum = 0;
-        double greenSum = 0;
-        double redSum = 0;
-        double weightSum = 0;
+        List<ColorSample> samples = new();
 
         int left = Math.Max(0, candidate.MinX - radius);
         int right = Math.Min(width - 1, candidate.MaxX + radius);
@@ -451,11 +565,30 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
                 }
 
                 int index = y * stride + x * 4;
-                blueSum += originalPixels[index] * mask;
-                greenSum += originalPixels[index + 1] * mask;
-                redSum += originalPixels[index + 2] * mask;
-                weightSum += mask;
+                samples.Add(new ColorSample(
+                    originalPixels[index],
+                    originalPixels[index + 1],
+                    originalPixels[index + 2],
+                    mask));
             }
+        }
+
+        if (samples.Count == 0)
+        {
+            return new ColorSample(0, 0, 0, 0);
+        }
+
+        IReadOnlyList<ColorSample> cleanSamples = SelectCleanColorSamples(samples);
+        double blueSum = 0;
+        double greenSum = 0;
+        double redSum = 0;
+        double weightSum = 0;
+        foreach (ColorSample sample in cleanSamples)
+        {
+            blueSum += sample.Blue * sample.Weight;
+            greenSum += sample.Green * sample.Weight;
+            redSum += sample.Red * sample.Weight;
+            weightSum += sample.Weight;
         }
 
         if (weightSum <= 0)
@@ -464,6 +597,49 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         }
 
         return new ColorSample(blueSum / weightSum, greenSum / weightSum, redSum / weightSum, weightSum);
+    }
+
+    private static IReadOnlyList<ColorSample> SelectCleanColorSamples(IReadOnlyList<ColorSample> samples)
+    {
+        if (samples.Count < 12)
+        {
+            return samples;
+        }
+
+        double[] luminanceValues = samples
+            .Select(sample => GetLuminance(sample.Red, sample.Green, sample.Blue))
+            .OrderBy(value => value)
+            .ToArray();
+        double[] redExcessValues = samples
+            .Select(sample => GetRedExcess(sample.Red, sample.Green, sample.Blue))
+            .OrderBy(value => value)
+            .ToArray();
+
+        double medianLuminance = luminanceValues[luminanceValues.Length / 2];
+        double medianRedExcess = redExcessValues[redExcessValues.Length / 2];
+        double darkLimit = medianLuminance - 20;
+        double redLimit = medianRedExcess + 10;
+
+        ColorSample[] clean = samples
+            .Where(sample =>
+            {
+                double luminance = GetLuminance(sample.Red, sample.Green, sample.Blue);
+                double redExcess = GetRedExcess(sample.Red, sample.Green, sample.Blue);
+                return luminance >= darkLimit && redExcess <= redLimit;
+            })
+            .ToArray();
+
+        return clean.Length >= Math.Max(6, samples.Count / 4) ? clean : samples;
+    }
+
+    private static double GetLuminance(double red, double green, double blue)
+    {
+        return red * 0.299 + green * 0.587 + blue * 0.114;
+    }
+
+    private static double GetRedExcess(double red, double green, double blue)
+    {
+        return red - (green + blue) * 0.5;
     }
 
     private static bool IsNearHardProtect(MaskPlane hardProtectMask, int width, int height, double centerX, double centerY, int radius)
@@ -533,6 +709,67 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         }
 
         return Math.Clamp(scale, 0.25, 1);
+    }
+
+    private static double GetCandidateKindStrengthScale(BlemishCandidateKind kind, bool isMaximumBlemishReduce)
+    {
+        if (isMaximumBlemishReduce)
+        {
+            return kind switch
+            {
+                BlemishCandidateKind.Redness => 1.06,
+                BlemishCandidateKind.Freckle => 0.96,
+                BlemishCandidateKind.DarkSpot => 1.16,
+                BlemishCandidateKind.SmallBlob => 1.08,
+                BlemishCandidateKind.SkinMaskHole => 1.2,
+                _ => 1.0
+            };
+        }
+
+        return kind switch
+        {
+            BlemishCandidateKind.Redness => 0.78,
+            BlemishCandidateKind.Freckle => 0.68,
+            BlemishCandidateKind.DarkSpot => 1.06,
+            BlemishCandidateKind.SmallBlob => 0.94,
+            BlemishCandidateKind.SkinMaskHole => 1.12,
+            _ => 0.88
+        };
+    }
+
+    private static ColorSample AdjustMaximumBlemishTarget(ColorSample target, BlemishCandidateKind kind)
+    {
+        if (target.Weight <= 0)
+        {
+            return target;
+        }
+
+        double blue = target.Blue;
+        double green = target.Green;
+        double red = target.Red;
+        switch (kind)
+        {
+            case BlemishCandidateKind.Redness:
+            case BlemishCandidateKind.SmallBlob:
+                red = Math.Min(red, (green + blue) * 0.5 + 14);
+                green = green * 0.985 + red * 0.015;
+                break;
+            case BlemishCandidateKind.DarkSpot:
+            case BlemishCandidateKind.Freckle:
+            case BlemishCandidateKind.SkinMaskHole:
+                double luminance = GetLuminance(red, green, blue);
+                double lift = Math.Clamp(156 - luminance, 0, 18);
+                red += lift * 0.78;
+                green += lift * 0.86;
+                blue += lift * 0.72;
+                break;
+        }
+
+        return new ColorSample(
+            Math.Clamp(blue, 0, 255),
+            Math.Clamp(green, 0, 255),
+            Math.Clamp(red, 0, 255),
+            target.Weight);
     }
 
     private static byte[] BoxBlur(byte[] sourcePixels, int width, int height, int radius)
@@ -674,6 +911,7 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         string SnapshotStableId,
         MaskPlane CandidateMask,
         IReadOnlyList<BlemishCandidate> Candidates,
+        IReadOnlyList<BlemishCandidatePoint> CandidatePoints,
         IReadOnlyList<string> DebugWarnings);
 
     private sealed record BlemishCandidate(
@@ -685,7 +923,8 @@ public sealed class BlemishReduceFilter : IBlemishReduceFilter
         double CenterX,
         double CenterY,
         double Score,
-        bool IsSoftProtect);
+        bool IsSoftProtect,
+        BlemishCandidateKind Kind);
 
     private sealed record ComponentStats(
         int MinX,
@@ -735,4 +974,26 @@ public sealed record BlemishProcessReport(
     int SkippedCount,
     double BlemishReduceAmount,
     double AverageCorrectionStrength,
-    IReadOnlyList<string> DebugWarnings);
+    IReadOnlyList<string> DebugWarnings,
+    IReadOnlyList<BlemishCandidatePoint> CandidatePoints);
+
+public sealed record BlemishCandidatePoint(
+    BlemishCandidateKind Kind,
+    double CenterX,
+    double CenterY,
+    int MinX,
+    int MinY,
+    int MaxX,
+    int MaxY,
+    double Score,
+    bool IsSoftProtect);
+
+public enum BlemishCandidateKind
+{
+    None,
+    SkinMaskHole,
+    SmallBlob,
+    Redness,
+    DarkSpot,
+    Freckle
+}

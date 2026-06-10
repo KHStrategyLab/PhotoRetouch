@@ -64,6 +64,11 @@ public static class AverageFaceColorMaskBuilder
         skinRangeMask = FeatherColorMask(skinRangeMask, pixels, stride, references, rangeAmount, cancellationToken);
         MaskPlane featureBlockMask = BuildFeatureBlockMask(width, height, analysis, masks);
         skinRangeMask = FillEnclosedMaskHoles(skinRangeMask, featureBlockMask, rangeAmount, cancellationToken);
+        if (masks is not null)
+        {
+            skinRangeMask = FillInteriorFaceMaskHoles(skinRangeMask, featureBlockMask, analysis, rangeAmount, cancellationToken);
+        }
+
         skinRangeMask = ApplyFeatureBlockMask(skinRangeMask, featureBlockMask);
         double average = skinRangeMask.Average();
         FaceColorReference displayReference = BlendReferences(defaultReferences);
@@ -365,6 +370,215 @@ public static class AverageFaceColorMaskBuilder
         return result;
     }
 
+    private static MaskPlane FillInteriorFaceMaskHoles(
+        MaskPlane source,
+        MaskPlane featureBlockMask,
+        FaceAnalysisResult analysis,
+        double rangeAmount,
+        CancellationToken cancellationToken)
+    {
+        MaskPlane.EnsureSameSize(source, featureBlockMask);
+        int width = source.Width;
+        int height = source.Height;
+        Int32Rect faceRect = BuildInteriorFillRect(analysis.FaceBox, width, height);
+        if (faceRect.Width <= 2 || faceRect.Height <= 2)
+        {
+            return source;
+        }
+
+        MaskPlane result = source.Clone();
+        bool[] visited = new bool[source.Values.Length];
+        const double sourceThreshold = 0.10;
+        const double blockThreshold = 0.20;
+        int maxArea = Math.Clamp(
+            (int)Math.Round(faceRect.Width * faceRect.Height * (0.012 + Math.Clamp(rangeAmount, 0, 1) * 0.028)),
+            64,
+            Math.Max(96, faceRect.Width * faceRect.Height / 16));
+
+        for (int y = faceRect.Y; y < faceRect.Y + faceRect.Height; y++)
+        {
+            if ((y & 7) == 0 && cancellationToken.IsCancellationRequested)
+            {
+                return source;
+            }
+
+            for (int x = faceRect.X; x < faceRect.X + faceRect.Width; x++)
+            {
+                int index = y * width + x;
+                if (visited[index] ||
+                    source.Values[index] > sourceThreshold ||
+                    featureBlockMask.Values[index] >= blockThreshold)
+                {
+                    continue;
+                }
+
+                InteriorHoleComponent component = FloodFillInteriorHole(
+                    source,
+                    featureBlockMask,
+                    visited,
+                    faceRect,
+                    x,
+                    y,
+                    sourceThreshold,
+                    blockThreshold,
+                    cancellationToken);
+                if (component.TouchesFaceRectEdge ||
+                    component.Pixels.Count == 0 ||
+                    component.Pixels.Count > maxArea)
+                {
+                    continue;
+                }
+
+                double ringSupport = CalculateRingSupport(source, featureBlockMask, component.Bounds, blockThreshold);
+                if (ringSupport < 0.22)
+                {
+                    continue;
+                }
+
+                double fill = Math.Clamp(ringSupport * (0.62 + Math.Clamp(rangeAmount, 0, 1) * 0.24), 0.16, 0.72);
+                foreach (int fillIndex in component.Pixels)
+                {
+                    result.Values[fillIndex] = Math.Max(result.Values[fillIndex], fill);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static InteriorHoleComponent FloodFillInteriorHole(
+        MaskPlane source,
+        MaskPlane featureBlockMask,
+        bool[] visited,
+        Int32Rect faceRect,
+        int startX,
+        int startY,
+        double sourceThreshold,
+        double blockThreshold,
+        CancellationToken cancellationToken)
+    {
+        int width = source.Width;
+        Queue<(int X, int Y)> queue = new();
+        List<int> pixels = new();
+        queue.Enqueue((startX, startY));
+        visited[startY * width + startX] = true;
+        bool touchesEdge = false;
+        int minX = startX;
+        int maxX = startX;
+        int minY = startY;
+        int maxY = startY;
+
+        while (queue.Count > 0)
+        {
+            if ((pixels.Count & 255) == 0 && cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            (int x, int y) = queue.Dequeue();
+            int index = y * width + x;
+            pixels.Add(index);
+            touchesEdge |= x == faceRect.X ||
+                y == faceRect.Y ||
+                x == faceRect.X + faceRect.Width - 1 ||
+                y == faceRect.Y + faceRect.Height - 1;
+            minX = Math.Min(minX, x);
+            maxX = Math.Max(maxX, x);
+            minY = Math.Min(minY, y);
+            maxY = Math.Max(maxY, y);
+
+            TryAddInteriorNeighbor(x - 1, y);
+            TryAddInteriorNeighbor(x + 1, y);
+            TryAddInteriorNeighbor(x, y - 1);
+            TryAddInteriorNeighbor(x, y + 1);
+        }
+
+        return new InteriorHoleComponent(
+            pixels,
+            new Int32Rect(minX, minY, maxX - minX + 1, maxY - minY + 1),
+            touchesEdge);
+
+        void TryAddInteriorNeighbor(int x, int y)
+        {
+            if (x < faceRect.X ||
+                y < faceRect.Y ||
+                x >= faceRect.X + faceRect.Width ||
+                y >= faceRect.Y + faceRect.Height)
+            {
+                return;
+            }
+
+            int index = y * width + x;
+            if (visited[index] ||
+                source.Values[index] > sourceThreshold ||
+                featureBlockMask.Values[index] >= blockThreshold)
+            {
+                return;
+            }
+
+            visited[index] = true;
+            queue.Enqueue((x, y));
+        }
+    }
+
+    private static double CalculateRingSupport(MaskPlane source, MaskPlane featureBlockMask, Int32Rect bounds, double blockThreshold)
+    {
+        int radius = Math.Clamp((int)Math.Round(Math.Max(bounds.Width, bounds.Height) * 0.28), 4, 18);
+        int left = Math.Max(0, bounds.X - radius);
+        int top = Math.Max(0, bounds.Y - radius);
+        int right = Math.Min(source.Width - 1, bounds.X + bounds.Width - 1 + radius);
+        int bottom = Math.Min(source.Height - 1, bounds.Y + bounds.Height - 1 + radius);
+        double sum = 0;
+        int count = 0;
+
+        for (int y = top; y <= bottom; y++)
+        {
+            for (int x = left; x <= right; x++)
+            {
+                bool insideOriginalBounds = x >= bounds.X &&
+                    x < bounds.X + bounds.Width &&
+                    y >= bounds.Y &&
+                    y < bounds.Y + bounds.Height;
+                if (insideOriginalBounds)
+                {
+                    continue;
+                }
+
+                int index = y * source.Width + x;
+                if (featureBlockMask.Values[index] >= blockThreshold)
+                {
+                    continue;
+                }
+
+                double value = source.Values[index];
+                if (value <= 0.10)
+                {
+                    continue;
+                }
+
+                sum += value;
+                count++;
+            }
+        }
+
+        return count > 0 ? sum / count : 0;
+    }
+
+    private static Int32Rect BuildInteriorFillRect(Int32Rect faceBox, int width, int height)
+    {
+        double left = faceBox.X + faceBox.Width * 0.06;
+        double top = faceBox.Y + faceBox.Height * 0.12;
+        double right = faceBox.X + faceBox.Width * 0.94;
+        double bottom = faceBox.Y + faceBox.Height * 0.94;
+        return ClampRect(new Int32Rect(
+            (int)Math.Round(left),
+            (int)Math.Round(top),
+            Math.Max(1, (int)Math.Round(right - left)),
+            Math.Max(1, (int)Math.Round(bottom - top))),
+            width,
+            height);
+    }
+
     private static MaskPlane ApplyFeatureBlockMask(MaskPlane source, MaskPlane featureBlockMask)
     {
         MaskPlane.EnsureSameSize(source, featureBlockMask);
@@ -545,5 +759,7 @@ public static class AverageFaceColorMaskBuilder
     }
 
     private sealed record FaceColorReference(double Red, double Green, double Blue, double Luma, double Weight);
+
+    private sealed record InteriorHoleComponent(List<int> Pixels, Int32Rect Bounds, bool TouchesFaceRectEdge);
 
 }

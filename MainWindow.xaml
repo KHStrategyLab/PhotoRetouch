@@ -609,6 +609,23 @@
                               Background="Transparent">
                     <StackPanel x:Name="RetouchPanelContent">
                         <TextBlock Text="&#xBCF4;&#xC815; &#xD328;&#xB110;" Style="{StaticResource SectionTitle}"/>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Content="{Binding UserToolModeButtonText}"
+                                    Height="34"
+                                    Margin="0,0,6,0"
+                                    HorizontalContentAlignment="Center"
+                                    Click="UserToolModeButton_Click"/>
+                            <Button Grid.Column="1"
+                                    Content="{Binding UserToolEditButtonText}"
+                                    Height="34"
+                                    Margin="0"
+                                    HorizontalContentAlignment="Center"
+                                    Click="UserToolEditModeButton_Click"/>
+                        </Grid>
 
                         <Border Background="{StaticResource PanelSoft}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" Padding="12" Margin="0,0,0,14">
                             <StackPanel>
@@ -641,6 +658,8 @@
                                             PreviewDrop="RetouchSection_PreviewDrop"
                                             Padding="{Binding SectionPadding}"
                                             Margin="0,0,0,10"
+                                            Visibility="{Binding SectionVisibility}"
+                                            Opacity="{Binding UserModeOpacity}"
                                             Background="Transparent">
                                         <Expander IsExpanded="{Binding IsExpanded}"
                                                   Expanded="RetouchSection_Expanded"
@@ -651,6 +670,7 @@
                                             <Grid Width="276">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
@@ -666,7 +686,19 @@
                                                         FontSize="16"
                                                         ToolTip="&#xC774; &#xBAA9;&#xB85D; &#xCD08;&#xAE30;&#xD654;"
                                                         Click="ResetRetouchSectionButton_Click"/>
-                                                <Border Grid.Column="2"
+                                                <Button Grid.Column="2"
+                                                        Width="30"
+                                                        Height="28"
+                                                        Padding="0"
+                                                        Margin="0,0,4,0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Content="{Binding UserModeToggleText}"
+                                                        FontSize="16"
+                                                        ToolTip="{Binding UserModeToggleToolTip}"
+                                                        Visibility="{Binding DataContext.IsUserToolEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                        Click="ToggleRetouchSectionUserModeButton_Click"/>
+                                                <Border Grid.Column="3"
                                                         Width="32"
                                                         Height="28"
                                                         Background="Transparent"

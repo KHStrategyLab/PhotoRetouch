@@ -12,6 +12,8 @@ public sealed class RetouchSection : INotifyPropertyChanged
     private bool _isExpanded;
     private double _dragGapBefore;
     private double _dragGapAfter;
+    private bool _isUserModeIncluded = true;
+    private Visibility _sectionVisibility = Visibility.Visible;
 
     public RetouchSection(string id, string title, bool isExpanded, IReadOnlyList<RetouchControl> controls)
     {
@@ -26,6 +28,9 @@ public sealed class RetouchSection : INotifyPropertyChanged
     public string Id { get; }
     public string Title { get; }
     public Thickness SectionPadding => new(0, DragGapBefore, 0, DragGapAfter);
+    public string UserModeToggleText => IsUserModeIncluded ? "−" : "+";
+    public string UserModeToggleToolTip => IsUserModeIncluded ? "사용자 탭에서 빼기" : "사용자 탭에 추가";
+    public double UserModeOpacity => IsUserModeIncluded ? 1.0 : 0.46;
     public bool IsExpanded
     {
         get => _isExpanded;
@@ -37,6 +42,39 @@ public sealed class RetouchSection : INotifyPropertyChanged
             }
 
             _isExpanded = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsUserModeIncluded
+    {
+        get => _isUserModeIncluded;
+        set
+        {
+            if (_isUserModeIncluded == value)
+            {
+                return;
+            }
+
+            _isUserModeIncluded = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(UserModeToggleText));
+            OnPropertyChanged(nameof(UserModeToggleToolTip));
+            OnPropertyChanged(nameof(UserModeOpacity));
+        }
+    }
+
+    public Visibility SectionVisibility
+    {
+        get => _sectionVisibility;
+        set
+        {
+            if (_sectionVisibility == value)
+            {
+                return;
+            }
+
+            _sectionVisibility = value;
             OnPropertyChanged();
         }
     }

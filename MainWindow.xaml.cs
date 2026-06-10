@@ -22,6 +22,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "PhotoRetouch");
     private static readonly string SectionOrderPath = Path.Combine(SettingsDirectory, "section-order.json");
+    private static readonly string SectionHiddenPath = Path.Combine(SettingsDirectory, "section-hidden.json");
 
     private RetouchSection? _sectionDragSource;
     private RetouchSection? _sectionDropTarget;
@@ -85,6 +86,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private FaceWorkArea _faceWorkAreaDragStartArea = FaceWorkArea.Default;
     private RetouchAdjustmentState? _faceWorkAreaDragUndoBeforeState;
     private bool _isSectionOrderEditMode;
+    private bool _isUserToolMode;
+    private bool _isUserToolEditMode;
     private RetouchAdjustmentState? _retouchSliderUndoBeforeState;
     private RetouchAdjustmentState? _curveAmountUndoBeforeState;
     private RetouchAdjustmentState? _curveDragUndoBeforeState;
@@ -570,6 +573,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         };
         _retouchSliderPreviewTimer.Tick += RetouchSliderPreviewTimer_Tick;
         RestoreSectionOrder();
+        RestoreHiddenSections();
+        ApplyRetouchSectionVisibility();
         SubscribeRetouchControlChanges();
         InitializeComponent();
         DataContext = this;
@@ -1883,6 +1888,44 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         File.WriteAllLines(Path.Combine(outputDirectory, "debug_average_skin_mask_report.txt"), lines, System.Text.Encoding.UTF8);
     }
+
+    public bool IsUserToolMode
+    {
+        get => _isUserToolMode;
+        private set
+        {
+            if (_isUserToolMode == value)
+            {
+                return;
+            }
+
+            _isUserToolMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(UserToolModeButtonText));
+            ApplyRetouchSectionVisibility();
+        }
+    }
+
+    public bool IsUserToolEditMode
+    {
+        get => _isUserToolEditMode;
+        private set
+        {
+            if (_isUserToolEditMode == value)
+            {
+                return;
+            }
+
+            _isUserToolEditMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(UserToolEditButtonText));
+            ApplyRetouchSectionVisibility();
+        }
+    }
+
+    public string UserToolModeButtonText => IsUserToolMode ? "전체 탭" : "사용자 탭";
+
+    public string UserToolEditButtonText => IsUserToolEditMode ? "편집 완료" : "즐겨찾기 편집";
 
     private static void DeleteOldAverageColorMaskDebugFiles(string outputDirectory)
     {
@@ -5862,6 +5905,43 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private void UserToolModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        IsUserToolMode = !IsUserToolMode;
+    }
+
+    private void UserToolEditModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        IsUserToolEditMode = !IsUserToolEditMode;
+        if (!IsUserToolEditMode)
+        {
+            SaveHiddenSections();
+        }
+    }
+
+    private void ToggleRetouchSectionUserModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not RetouchSection section)
+        {
+            return;
+        }
+
+        section.IsUserModeIncluded = !section.IsUserModeIncluded;
+        if (!section.IsUserModeIncluded)
+        {
+            section.IsExpanded = false;
+            if (ReferenceEquals(_activeRetouchSection, section))
+            {
+                _activeRetouchSection = null;
+                OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
+            }
+        }
+
+        SaveHiddenSections();
+        ApplyRetouchSectionVisibility();
+        e.Handled = true;
+    }
+
     private void RetouchSection_Expanded(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not RetouchSection expandedSection)
@@ -6106,6 +6186,70 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (UnauthorizedAccessException)
         {
+        }
+    }
+
+    private void RestoreHiddenSections()
+    {
+        if (!File.Exists(SectionHiddenPath))
+        {
+            return;
+        }
+
+        try
+        {
+            string[]? hiddenSectionIds = JsonSerializer.Deserialize<string[]>(File.ReadAllText(SectionHiddenPath));
+            if (hiddenSectionIds is null)
+            {
+                return;
+            }
+
+            HashSet<string> hidden = new(hiddenSectionIds, StringComparer.OrdinalIgnoreCase);
+            foreach (RetouchSection section in RetouchSections)
+            {
+                section.IsUserModeIncluded = !hidden.Contains(section.Id);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (JsonException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private void SaveHiddenSections()
+    {
+        try
+        {
+            Directory.CreateDirectory(SettingsDirectory);
+            string json = JsonSerializer.Serialize(RetouchSections
+                .Where(section => !section.IsUserModeIncluded)
+                .Select(section => section.Id)
+                .ToArray());
+            File.WriteAllText(SectionHiddenPath, json);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private void ApplyRetouchSectionVisibility()
+    {
+        foreach (RetouchSection section in RetouchSections)
+        {
+            bool visible = !IsUserToolMode || IsUserToolEditMode || section.IsUserModeIncluded;
+            section.SectionVisibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            if (!visible)
+            {
+                section.IsExpanded = false;
+            }
         }
     }
 

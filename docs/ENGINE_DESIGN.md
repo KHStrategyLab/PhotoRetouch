@@ -614,6 +614,50 @@ Engine interpretation:
 3. Repair the defect with nearby clean skin color.
 4. Reintroduce subtle fine texture inside the repair mask, preferably from nearby original skin detail first, procedural 50% gray texture only as a fallback.
 
+## Frequency Separation Skin Filter Baseline
+
+This is the baseline philosophy for PhotoRetouch skin filters. It is separate from K-AnchorWarp/Liquify geometry work.
+
+The Photoshop-style workflow maps to the app as frequency separation:
+
+- `Color/Tone Layer`: low-frequency skin color, redness, dullness, patchy tone, and soft shadow transitions.
+- `Texture Layer`: pores, fine skin grain, small wrinkles, and high-frequency skin detail.
+- `SkinMask / RetouchAllowMask`: where the user can softly reveal the skin correction.
+- `HardProtectMask`: areas that must stay original, including eyes, eyebrows, eyelashes, lips, inner mouth, teeth, nostrils, hair, beard, glasses, clothing, and background.
+
+The practical retouch idea is:
+
+1. Split the original image into a low-frequency color/tone field and a high-frequency texture/detail field.
+2. Clean or smooth only the color/tone field inside `RetouchAllowMask`.
+3. Fill small enclosed holes in the skin/color mask before applying the feature exclusion mask.
+4. Never refill deliberate protection holes. Eyes, lips, nostrils, hair, beard, glasses, clothing, and background must be excluded again through `HardProtectMask` / feature block masks.
+5. Keep the texture/detail field from the original whenever possible.
+6. Reduce texture restoration over blemish and wrinkle repair masks so removed defects do not come back.
+7. Blend the corrected color/tone layer through a soft skin mask.
+8. Restore controlled original texture through `TextureRestoreFilter`.
+9. Restore `HardProtectMask` pixels from the original as the final image-changing operation.
+
+Engineering interpretation:
+
+```text
+OriginalImage
+-> LowFrequencyColorTone = EdgeAwareSmooth(OriginalImage)
+-> DetailTexture = OriginalImage - LowFrequencyColorTone
+-> FilledSkinMask = FillSmallEnclosedSkinMaskHoles(SkinMask, FeatureBlockMask)
+-> RetouchAllowMask = FilledSkinMask - HardProtectMask
+-> SmoothToneCandidate = RepairColorTone(LowFrequencyColorTone, RetouchAllowMask)
+-> TextureCandidate = PreserveOrRestoreTexture(DetailTexture, TextureRestoreMask)
+-> SkinRetouch =
+       SmoothToneCandidate through RetouchAllowMask
+     + weaker SmoothToneCandidate through SoftProtectMask
+     + TextureCandidate through TextureRestoreMask
+-> FinalImage = HardProtectFinalRestore(OriginalImage, SkinRetouch, HardProtectMask)
+```
+
+PhotoRetouch should treat masked skin smoothing as a controlled local reveal workflow, like soft brush work on a mask. The app can automate the mask and preview, but the concept is still: smooth color/tone, preserve texture, and reveal only where skin correction is allowed.
+
+Do not treat this baseline as face-shape correction. Face shape, jawline, eye position, mouth position, and liquify-style deformation belong to K-AnchorMesh / K-AnchorWarp, not SkinSmooth or TextureRestore.
+
 ## Photoshop Smoothing Reference
 
 The subtitle `C:\Users\beint\source\repos\유튜브_자막다운\subs\NA - Photoshop Fast & Easy Series： Best Way to Realistically SMOOTH SKIN and Remove Blemishes! [utcs8Pdgt2c].en-orig.vtt` describes a practical smoothing workflow that maps well to the app's engine design.

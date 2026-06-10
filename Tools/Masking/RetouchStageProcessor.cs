@@ -311,7 +311,7 @@ public sealed class RetouchStageProcessor
     private static BlemishReduceResult CreateDisabledBlemishResult(BitmapSource currentImage, int width, int height, double amount)
     {
         MaskPlane empty = MaskPlane.Empty(width, height);
-        BlemishProcessReport report = new(0, 0, 0, amount, 0, new[] { "blemish_reduce_disabled" });
+        BlemishProcessReport report = new(0, 0, 0, amount, 0, new[] { "blemish_reduce_disabled" }, Array.Empty<BlemishCandidatePoint>());
         return new BlemishReduceResult(currentImage, empty, empty, report, report.DebugWarnings);
     }
 
@@ -335,7 +335,7 @@ public sealed class RetouchStageProcessor
         int width = bitmap.PixelWidth;
         int height = bitmap.PixelHeight;
         MaskPlane empty = MaskPlane.Empty(width, height);
-        BlemishProcessReport blemishReport = new(0, 0, 0, 0, 0, new[] { "blemish_reduce_not_requested" });
+        BlemishProcessReport blemishReport = new(0, 0, 0, 0, 0, new[] { "blemish_reduce_not_requested" }, Array.Empty<BlemishCandidatePoint>());
         WrinkleProcessReport wrinkleReport = WrinkleProcessReport.Empty(new[] { "wrinkle_reduce_not_requested" });
         TextureRestoreProcessReport textureReport = new(appliedStage, 0, 0, 0, 0, 0, new[] { "texture_restore_not_requested" });
         HardProtectRestoreReport hardProtectReport = new(

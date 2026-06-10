@@ -153,6 +153,8 @@ Skin retouching is now mask-first.
 - Current BlemishReduce pass detects small local blemish candidates only through RetouchAllow/weak SoftProtect masks, samples nearby skin color, clips out HardProtect, caches candidate analysis by Snapshot key, and changes only correction strength when Stage changes.
 - Current WrinkleSoftReduce pass detects linear dark wrinkle candidates through SoftProtect plus weak RetouchAllow masks, splits them into under-eye, glabella, forehead, nasolabial, mouth-corner, neck, and nose-shadow masks, clips out HardProtect, caches candidate analysis by Snapshot key, and changes only correction strength when Stage or toolset values change.
 - Current TextureRestore pass runs after SkinSmooth, BlemishReduce, WrinkleSoftReduce, and ToneEven stages. It extracts original detail, restores texture through RetouchAllow and weak SoftProtect masks, reduces restore strength over blemish/wrinkle repair masks, applies a PlasticSkinGuard boost when detail loss is high, caches analysis by Snapshot key, and restores HardProtect from the original.
+- Skin filter baseline follows a Photoshop frequency-separation idea: smooth low-frequency color/tone through `RetouchAllowMask`, preserve or restore high-frequency skin texture through `TextureRestoreFilter`, reduce restoration over repaired blemish/wrinkle masks, and restore `HardProtectMask` from the original last.
+- Fill small enclosed holes in skin/color masks before feature exclusion, but never refill deliberate protection holes for eyes, lips, nostrils, hair, beard, glasses, clothing, or background.
 - Current Toolset alignment uses `RetouchToolset` and `AppliedRetouchOptions`: Stage presets provide defaults, and changed sliders act as user overrides without rebuilding SnapshotMask.
 - HardProtect always keeps the original pixels. SoftProtect is blended at low opacity. RetouchAllow receives the main skin smoothing blend.
 - Never rerun face analysis only because Stage `1-10`, `SkinSmooth`, `BlemishReduce`, `ToneEven`, `TextureRestore`, or before/after view changed.
@@ -230,6 +232,30 @@ K-AnchorWarp should expose workflow modes instead of one intimidating free-trans
 - Full AUTO mode, if ever added, must remain optional and conservative. It must not replace the user as the final judge.
 
 Default should be Easy Liquify. Advanced and Auto modes should be separate surfaces or tabs if they do not fit cleanly into the existing tool panels.
+
+Separate shape tools into two user-facing families:
+
+1. Liquify
+
+   This is the easy Photoshop-like brush tool. It should feel approachable and local.
+
+   Target behavior is closer to Photoshop CS3 Liquify: direct brush-based deformation, not modern automatic face-aware beautification.
+
+   Initial brush modes: push, bloat, pinch, restore, and protect.
+
+   Typical use: small jawline nudges, cheekbone nudges, cheek line, temple, sideburn/ear-side line, neck, clothing edge, and other light local corrections.
+
+   Liquify is a visual brush workflow. It is not a face-feature handle workflow.
+
+2. Mesh Tool
+
+   This is the face-specific handle tool built on K-AnchorMesh / K-AnchorWarp.
+
+   Initial handle bundles: eyes, nose, mouth, brows, philtrum, chin, jawline, cheekbone, temple, and ear-side.
+
+   Intended interaction: click a face handle, drag it, use arrow keys for fine adjustment, Enter to commit, and Esc to cancel.
+
+   Mesh Tool is not slider-first. It should let the user directly grab grouped face handles on the image.
 
 ## Engine Roadmap
 
