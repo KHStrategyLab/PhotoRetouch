@@ -65,6 +65,7 @@ public sealed class KAnchorMeshEngine
         AnchorMeshFeatureSet aligned = _aligner.Align(posed, yunetAnchors, fitBox);
         AnchorMeshFeatureSet final = _snapper.Snap(aligned, maskContours);
         _aligner.LockPrimaryFeatureCenters(final, yunetAnchors);
+        bool chinLimited = _aligner.ConstrainFaceOutlineChinToEyeNoseDistanceLimit(final, yunetAnchors);
 
         AnchorMeshResult result = new()
         {
@@ -97,6 +98,10 @@ public sealed class KAnchorMeshEngine
         }
 
         result.Warnings.AddRange(measurements.Warnings);
+        if (chinLimited)
+        {
+            result.Warnings.Add("face_outline_chin_limited_by_eye_center_to_nose_tip_distance");
+        }
 
         return result;
     }

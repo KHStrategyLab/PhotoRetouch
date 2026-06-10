@@ -138,45 +138,80 @@ public sealed class AnchorMeshTemplateFactory
 
     private static AnchorMeshFeature CreateBrow(string name, float startX, float startY, float endX, float endY, float arch, bool isLeftBrow)
     {
-        const int count = 12;
-        AnchorMeshFeature feature = new() { Name = name, IsClosedLoop = false };
-        for (int i = 0; i < count; i++)
+        const int contourCount = 15;
+        AnchorMeshFeature feature = new() { Name = name, IsClosedLoop = true };
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float length = MathF.Max(0.0001f, MathF.Sqrt(dx * dx + dy * dy));
+        float downX = -dy / length;
+        float downY = dx / length;
+
+        for (int i = 0; i < contourCount; i++)
         {
-            float t = (float)i / (count - 1);
-            float x = Lerp(startX, endX, t);
-            float y = Lerp(startY, endY, t) - MathF.Sin(t * MathF.PI) * arch;
-            string role = GetBrowPointRole(i, count, isLeftBrow);
-            feature.Points.Add(CreatePoint(name, role, i, x, y, z: 0.04f));
+            float t = (float)i / (contourCount - 1);
+            (float centerX, float centerY, float thickness) = EvaluateBrowBundleCenter(startX, startY, endX, endY, arch, t, isLeftBrow);
+            string role = GetBrowShapePointRole(i, t, isUpper: true, isLeftBrow: isLeftBrow);
+            feature.Points.Add(CreatePoint(name, role, i, centerX - downX * thickness * 0.42f, centerY - downY * thickness * 0.42f, z: 0.045f));
+        }
+
+        for (int j = 0; j < contourCount; j++)
+        {
+            float t = 1.0f - (float)j / (contourCount - 1);
+            (float centerX, float centerY, float thickness) = EvaluateBrowBundleCenter(startX, startY, endX, endY, arch, t, isLeftBrow);
+            string role = GetBrowShapePointRole(contourCount + j, t, isUpper: false, isLeftBrow: isLeftBrow);
+            feature.Points.Add(CreatePoint(name, role, contourCount + j, centerX + downX * thickness * 0.58f, centerY + downY * thickness * 0.58f, z: 0.035f));
         }
 
         AnchorMeshMetrics.Update(feature, 0);
         return feature;
     }
 
-    private static string GetBrowPointRole(int index, int count, bool isLeftBrow)
+    private static (float X, float Y, float Thickness) EvaluateBrowBundleCenter(float startX, float startY, float endX, float endY, float arch, float t, bool isLeftBrow)
     {
-        if (index == 0)
+        float x = Lerp(startX, endX, t);
+        float y = Lerp(startY, endY, t) - MathF.Sin(t * MathF.PI) * arch;
+        float innerness = isLeftBrow ? t : 1.0f - t;
+        float headThickness = 0.026f;
+        float tailThickness = 0.013f;
+        float bodyFullness = MathF.Sin(t * MathF.PI) * 0.006f;
+        float thickness = Lerp(tailThickness, headThickness, innerness) + bodyFullness;
+        return (x, y, thickness);
+    }
+
+    private static string GetBrowShapePointRole(int index, float t, bool isUpper, bool isLeftBrow)
+    {
+        float innerness = isLeftBrow ? t : 1.0f - t;
+        float outerness = 1.0f - innerness;
+        float archT = isLeftBrow ? 0.43f : 0.57f;
+        string side = isLeftBrow ? "Left" : "Right";
+        string edge = isUpper ? "Upper" : "Lower";
+
+        if (innerness >= 0.96f)
         {
-            return isLeftBrow ? "LeftBrowOuterEnd" : "RightBrowInnerEnd";
+            return side + "Brow" + edge + "InnerEnd";
         }
 
-        if (index == count - 1)
+        if (outerness >= 0.96f)
         {
-            return isLeftBrow ? "LeftBrowInnerEnd" : "RightBrowOuterEnd";
+            return side + "Brow" + edge + "OuterEnd";
         }
 
-        int peakIndex = isLeftBrow ? count / 2 - 1 : count / 2;
-        if (index == peakIndex)
+        if (MathF.Abs(t - archT) <= 0.04f)
         {
-            return isLeftBrow ? "LeftBrowPeak" : "RightBrowPeak";
+            return side + "Brow" + edge + "Arch";
         }
 
-        if (index == count / 2 - 1 || index == count / 2)
+        if (innerness > 0.70f)
         {
-            return isLeftBrow ? "LeftBrowArchCenter" : "RightBrowArchCenter";
+            return side + "Brow" + edge + "HeadContour";
         }
 
-        return isLeftBrow ? "LeftBrowContour" : "RightBrowContour";
+        if (outerness > 0.70f)
+        {
+            return side + "Brow" + edge + "TailContour";
+        }
+
+        return side + "Brow" + edge + "BodyContour";
     }
 
     private static AnchorMeshFeature CreateCurve(string name, string role, int count, float startX, float startY, float endX, float endY, float arch, bool closed)

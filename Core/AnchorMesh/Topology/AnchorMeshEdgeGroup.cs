@@ -14,6 +14,8 @@ public enum AnchorMeshEdgeGroup
     RightBrowCurve,
     LeftBrowAnchorCurve,
     RightBrowAnchorCurve,
+    LeftBrowShapeLoop,
+    RightBrowShapeLoop,
     LeftBrowEyeMeasurement,
     RightBrowEyeMeasurement,
     NoseStructure,

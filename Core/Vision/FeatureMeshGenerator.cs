@@ -191,9 +191,11 @@ public static class FeatureMeshGenerator
         double thickness = Math.Clamp(faceHeight * 0.013, 2.0, faceHeight * 0.026);
         double lift = Math.Clamp(faceHeight * 0.075, 12, 42);
         List<FeatureMeshPoint> points = new(PointsPerFeature);
-        AddBrowPoints(points, new WpfPoint(input.LeftEyeCenter.X, input.LeftEyeCenter.Y - lift), halfLength, thickness, angle, 0, "left_brow_contour");
-        AddBrowPoints(points, new WpfPoint(input.RightEyeCenter.X, input.RightEyeCenter.Y - lift), halfLength, thickness, angle, 25, "right_brow_contour");
-        return new FaceFeatureMesh(FaceFeatureType.Brow, points, 0.35, "landmark_eye_centers_brow_dummy_50");
+        WpfPoint leftBrowCenter = OffsetAlongFaceUp(input.LeftEyeCenter, input, lift);
+        WpfPoint rightBrowCenter = OffsetAlongFaceUp(input.RightEyeCenter, input, lift);
+        AddBrowPoints(points, leftBrowCenter, halfLength, thickness, angle, 0, "left_brow_contour");
+        AddBrowPoints(points, rightBrowCenter, halfLength, thickness, angle, 25, "right_brow_contour");
+        return new FaceFeatureMesh(FaceFeatureType.Brow, points, 0.35, "landmark_eye_axis_tilted_brow_guide_50");
     }
 
     private static void AddEyePoints(List<FeatureMeshPoint> points, WpfPoint center, double radiusX, double radiusY, double angle, int startIndex, string role)

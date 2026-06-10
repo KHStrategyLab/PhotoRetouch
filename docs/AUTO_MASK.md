@@ -146,7 +146,6 @@ Shadow smoothing must eventually be controlled per region. Do not use one global
 
 Current AUTO MASK debug output uses:
 
-- `debug_average_skin_mask_bw.png`
 - `debug_average_skin_mask_color.png`
 - `debug_average_skin_mask_report.txt`
 

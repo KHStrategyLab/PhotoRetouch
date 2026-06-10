@@ -5,9 +5,9 @@ public static class AnchorMorphGroupBuilder
     public static AnchorMorphGroupSet BuildDefaultGroups()
     {
         AnchorMorphGroupSet set = new();
-        set.Groups.Add(Create("LeftEyeMorphGroup", "scale", "eye_size", 36, Points("LeftEye", 16), Points("LeftBrow", 12), ["Nose_00", "Nose_08"]));
-        set.Groups.Add(Create("RightEyeMorphGroup", "scale", "eye_size", 36, Points("RightEye", 16), Points("RightBrow", 12), ["Nose_00", "Nose_08"]));
-        set.Groups.Add(Create("BrowMorphGroup", "vertical", "brow_height", 42, Points("LeftBrow", 12).Concat(Points("RightBrow", 12)), Points("LeftEye", 16).Concat(Points("RightEye", 16)), ["Nose_00"]));
+        set.Groups.Add(Create("LeftEyeMorphGroup", "scale", "eye_size", 36, Points("LeftEye", 16), Points("LeftBrow", 30), ["Nose_00", "Nose_08"]));
+        set.Groups.Add(Create("RightEyeMorphGroup", "scale", "eye_size", 36, Points("RightEye", 16), Points("RightBrow", 30), ["Nose_00", "Nose_08"]));
+        set.Groups.Add(Create("BrowMorphGroup", "vertical", "brow_height", 42, Points("LeftBrow", 30).Concat(Points("RightBrow", 30)), Points("LeftEye", 16).Concat(Points("RightEye", 16)), ["Nose_00"]));
         set.Groups.Add(Create("NoseAnchorGroup", "center", "nose_balance", 48, Points("Nose", 24), Points("LeftEye", 16).Concat(Points("RightEye", 16)), ["LeftEye_04", "RightEye_12"]));
         set.Groups.Add(Create("MouthMorphGroup", "scale", "mouth_shape", 46, Points("LipOuter", 24).Concat(Points("LipInner", 16)), Points("Nose", 24), ["Nose_08"]));
         set.Groups.Add(Create("ChinMorphGroup", "vertical", "chin_length", 70, ["FaceOutline_14", "FaceOutline_15", "FaceOutline_16"], ["LipOuter_18"], ["Nose_08", "LipOuter_18"]));

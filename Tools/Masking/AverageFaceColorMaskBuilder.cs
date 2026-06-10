@@ -59,11 +59,10 @@ public static class AverageFaceColorMaskBuilder
 
         MaskPlane skinRangeMask = BuildSkinRangeMask(pixels, width, height, stride, analysis, references, rangeAmount, cancellationToken);
         skinRangeMask = FeatherColorMask(skinRangeMask, pixels, stride, analysis, references, rangeAmount, cancellationToken);
-        if (masks is not null &&
-            masks.HardProtectMask.Width == width &&
-            masks.HardProtectMask.Height == height)
+        if (masks is not null)
         {
-            skinRangeMask = MaskPlane.Subtract(skinRangeMask, masks.HardProtectMask);
+            MaskPlane colorProtectMask = BuildColorMaskProtectionMask(masks, width, height);
+            skinRangeMask = MaskPlane.Subtract(skinRangeMask, colorProtectMask);
         }
 
         double average = skinRangeMask.Average();
@@ -87,6 +86,38 @@ public static class AverageFaceColorMaskBuilder
         }
 
         return CreateDefaultSkinColorReferences();
+    }
+
+    private static MaskPlane BuildColorMaskProtectionMask(FaceMaskSet masks, int width, int height)
+    {
+        MaskPlane protect = MaskPlane.Empty(width, height);
+        AddIfSameSize(protect, masks.EyeMask);
+        AddIfSameSize(protect, masks.LipMask);
+        AddIfSameSize(protect, masks.InnerMouthMask);
+        AddIfSameSize(protect, masks.TeethMask);
+        AddIfSameSize(protect, masks.NostrilMask);
+        AddIfSameSize(protect, masks.HairMask);
+        AddIfSameSize(protect, masks.BeardMask);
+        AddIfSameSize(protect, masks.MustacheMask);
+        AddIfSameSize(protect, masks.GlassesMask);
+        return protect;
+    }
+
+    private static void AddIfSameSize(MaskPlane target, MaskPlane candidate)
+    {
+        if (candidate.Width != target.Width || candidate.Height != target.Height)
+        {
+            return;
+        }
+
+        for (int index = 0; index < target.Values.Length; index++)
+        {
+            double value = candidate.Values[index];
+            if (value > target.Values[index])
+            {
+                target.Values[index] = value;
+            }
+        }
     }
 
     private static FaceColorReference[] CreateDefaultSkinColorReferences()

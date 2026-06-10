@@ -92,6 +92,7 @@ Current state:
 - Stage and slider changes should not rebuild SnapshotMask.
 - Real face parsing AI is not connected.
 - `NoFaceParsingDetector` is a fallback scaffold.
+- `MaskPlane` values are internal soft mask weights, not exported channel masks. Do not generate separate RGBA component cutout PNGs for lip, eyebrow, skin, beard, hair, or other detected parts.
 
 ## AUTO MASK
 
@@ -198,10 +199,17 @@ Rules:
 - FaceBox must not drive editable regions after landmarks and fitted masks are available.
 - No visible correction can be driven by FaceBox; all visible correction must be driven by anchored local masks and user controls.
 - Eyebrow masks must not be a simple `browHead -> browTail` line segment. Brow head/arch/tail points are anchors for a local ROI; the final `EyebrowMask` should be fitted from dark hair texture, eyebrow directionality, local connectivity, and brow-color clustering inside that ROI.
+- Eyebrow analysis is separated into `EyebrowAnalyzer`. It is not a correction module: it builds left/right eyebrow candidates, area masks, protection masks, confidence, failure reason, eye-to-brow distance, length, thickness, slope, arch, color, texture, and connectedness scores.
+- Eyebrow search must be constrained by the orbital structure above each eye. Build the brow search ROI from eye center, pupil/iris center when available, upper eyelid position, eye width/height, and a soft upper orbital arc. The orbital guide decides where to search; pixel evidence decides the final brow mask.
+- Eyebrow 3D guide geometry should be a 30-point closed free polygon around the brow hair bundle. It has upper and lower contour points, variable head/body/tail thickness, and represents the brow mass envelope rather than a centerline.
 - Eyebrow ROI placement must be constrained by eye-to-brow distance and side-offset ratio guards. Do not fix eyebrow masks by absolute coordinates.
+- Eyebrow mask generation should be evidence-only: search inside the brow ROI for the real eyebrow hair bundle, score the found cluster endpoints, free angle, free length, variable thickness, curve peak, density, and continuity, then use the confirmed hair-pixel evidence as the mask. Do not draw a generated brow cover, do not use a round brush, and do not create an anchor-only fallback brow. The brow may be sparse, broken, uneven, or absent; preserve gaps when pixel evidence is weak.
 - Nose masks must represent bridge, tip, wings, and base skin as area-based surface masks. `NoseStructureGuide` lines are geometry guides only; nostril dark regions are separate hard protection masks and must not become the whole `NoseMask`.
 - Lip and inner-mouth masks must respect nose-to-mouth proximity ratios and be clipped away from nostrils and nose base before final protection masks are produced.
 - Mouth topology must be mouth-corner based. Closed mouth is one horizontal almond loop; open mouth is upper and lower almond surface loops sharing the same left/right mouth-corner anchors with an `InnerMouthProtectionLoop` between them. Do not use two independent circles or a mouth-center radius mask.
+- Lip surface fill must use the lip loops as the boundary. Build upper and lower lip surface loops from the outer lip and inner lip topology, soft-fill them as surface areas, use color only as candidate evidence, and subtract a softened inner-mouth protection mask. A good mask covers the real lip surface without bleeding into skin, philtrum, chin, nostrils, teeth, or the inner mouth; it should not stop at the middle because a color threshold was too strict. Lip and inner-mouth masks should be internal no-edit exclusions, not a broad visible hard-protect cover over the lips.
+- Lip directional/phase texture evidence is guide-centered, not standalone. A lip 3D guide, guide centerline, or guide search mask must first localize the expected lip line/curve area; `LipGuideTextureEvidenceAnalyzer` then expands that guide into two long upper/lower lip surface planes so evidence can run to the lip ends. The bold search can include a wider band and weak vermilion-side support, while still subtracting inner-mouth protection. It can produce candidate evidence masks for cracks, dry texture, gloss breaks, and line direction, but visible correction still requires a user lip tool or slider.
+- Lip and eyebrow mask rules: `LipMask`, upper/lower lip masks, inner-mouth protection, eyebrow masks, skin, beard, and hair masks are internal soft masks only. Do not create component channel PNGs or replacement RGB pixels during detection.
 - K-AnchorMesh topology must connect points into explicit edge types: anchor, boundary, surface, protection, measurement, structural, and morph-control edges. Edges are used for direction, distance, width, ratio, surface-loop candidates, protection boundaries, and confidence checks.
 - Topology edges are not final masks. Surface loops create candidate areas only; final masks must still be fitted from pixel evidence inside anchor-based ROIs and clipped by protection masks.
 - Do not replace SkinRetouch with geometry warp.

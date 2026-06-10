@@ -37,9 +37,9 @@ public sealed class StandardMaskLoader
         MaskPlane skin = LoadOrEmpty("standard_skin_mask", warnings);
         MaskPlane eye = LoadOrEmpty("standard_eye_protect_mask", warnings);
         MaskPlane eyebrow = LoadOrEmpty("standard_eyebrow_protect_mask", warnings);
-        MaskPlane lip = LoadOrEmpty("standard_lip_protect_mask", warnings);
+        MaskPlane lip = EmptyRemovedDummyMask("standard_lip_protect_mask", warnings);
         MaskPlane nose = LoadOrEmpty("standard_nose_mask", warnings);
-        MaskPlane nostril = LoadOrEmpty("standard_nostril_mask", warnings);
+        MaskPlane nostril = EmptyRemovedDummyMask("standard_nostril_mask", warnings);
         MaskPlane soft = LoadOrEmpty("standard_soft_protect_mask", warnings);
 
         _cachedMaskSet = new StandardMaskSet(
@@ -50,9 +50,15 @@ public sealed class StandardMaskLoader
             nose,
             nostril,
             soft,
-            "standard_masks_v1",
+            "standard_masks_no_lip_nostril_png_dummy_v2",
             warnings);
         return _cachedMaskSet;
+    }
+
+    private static MaskPlane EmptyRemovedDummyMask(string resourceName, List<string> warnings)
+    {
+        warnings.Add(resourceName + "_removed_png_dummy");
+        return MaskPlane.Empty(1, 1);
     }
 
     private MaskPlane LoadOrEmpty(string resourceName, List<string> warnings)

@@ -34,9 +34,17 @@ Topology edge rule: points alone are not enough. K-AnchorMesh must connect compo
 
 Eyebrow mask rule: `browHead`, `browArch`, and `browTail` are anchors, not the mask. Build a brow ROI around those anchors, constrain it by eye-to-brow distance and side-offset ratio bands, then confirm the final eyebrow mask from dark hair texture, eyebrow directionality, local connectivity, and brow-color clusters inside the ROI. A direct brow-head-to-brow-tail segment is only a low-confidence fallback guide.
 
+Eyebrow analyzer rule: `EyebrowAnalyzer` owns eyebrow candidate interpretation and confidence. It calculates left/right eyebrow candidate masks, protection masks, failure reasons, eye-to-brow distance, brow length, thickness, slope angle, arch, color, texture, and connectedness scores. It does not beautify, reshape, recolor, or symmetrize eyebrows.
+
+Eyebrow 3D guide rule: the brow is closest to a free arch-like hair bundle, not a horizontal stroke or fixed template. The guide can describe a 30-point closed free polygon around the hair-mass envelope, but it is only a guide. The final eyebrow mask must come from real hair-pixel evidence, not a generated brush cover. Brow thickness may differ between head, body, arch, and tail. The hair bundle may be sparse, broken, interrupted, or very occasionally absent. When pixel evidence is too low, do not invent an eyebrow from anchor points alone.
+
+Orbital-eyebrow guide rule: eyebrow detection is constrained by the upper orbital structure. Estimate an orbital center from `eyeCenter` and `irisCenter`/`pupilCenter`, build a soft upper orbital arc above the upper eyelid, and search only inside that orbital-brow ROI. The upper orbital arc is a horizontally stretched curved guide, not a face-wide box and not a final mask. Use the arc, eye width, eye height, and eye-to-brow distance to reject eyelid shadow, lower lash darkness, forehead wrinkles, bangs, and floating dark lines before pixel fitting.
+
 Nose mask rule: nose anchors define a nose ROI and `NoseStructureGuide`, not nostril-only dark components and not a final editable mask. The final `NoseMask` must be an area-based union of `noseBridgeSurfaceMask`, `noseTipSurfaceMask`, left/right `noseWingSurfaceMask`, and `noseBaseSurfaceMask`, then exclude `nostrilProtectionMask`.
 
 Mouth/nose proximity rule: lip and inner-mouth masks must be clipped by anchored nose-to-mouth distance ratios so they cannot overlap nostril interiors or nose base. Do not solve overlap by fixed coordinates.
+
+Component mask rule: detected component masks are internal soft masks only. Do not export separate RGBA/channel mask PNGs for detected parts; masks guide ROI, protection, snapping, and correction safety inside the engine.
 
 Rules:
 
@@ -2070,6 +2078,16 @@ Before brow analysis:
 
 Brow landmarks are less stable than eye landmarks. Brow hair is soft, broken, semi-transparent, and lighting-sensitive. Do not reshape brows if the brow mask is unstable.
 
+In the 3D/AnchorMesh guide, an eyebrow can be described as a 30-point closed free polygon around the visible brow hair mass. This is guide geometry only. The mask itself should stay evidence-only and should not be painted by a generated brush. Its angle, length, arch height, density, continuity, and thickness can vary naturally; the head is often thicker, the tail may fade, and some sections can be broken or missing. If a real brow hair bundle is not visible, the model should report low or missing evidence instead of drawing a guessed brow.
+
+Eyebrow detection must be orbit-guided:
+
+- Estimate `orbitalCenter` from `eyeCenter` and `irisCenter`/`pupilCenter` when available.
+- Use `eyeW = distance(eyeInner, eyeOuter)` and `eyeH = distance(eyeUpperMid, eyeLowerMid)` as the local size basis.
+- Build a soft upper orbital arc above `eyeUpperMid`; practical search range is roughly `0.60 ~ 2.20 * eyeH` above the upper eyelid with a face-ratio safety band.
+- Brow candidates should be slightly wider than the visible eye, usually `0.90 ~ 1.50 * eyeW`, and should sit near the upper orbital arc rather than in a full face box.
+- Reject candidates that are too close to the eyelid, too high in the forehead, only a thin floating line, mostly eyelash/eyelid shadow, or lacking hair-like texture.
+
 ### Brow Anchors
 
 Dense landmark target anchors:
@@ -2183,6 +2201,7 @@ Useful future metrics:
 - `BrowHeadHarshnessScore`
 
 Eyebrows are hair, not solid shapes. Natural brows have density variation, a softer head, and a tail fade. Avoid painted-looking fills, flat masks, and over-darkening.
+They can also be partially disconnected or sparse. Preserve those gaps unless the user explicitly requests brow fill or restoration.
 
 ### Brow Masks
 
@@ -2191,6 +2210,7 @@ Recommended masks:
 - Left/right full brow masks.
 - Brow head, body, arch, and tail masks.
 - Brow upper/lower edge masks.
+- 30-point brow bundle guide polygon with upper/lower contour points.
 - Forehead protection mask.
 - Upper eyelid protection mask.
 - Hair/glasses occlusion masks.
@@ -6376,6 +6396,18 @@ Fallback:
 Absolute rule:
 
 - No lip surface correction without `lipSurfaceMask` confidence.
+
+Lip guide-centered directional texture evidence:
+
+- Lip directional/phase texture detection is not a standalone whole-lip analyzer.
+- First create or estimate a lip 3D guide, guide centerline, or local guide search mask from mouth/lip anchors.
+- The guide is a search start and local curve reference only; it is not the final correction mask.
+- Build `LipGuideSearchBand` around the guide centerline, then expand it into two long surface planes: one upper-lip plane and one lower-lip plane.
+- The two planes may be deliberately wider than the centerline band so the analyzer can reach the lip ends; inner-mouth protection remains the hard exclusion, while vermilion-side support can stay soft.
+- Inside this guide band, detect directional lip texture, natural lip lines, dry cracks, rough dry patches, gloss breaks, and border evidence.
+- If confidence is high, create candidate masks such as `lipLineCandidateMask`, `lipCrackCandidateMask`, `lipDryPatchCandidateMask`, and `lipTextureEvidenceMask`.
+- If confidence is low, keep protect-only behavior and do not guess from landmarks.
+- Visible correction still requires an explicit lip tool or slider.
 
 Protection masks:
 

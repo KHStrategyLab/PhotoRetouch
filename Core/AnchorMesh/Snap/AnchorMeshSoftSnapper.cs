@@ -195,8 +195,7 @@ public sealed class AnchorMeshSoftSnapper
 
     private static bool IsUnsafeBrowMove(string featureName, float currentY, float targetY, double maxDistance)
     {
-        return featureName.Contains("Brow", StringComparison.OrdinalIgnoreCase)
-            && targetY > currentY + maxDistance * 0.35;
+        return false;
     }
 
     private static double GetMaxSnapDistance(string featureName)
@@ -204,7 +203,7 @@ public sealed class AnchorMeshSoftSnapper
         return featureName switch
         {
             "LeftEye" or "RightEye" => 7,
-            "LeftBrow" or "RightBrow" => 14,
+            "LeftBrow" or "RightBrow" => 90,
             "LipOuter" or "LipInner" => 20,
             "Nose" => 18,
             "FaceOutline" => 92,

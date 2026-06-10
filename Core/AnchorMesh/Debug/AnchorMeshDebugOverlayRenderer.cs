@@ -38,7 +38,21 @@ public sealed class AnchorMeshDebugOverlayRenderer
 
     public void SaveSnappedOverlay(BitmapSource source, AnchorMeshResult result, string path)
     {
-        SaveFeatureOverlay(source, result.Features, path, "K-AnchorMesh snapped");
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        DrawingVisual visual = new();
+        using (DrawingContext context = visual.RenderOpen())
+        {
+            context.DrawImage(source, new WpfRect(0, 0, width, height));
+            DrawEyeCenterAxisGuide(context, result, width);
+            DrawEyeCenterPerpendicularGuide(context, result, width, height);
+            DrawJawStartGuide(context, result, width);
+            DrawFirstDarkThickSegmentGuide(context, source, result, height);
+            DrawFeatures(context, result.Features, 1.0, 1.0);
+            DrawLabel(context, "K-AnchorMesh snapped");
+        }
+
+        SaveVisual(path, visual, width, height);
     }
 
     public void SaveTopologyOverlay(BitmapSource source, AnchorMeshResult result, string path)
@@ -50,6 +64,10 @@ public sealed class AnchorMeshDebugOverlayRenderer
         {
             context.DrawImage(source, new WpfRect(0, 0, width, height));
             DrawFitBoxes(context, result);
+            DrawEyeCenterAxisGuide(context, result, width);
+            DrawEyeCenterPerpendicularGuide(context, result, width, height);
+            DrawJawStartGuide(context, result, width);
+            DrawFirstDarkThickSegmentGuide(context, source, result, height);
             DrawTopologyEdges(context, result.Features, result.TopologyEdges);
             DrawFeatures(context, result.Features, 1.0, 1.0);
             DrawLabel(context, "K-AnchorMesh topology");
@@ -59,6 +77,321 @@ public sealed class AnchorMeshDebugOverlayRenderer
         bitmap.Render(visual);
         bitmap.Freeze();
         SaveBitmap(path, bitmap);
+    }
+
+    private static void DrawEyeCenterAxisGuide(DrawingContext context, AnchorMeshResult result, int width)
+    {
+        if (result.YuNetAnchors is null)
+        {
+            return;
+        }
+
+        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
+        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
+        float dx = rightEye.X - leftEye.X;
+        if (MathF.Abs(dx) < 0.001f)
+        {
+            return;
+        }
+
+        float slope = (rightEye.Y - leftEye.Y) / dx;
+        float startY = leftEye.Y + slope * (0 - leftEye.X);
+        float endY = leftEye.Y + slope * (width - leftEye.X);
+        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105)), 1.0);
+        context.DrawLine(guidePen, new WpfPoint(0, startY), new WpfPoint(width, endY));
+    }
+
+    private static void DrawJawStartGuide(DrawingContext context, AnchorMeshResult result, int width)
+    {
+        if (result.YuNetAnchors is null ||
+            !TryGetEyeAxisDownVector(result, out float downX, out float downY))
+        {
+            return;
+        }
+
+        System.Drawing.PointF eyeCenter = result.YuNetAnchors.EyeCenter;
+        System.Drawing.PointF noseTip = result.YuNetAnchors.NoseTip;
+        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
+        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
+        float axisX = rightEye.X - leftEye.X;
+        float axisY = rightEye.Y - leftEye.Y;
+        float axisLength = MathF.Sqrt(axisX * axisX + axisY * axisY);
+        if (axisLength < 0.001f)
+        {
+            return;
+        }
+
+        axisX /= axisLength;
+        axisY /= axisLength;
+        float eyeToNoseDistance = Distance(eyeCenter.X, eyeCenter.Y, noseTip.X, noseTip.Y);
+        float centerX = noseTip.X + downX * eyeToNoseDistance;
+        float centerY = noseTip.Y + downY * eyeToNoseDistance;
+        float halfLength = MathF.Min(width * 0.20f, MathF.Max(32.0f, result.YuNetAnchors.EyeDistance * 0.74f));
+        WpfPoint start = new(centerX - axisX * halfLength, centerY - axisY * halfLength);
+        WpfPoint end = new(centerX + axisX * halfLength, centerY + axisY * halfLength);
+        WpfPoint center = new(centerX, centerY);
+        MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(170, 0, 0, 0)), 4.0);
+        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 210, 70, 255)), 2.0);
+        MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 210, 70, 255));
+
+        context.DrawLine(shadowPen, start, end);
+        context.DrawLine(guidePen, start, end);
+        context.DrawEllipse(guideBrush, null, center, 4.0, 4.0);
+    }
+
+    private static void DrawFirstDarkThickSegmentGuide(DrawingContext context, BitmapSource source, AnchorMeshResult result, int height)
+    {
+        if (!TryFindLeftEyeDarkRunPoint(source, result, out WpfPoint segmentPoint))
+        {
+            if (TryGetLeftEyeScanStartPoint(source, result, out WpfPoint scanStart))
+            {
+                MediaBrush missBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 255, 70, 40));
+                context.DrawEllipse(missBrush, null, scanStart, 5.0, 5.0);
+            }
+
+            return;
+        }
+
+        if (!TryGetEyeAxisDownVector(result, out float downX, out float downY))
+        {
+            return;
+        }
+
+        float guideLength = MathF.Max(source.PixelWidth, source.PixelHeight) * 1.5f;
+        MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(170, 0, 0, 0)), 4.0);
+        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 255, 70, 40)), 1.6);
+        WpfPoint start = new(segmentPoint.X - downX * guideLength, segmentPoint.Y - downY * guideLength);
+        WpfPoint end = new(segmentPoint.X + downX * guideLength, segmentPoint.Y + downY * guideLength);
+        context.DrawLine(shadowPen, start, end);
+        context.DrawLine(guidePen, start, end);
+    }
+
+    private static bool TryGetLeftEyeScanStartPoint(BitmapSource source, AnchorMeshResult result, out WpfPoint scanStart)
+    {
+        scanStart = default;
+        if (result.YuNetAnchors is null)
+        {
+            return false;
+        }
+
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
+        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
+        double dx = rightEye.X - leftEye.X;
+        double dy = rightEye.Y - leftEye.Y;
+        if (Math.Abs(dx) < 0.001)
+        {
+            return false;
+        }
+
+        double eyeDistance = Math.Sqrt(dx * dx + dy * dy);
+        int x = Math.Clamp((int)Math.Round(leftEye.X - Math.Max(6.0, eyeDistance * 0.20)), 0, width - 1);
+        int y = Math.Clamp((int)Math.Round(leftEye.Y + (dy / dx) * (x - leftEye.X)), 0, height - 1);
+        scanStart = new WpfPoint(x, y);
+        return true;
+    }
+
+    private static void DrawEyeCenterPerpendicularGuide(DrawingContext context, AnchorMeshResult result, int width, int height)
+    {
+        if (result.YuNetAnchors is null)
+        {
+            return;
+        }
+
+        System.Drawing.PointF eyeCenter = result.YuNetAnchors.EyeCenter;
+        if (!TryGetEyeAxisDownVector(result, out float downX, out float downY))
+        {
+            return;
+        }
+
+        float guideLength = MathF.Max(width, height) * 1.5f;
+        WpfPoint start = new(eyeCenter.X - downX * guideLength, eyeCenter.Y - downY * guideLength);
+        WpfPoint end = new(eyeCenter.X + downX * guideLength, eyeCenter.Y + downY * guideLength);
+        WpfPoint center = new(eyeCenter.X, eyeCenter.Y);
+        MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(180, 0, 0, 0)), 5.0);
+        MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 155, 235)), 2.8);
+        MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 155, 235));
+
+        context.DrawLine(shadowPen, start, end);
+        context.DrawLine(guidePen, start, end);
+        context.DrawEllipse(guideBrush, null, center, 4.2, 4.2);
+    }
+
+    private static bool TryGetEyeAxisDownVector(AnchorMeshResult result, out float downX, out float downY)
+    {
+        downX = 0;
+        downY = 1;
+        if (result.YuNetAnchors is null)
+        {
+            return false;
+        }
+
+        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
+        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
+        float axisX = rightEye.X - leftEye.X;
+        float axisY = rightEye.Y - leftEye.Y;
+        float axisLength = MathF.Sqrt(axisX * axisX + axisY * axisY);
+        if (axisLength < 0.001f)
+        {
+            return false;
+        }
+
+        axisX /= axisLength;
+        axisY /= axisLength;
+        downX = -axisY;
+        downY = axisX;
+        if (downY < 0)
+        {
+            downX = -downX;
+            downY = -downY;
+        }
+
+        return true;
+    }
+
+    private static float Distance(float ax, float ay, float bx, float by)
+    {
+        float dx = ax - bx;
+        float dy = ay - by;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static bool TryFindLeftEyeDarkRunPoint(BitmapSource source, AnchorMeshResult result, out WpfPoint segmentPoint)
+    {
+        segmentPoint = default;
+        if (result.YuNetAnchors is null)
+        {
+            return false;
+        }
+
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int width = bitmap.PixelWidth;
+        int height = bitmap.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+
+        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
+        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
+        double dx = rightEye.X - leftEye.X;
+        if (Math.Abs(dx) < 0.001)
+        {
+            return false;
+        }
+
+        double slope = (rightEye.Y - leftEye.Y) / dx;
+        double eyeDistance = Math.Sqrt(dx * dx + Math.Pow(rightEye.Y - leftEye.Y, 2));
+        int leftEyeOuterX = Math.Clamp((int)Math.Round(leftEye.X - Math.Max(6.0, eyeDistance * 0.20)), 0, width - 1);
+        int skinRun = 0;
+        bool passedSkin = false;
+        int darkRun = 0;
+        WpfPoint runStart = default;
+        for (int x = leftEyeOuterX; x >= 0; x--)
+        {
+            int y = (int)Math.Round(leftEye.Y + slope * (x - leftEye.X));
+            if (y < 0 || y >= height)
+            {
+                darkRun = 0;
+                continue;
+            }
+
+            bool skinLike = IsSkinLikeBandAt(pixels, width, height, stride, x, y);
+            if (!passedSkin)
+            {
+                skinRun = skinLike ? skinRun + 1 : 0;
+                passedSkin = skinRun >= 3;
+                darkRun = 0;
+                continue;
+            }
+
+            if (IsVeryDarkBandAt(pixels, width, height, stride, x, y))
+            {
+                if (darkRun == 0)
+                {
+                    runStart = new WpfPoint(x, y);
+                }
+
+                darkRun++;
+                if (darkRun >= 5)
+                {
+                    segmentPoint = runStart;
+                    return true;
+                }
+            }
+            else
+            {
+                darkRun = 0;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSkinLikeBandAt(byte[] pixels, int width, int height, int stride, int x, int y)
+    {
+        int count = 0;
+        for (int yy = y - 2; yy <= y + 2; yy++)
+        {
+            if (IsSkinLikeAt(pixels, width, height, stride, x, yy))
+            {
+                count++;
+            }
+        }
+
+        return count >= 2;
+    }
+
+    private static bool IsVeryDarkBandAt(byte[] pixels, int width, int height, int stride, int x, int y)
+    {
+        int count = 0;
+        for (int yy = y - 2; yy <= y + 2; yy++)
+        {
+            if (IsVeryDarkAt(pixels, width, height, stride, x, yy))
+            {
+                count++;
+            }
+        }
+
+        return count >= 2;
+    }
+
+    private static bool IsSkinLikeAt(byte[] pixels, int width, int height, int stride, int x, int y)
+    {
+        if (x < 0 || x >= width || y < 0 || y >= height)
+        {
+            return false;
+        }
+
+        int index = y * stride + x * 4;
+        int blue = pixels[index];
+        int green = pixels[index + 1];
+        int red = pixels[index + 2];
+        int max = Math.Max(red, Math.Max(green, blue));
+        int min = Math.Min(red, Math.Min(green, blue));
+        return red >= 70 &&
+            green >= 45 &&
+            blue >= 30 &&
+            red >= green * 0.82 &&
+            red >= blue * 1.05 &&
+            max - min >= 12;
+    }
+
+    private static bool IsVeryDarkAt(byte[] pixels, int width, int height, int stride, int x, int y)
+    {
+        if (x < 0 || x >= width || y < 0 || y >= height)
+        {
+            return false;
+        }
+
+        int index = y * stride + x * 4;
+        int blue = pixels[index];
+        int green = pixels[index + 1];
+        int red = pixels[index + 2];
+        double luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+        return luminance <= 65;
     }
 
     public void SaveAlignedVsSnappedOverlay(BitmapSource source, AnchorMeshResult result, string path)
@@ -255,13 +588,6 @@ public sealed class AnchorMeshDebugOverlayRenderer
 
     private static void DrawFitBoxes(DrawingContext context, AnchorMeshResult result)
     {
-        if (result.YuNetAnchors is not null)
-        {
-            System.Drawing.RectangleF box = result.YuNetAnchors.FaceBox;
-            MediaPen yuNetPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(220, 80, 170, 255)), 2.0);
-            context.DrawRectangle(null, yuNetPen, new WpfRect(box.X, box.Y, box.Width, box.Height));
-        }
-
         if (result.FitBox is not null)
         {
             DrawRotatedRect(

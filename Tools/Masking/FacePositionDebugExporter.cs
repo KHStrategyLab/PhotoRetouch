@@ -66,11 +66,6 @@ public static class FacePositionDebugExporter
         }
 
         Int32Rect faceBox = ClampRect(analysis.FaceBox, width, height);
-        if (TryCreateEstimatedEyebrowLine(faceBox, analysis.FaceLandmarks, out WpfPoint browStart, out WpfPoint browEnd))
-        {
-            lines.Add("EstimatedEyebrowLine: " + FormatPoint(browStart) + " -> " + FormatPoint(browEnd));
-        }
-
         NeckGuide neck = CreateNeckGuide(faceBox, analysis.FaceLandmarks, width, height);
         lines.Add("EstimatedNeckGuide.TopCenter: " + FormatPoint(neck.TopCenter));
         lines.Add("EstimatedNeckGuide.BottomCenter: " + FormatPoint(neck.BottomCenter));
@@ -91,17 +86,12 @@ public static class FacePositionDebugExporter
             TryGetPoint(landmarks, "right_eye", out WpfPoint rightEye))
         {
             DrawLine(pixels, width, height, stride, leftEye, rightEye, 235, 60, 55, thickness: 2);
-        }
-
-        if (TryCreateEstimatedEyebrowLine(faceBox, landmarks, out WpfPoint browStart, out WpfPoint browEnd))
-        {
-            DrawLine(pixels, width, height, stride, browStart, browEnd, 170, 70, 235, thickness: 2);
-        }
-
-        if (TryGetPoint(landmarks, "nose_tip", out WpfPoint noseTip) &&
-            TryGetPoint(landmarks, "mouth_center", out WpfPoint mouthCenter))
-        {
-            DrawLine(pixels, width, height, stride, noseTip, mouthCenter, 40, 155, 235, thickness: 2);
+            if (TryGetPoint(landmarks, "nose_tip", out WpfPoint noseTip))
+            {
+                WpfPoint eyeCenter = Midpoint(leftEye, rightEye);
+                WpfPoint eyeToNoseVerticalEnd = new(eyeCenter.X, noseTip.Y);
+                DrawLine(pixels, width, height, stride, eyeCenter, eyeToNoseVerticalEnd, 40, 155, 235, thickness: 2);
+            }
         }
 
         if (TryGetPoint(landmarks, "mouth_center", out WpfPoint mouth) &&
@@ -139,24 +129,6 @@ public static class FacePositionDebugExporter
             };
             DrawPoint(pixels, width, height, stride, point, red, green, blue, radius: 8);
         }
-    }
-
-    private static bool TryCreateEstimatedEyebrowLine(Int32Rect faceBox, IReadOnlyDictionary<string, WpfPoint> landmarks, out WpfPoint start, out WpfPoint end)
-    {
-        start = default;
-        end = default;
-        if (!TryGetPoint(landmarks, "left_eye", out WpfPoint leftEye) ||
-            !TryGetPoint(landmarks, "right_eye", out WpfPoint rightEye))
-        {
-            return false;
-        }
-
-        double faceWidth = Math.Max(1, faceBox.Width);
-        double faceHeight = Math.Max(1, faceBox.Height);
-        double browY = (leftEye.Y + rightEye.Y) * 0.5 - faceHeight * 0.12;
-        start = new WpfPoint(leftEye.X - faceWidth * 0.11, browY);
-        end = new WpfPoint(rightEye.X + faceWidth * 0.11, browY);
-        return true;
     }
 
     private static NeckGuide CreateNeckGuide(Int32Rect faceBox, IReadOnlyDictionary<string, WpfPoint> landmarks, int width, int height)
@@ -204,6 +176,11 @@ public static class FacePositionDebugExporter
     private static bool TryGetPoint(IReadOnlyDictionary<string, WpfPoint> landmarks, string key, out WpfPoint point)
     {
         return landmarks.TryGetValue(key, out point);
+    }
+
+    private static WpfPoint Midpoint(WpfPoint first, WpfPoint second)
+    {
+        return new WpfPoint((first.X + second.X) * 0.5, (first.Y + second.Y) * 0.5);
     }
 
     private static Int32Rect ClampRect(Int32Rect rect, int width, int height)

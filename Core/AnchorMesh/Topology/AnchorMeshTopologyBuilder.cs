@@ -10,8 +10,8 @@ public static class AnchorMeshTopologyBuilder
         AddFeatureEdges(edges, "RightEye", AnchorMeshEdgeKind.Protection, AnchorMeshEdgeGroup.RightEyeOpeningLoop, closed: true);
         AddFeatureEdges(edges, "LeftPupil", AnchorMeshEdgeKind.Protection, AnchorMeshEdgeGroup.LeftPupilProtectionLoop, closed: true);
         AddFeatureEdges(edges, "RightPupil", AnchorMeshEdgeKind.Protection, AnchorMeshEdgeGroup.RightPupilProtectionLoop, closed: true);
-        AddFeatureEdges(edges, "LeftBrow", AnchorMeshEdgeKind.Anchor, AnchorMeshEdgeGroup.LeftBrowAnchorCurve, closed: false);
-        AddFeatureEdges(edges, "RightBrow", AnchorMeshEdgeKind.Anchor, AnchorMeshEdgeGroup.RightBrowAnchorCurve, closed: false);
+        AddFeatureEdges(edges, "LeftBrow", AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.LeftBrowShapeLoop, closed: true);
+        AddFeatureEdges(edges, "RightBrow", AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.RightBrowShapeLoop, closed: true);
         AddFeatureEdges(edges, "LipOuter", AnchorMeshEdgeKind.Boundary, AnchorMeshEdgeGroup.LipOuterLoop, closed: true);
         AddFeatureEdges(edges, "LipInner", AnchorMeshEdgeKind.Protection, AnchorMeshEdgeGroup.InnerMouthProtectionLoop, closed: true);
 
@@ -34,10 +34,10 @@ public static class AnchorMeshTopologyBuilder
 
     private static void AddEyeBrowMeasurements(List<AnchorMeshEdge> edges)
     {
-        Add(edges, "LeftEye_12", "LeftBrow_05", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.LeftBrowEyeMeasurement);
-        Add(edges, "LeftEye_12", "LeftBrow_11", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.LeftBrowEyeMeasurement);
-        Add(edges, "RightEye_12", "RightBrow_06", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.RightBrowEyeMeasurement);
-        Add(edges, "RightEye_12", "RightBrow_00", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.RightBrowEyeMeasurement);
+        Add(edges, "LeftEye_12", "LeftBrow_23", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.LeftBrowEyeMeasurement);
+        Add(edges, "LeftEye_12", "LeftBrow_15", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.LeftBrowEyeMeasurement);
+        Add(edges, "RightEye_12", "RightBrow_21", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.RightBrowEyeMeasurement);
+        Add(edges, "RightEye_12", "RightBrow_29", AnchorMeshEdgeKind.Measurement, AnchorMeshEdgeGroup.RightBrowEyeMeasurement);
     }
 
     private static void AddNoseTopology(List<AnchorMeshEdge> edges)

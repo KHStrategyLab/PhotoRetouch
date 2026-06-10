@@ -148,17 +148,62 @@ public static class DebugMaskExporter
                 double amount = Math.Clamp(mask[x, y] * maskOpacity, 0, 1);
                 if (amount <= 0.0001)
                 {
-                    pixels[index] = 22;
-                    pixels[index + 1] = 20;
-                    pixels[index + 2] = 18;
-                    pixels[index + 3] = 0;
+                    pixels[index] = 255;
+                    pixels[index + 1] = 255;
+                    pixels[index + 2] = 255;
+                    pixels[index + 3] = 255;
                     continue;
                 }
 
                 pixels[index] = sourcePixels[index];
                 pixels[index + 1] = sourcePixels[index + 1];
                 pixels[index + 2] = sourcePixels[index + 2];
-                pixels[index + 3] = ToByte(amount);
+                pixels[index + 3] = 255;
+            }
+        }
+
+        return CreateBitmap(width, height, pixels);
+    }
+
+    public static BitmapSource CreateSourceColorMaskPreview(BitmapSource source, MaskPlane mask, double opacity, FaceAnalysisResult analysis)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        if (width != mask.Width || height != mask.Height)
+        {
+            return CreateMaskPreview(mask);
+        }
+
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        bitmap.Freeze();
+
+        int stride = width * 4;
+        byte[] sourcePixels = new byte[stride * height];
+        byte[] pixels = new byte[stride * height];
+        bitmap.CopyPixels(sourcePixels, stride, 0);
+        double maskOpacity = Math.Clamp(opacity, 0, 1);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * stride + x * 4;
+                double amount = Math.Clamp(mask[x, y] * maskOpacity, 0, 1);
+                if (amount <= 0.0001)
+                {
+                    pixels[index] = 255;
+                    pixels[index + 1] = 255;
+                    pixels[index + 2] = 255;
+                    pixels[index + 3] = 255;
+                    continue;
+                }
+
+                pixels[index] = sourcePixels[index];
+                pixels[index + 1] = sourcePixels[index + 1];
+                pixels[index + 2] = sourcePixels[index + 2];
+                pixels[index + 3] = 255;
             }
         }
 

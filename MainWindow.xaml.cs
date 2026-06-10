@@ -1178,7 +1178,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 BitmapSource preview = DebugMaskExporter.CreateSourceColorMaskPreview(
                     analysisImage,
                     colorMask.ColorDifferenceMask,
-                    previewOptions.MaskOpacity);
+                    previewOptions.MaskOpacity,
+                    effectiveSnapshot.Analysis);
                 return (preview, colorMask, effectiveSnapshot);
             });
 
@@ -1825,12 +1826,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         Directory.CreateDirectory(outputDirectory);
-        FacePositionDebugExporter.SaveWhiteBackground(photo.BaseImage, snapshot.Analysis, outputDirectory);
         SaveAnchorMeshDebugImages(photo.BaseImage, snapshot, outputDirectory);
         DeleteOldAverageColorMaskDebugFiles(outputDirectory);
-        MaskPlane opacityMask = ApplyMaskOpacity(colorMask.ColorDifferenceMask, skinMaskRange);
-        SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(opacityMask), Path.Combine(outputDirectory, "debug_average_skin_mask_bw.png"));
-        SaveDebugBitmap(DebugMaskExporter.CreateSourceColorMaskPreview(photo.BaseImage, colorMask.ColorDifferenceMask, skinMaskRange), Path.Combine(outputDirectory, "debug_average_skin_mask_color.png"));
+        SaveDebugBitmap(DebugMaskExporter.CreateSourceColorMaskPreview(photo.BaseImage, colorMask.ColorDifferenceMask, skinMaskRange, snapshot.Analysis), Path.Combine(outputDirectory, "debug_average_skin_mask_color.png"));
         string[] lines =
         {
             "Average Skin Color Mask",
@@ -1851,19 +1849,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         try
         {
+            FeatureMaskContourProvider contourProvider = AnchorMeshMaskContourProviderFactory.FromFaceMaskSet(snapshot.Masks);
             AnchorMeshResult anchorMesh = new KAnchorMeshEngine().Build(
                 source,
-                YuNetAnchorMapper.FromFaceAnalysisResult(snapshot.Analysis));
+                YuNetAnchorMapper.FromFaceAnalysisResult(snapshot.Analysis),
+                contourProvider,
+                snapshot.Masks.RetouchAllowMask);
             AnchorMeshDebugOverlayRenderer renderer = new();
             renderer.SaveSnappedOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_overlay.png"));
             renderer.SaveTopologyOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_topology.png"));
 
-            AnchorMeshFeatureMaskSet masks = AnchorMeshFeatureMaskBuilder.Build(source.PixelWidth, source.PixelHeight, anchorMesh);
-            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.EyeMask), Path.Combine(outputDirectory, "debug_anchor_eye_mask.png"));
-            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.EyebrowMask), Path.Combine(outputDirectory, "debug_anchor_eyebrow_mask.png"));
-            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.LipMask), Path.Combine(outputDirectory, "debug_anchor_lip_mask.png"));
-            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.NostrilMask), Path.Combine(outputDirectory, "debug_anchor_nostril_mask.png"));
-            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.HardProtectMask), Path.Combine(outputDirectory, "debug_anchor_hard_protect_mask.png"));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

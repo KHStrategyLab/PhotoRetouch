@@ -245,6 +245,11 @@ public static class MaskQualityValidator
 
     private static double ValidateNostrilMask(FaceMaskSet masks, FaceMetrics metrics, List<string> warnings)
     {
+        if (masks.NostrilMask.Average() <= 0.000001)
+        {
+            return 1.0;
+        }
+
         double score = ScoreArea(masks.NostrilMask.Average(), metrics.FaceAreaRatio * 0.00008, metrics.FaceAreaRatio * 0.035, "nostril_mask_area", warnings);
         if (OverlapRatio(masks.NostrilMask, masks.RetouchAllowMask) > 0.005)
         {

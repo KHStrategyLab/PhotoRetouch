@@ -109,6 +109,11 @@ public sealed class AnchorMeshAligner
             return;
         }
 
+        if (brow.SnapMode.Equals("SoftSnap", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         float axisX = MathF.Cos(anchors.FaceAngleRad);
         float axisY = MathF.Sin(anchors.FaceAngleRad);
         float upX = MathF.Sin(anchors.FaceAngleRad);
@@ -407,6 +412,70 @@ public sealed class AnchorMeshAligner
 
         outline.SnapMode = "EyeNoseBandOval";
         AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
+    }
+
+    public bool ConstrainFaceOutlineChinToEyeNoseDistanceLimit(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
+    {
+        AnchorMeshFeature? outline = features.FaceOutline;
+        if (outline is null || outline.Points.Count < 8)
+        {
+            return false;
+        }
+
+        float eyeToNoseDistance = Distance(anchors.EyeCenter.X, anchors.EyeCenter.Y, anchors.NoseTip.X, anchors.NoseTip.Y);
+        if (eyeToNoseDistance <= 1)
+        {
+            return false;
+        }
+
+        float axisX = MathF.Cos(anchors.FaceAngleRad);
+        float axisY = MathF.Sin(anchors.FaceAngleRad);
+        float downX = -axisY;
+        float downY = axisX;
+        float limitX = anchors.NoseTip.X + downX * eyeToNoseDistance;
+        float limitY = anchors.NoseTip.Y + downY * eyeToNoseDistance;
+        bool moved = false;
+
+        foreach (AnchorMeshPoint point in outline.Points)
+        {
+            if (!IsChinLimitPoint(point))
+            {
+                continue;
+            }
+
+            float distanceFromLimit = (point.SnappedX - limitX) * downX + (point.SnappedY - limitY) * downY;
+            if (distanceFromLimit >= 0)
+            {
+                continue;
+            }
+
+            point.SnappedX += downX * -distanceFromLimit;
+            point.SnappedY += downY * -distanceFromLimit;
+            point.ImageX = point.SnappedX;
+            point.ImageY = point.SnappedY;
+            point.Source = "ChinEyeNoseDistanceLimited";
+            point.Confidence = MathF.Max(point.Confidence, anchors.Score * 0.82f);
+            moved = true;
+        }
+
+        if (moved)
+        {
+            outline.SnapMode = "ChinEyeNoseDistanceLimited";
+            AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
+        }
+
+        return moved;
+    }
+
+    private static bool IsChinLimitPoint(AnchorMeshPoint point)
+    {
+        if (point.FeatureName.Equals("FaceOutline", StringComparison.OrdinalIgnoreCase) &&
+            point.Index is >= 13 and <= 17)
+        {
+            return true;
+        }
+
+        return point.Role.Contains("Chin", StringComparison.OrdinalIgnoreCase);
     }
 
     private static PointF ClampFaceOutlineCenterToEyeNoseBand(float candidateX, float candidateY, YuNetAnchorSet anchors, float downX, float downY)
