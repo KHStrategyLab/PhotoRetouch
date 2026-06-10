@@ -1,4 +1,5 @@
-using System.Windows;
+﻿using System.Windows;
+using PhotoRetouch.AnchorMesh;
 using WpfPoint = System.Windows.Point;
 
 namespace PhotoRetouch;
@@ -33,6 +34,16 @@ public sealed class FaceSymmetryAnalyzer
         double facePitchLikeBias = hasMouth && hasNose
             ? ((mouthCenter.Y - noseTip.Y) / faceHeight) - 0.22
             : 0;
+        AnchorMeshResult? anchorMesh = TryBuildAnchorMesh(snapshot, warnings);
+        if (anchorMesh?.Pose is { } pose)
+        {
+            double anchorYawBias = Math.Clamp(pose.YawRad / 0.42d, -0.38, 0.38);
+            double anchorPitchBias = Math.Clamp(-pose.PitchRad / 0.24d * 0.25d, -0.25, 0.25);
+            faceYawLikeBias = Blend(faceYawLikeBias, anchorYawBias, 0.45);
+            facePitchLikeBias = Blend(facePitchLikeBias, anchorPitchBias, 0.35);
+            warnings.Add("anchor_mesh_pose_connected_for_shape_balance");
+        }
+
         double noseLineTilt = hasNose && hasChin
             ? Math.Atan2(chinPoint.X - noseTip.X, Math.Max(1, chinPoint.Y - noseTip.Y)) * 180d / Math.PI
             : 0;
@@ -131,5 +142,27 @@ public sealed class FaceSymmetryAnalyzer
 
         double delta = total <= 0 ? 0 : (rightArea - leftArea) / total;
         return new NostrilBalanceObservation(leftArea, rightArea, delta, reliable);
+    }
+
+    private static AnchorMeshResult? TryBuildAnchorMesh(FaceSnapshotMaskSet snapshot, List<string> warnings)
+    {
+        try
+        {
+            YuNetAnchorSet anchors = YuNetAnchorMapper.FromFaceAnalysisResult(snapshot.Analysis);
+            FeatureMaskContourProvider contours = AnchorMeshMaskContourProviderFactory.FromFaceMaskSet(snapshot.Masks);
+            AnchorMeshResult result = new KAnchorMeshEngine().Build(anchors, contours, snapshot.Masks.RetouchAllowMask);
+            warnings.AddRange(result.Warnings.Select(warning => "anchor_mesh_" + warning));
+            return result.IsValid ? result : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            warnings.Add("anchor_mesh_build_failed:" + ex.GetType().Name);
+            return null;
+        }
+    }
+
+    private static double Blend(double original, double anchorValue, double amount)
+    {
+        return original * (1 - amount) + anchorValue * amount;
     }
 }

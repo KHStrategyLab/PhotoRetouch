@@ -1,4 +1,4 @@
-# Preview And Workflow Rules
+﻿# Preview And Workflow Rules
 
 Last updated: 2026-06-10
 
@@ -37,6 +37,23 @@ Avoid:
 - Rebuilding masks unnecessarily.
 - Running full retouch pipelines without a changed value.
 - Blocking mouse wheel preview navigation with tool overlay layers.
+
+## Geometry Tools
+
+Face geometry tools are user-controlled tools.
+
+The app may prepare lightweight mesh, measurement, or guide data, but it should not automatically reshape the face just because a photo was selected or a panel was opened.
+
+Rules:
+
+- Shape correction starts from explicit user action.
+- Handles, brush strokes, and sliders are control inputs, not automatic beauty commands.
+- The user may drag, shake, nudge, cancel, or commit a geometry change.
+- Mesh/handle movement preview should be light and reversible.
+- Pixel warp should come after the interaction path is stable.
+- During geometry interaction, use screen-sized preview sources first.
+- When geometry warp is committed, image pixels and masks must move together.
+- SkinRetouch must stay separate from geometry tools.
 
 ## Slider Behavior
 
@@ -130,4 +147,3 @@ Fix performance by:
 - Running heavy work only on release.
 - Using visible-preview-sized sources.
 - Avoiding repeated full-original processing during dragging.
-

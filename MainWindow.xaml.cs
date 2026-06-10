@@ -18,6 +18,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private const int CurveAmountLivePreviewIntervalMilliseconds = 140;
     private const int RetouchSliderLivePreviewIntervalMilliseconds = 140;
     private const int RetouchHistoryLimit = 80;
+    private const int ManualSkinReferenceMaxSamples = 5;
+    private const int ManualSkinReferenceSampleRadius = 10;
     private static readonly string SettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "PhotoRetouch");
@@ -79,6 +81,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string? _pendingRetouchBindingControlId;
     private double? _pendingRetouchBindingControlValue;
     private System.Windows.Media.Color? _manualSkinReferenceColor;
+    private readonly List<System.Windows.Media.Color> _manualSkinReferenceColors = new();
     private bool _isDraggingFaceWorkArea;
     private FaceWorkAreaDragMode _faceWorkAreaDragMode;
     private System.Windows.Point _faceWorkAreaDragStart;
@@ -413,8 +416,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 new("skin_smooth", "\uD53C\uBD80\uACB0 \uC815\uB9AC", 0, 100, 0),
                 new("pore_clean", "\uBAA8\uACF5 \uC815\uB9AC", 0, 100, 0),
                 new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0),
-                RetouchControl.CreateAction("skin_sample_tone", "\uD53C\uBD80\uD1A4 \uAE30\uC900", "\uB113\uC740 \uC2A4\uD3EC\uC774\uB4DC"),
-                new("skin_mask_range", "\uD53C\uBD80 \uBCF4\uC815 \uBC94\uC704", 0, 100, 75),
+                RetouchControl.CreateAction("skin_sample_tone", "\uD53C\uBD80\uD1A4 \uAE30\uC900", "\uD53C\uBD80\uC0C9 \uC120\uD0DD\uD558\uAE30"),
                 new("skin_texture_protect", "\uD53C\uBD80\uACB0 \uBCF4\uC874", 0, 100, 70)
             }),
         new RetouchSection(
@@ -1111,15 +1113,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _isAutoAiMaskPreviewRendering = true;
         AutoAiMaskPreviewStatusText = "평균색 계산 중";
         double skinMaskRange = CaptureSkinMaskRange();
+        string skinReferenceKey = CreateManualSkinReferenceKey(_manualSkinReferenceColors);
+        System.Windows.Media.Color[] manualSkinReferences = _manualSkinReferenceColors.ToArray();
         AutoAiMaskPreviewOptions previewOptions = CaptureAutoAiMaskPreviewOptions();
-        if (photo.TryGetAverageFaceColorMaskPreview(skinMaskRange, out AverageFaceColorMaskPreviewCache cachedMask))
+        if (photo.TryGetAverageFaceColorMaskPreview(skinMaskRange, skinReferenceKey, out AverageFaceColorMaskPreviewCache cachedMask))
         {
             AutoAiMaskPreviewImage = cachedMask.PreviewImage;
-            AutoAiMaskPreviewStatusText = "평균색 마스크";
+            AutoAiMaskPreviewStatusText = CreateAverageMaskStatusText(manualSkinReferences.Length);
             if (_pendingAutoAiMaskSaveOnComplete)
             {
                 _pendingAutoAiMaskSaveOnComplete = false;
-                SaveAutoAiMaskDebugImages(photo, cachedMask.Result, cachedMask.Snapshot, skinMaskRange);
+                SaveAutoAiMaskDebugImages(photo, cachedMask.Result, cachedMask.Snapshot, skinMaskRange, manualSkinReferences);
             }
 
             _isAutoAiMaskPreviewRendering = false;
@@ -1163,7 +1167,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     effectiveSnapshot.Analysis,
                     effectiveSnapshot.Masks,
                     skinMaskRange,
-                    cancellationToken);
+                    cancellationToken,
+                    manualSkinReferences);
                 if (cancellationToken.IsCancellationRequested || colorMask.AverageSignal <= 0.000001)
                 {
                     return ((BitmapSource?)null, (AverageFaceColorMaskResult?)null, (FaceSnapshotMaskSet?)null);
@@ -1181,18 +1186,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 colorMask is not null &&
                 effectiveSnapshot is not null)
             {
-                photo.CacheAverageFaceColorMaskPreview(skinMaskRange, colorMask, effectiveSnapshot, maskPreview);
+                photo.CacheAverageFaceColorMaskPreview(skinMaskRange, skinReferenceKey, colorMask, effectiveSnapshot, maskPreview);
                 if (_pendingAutoAiMaskSaveOnComplete)
                 {
                     _pendingAutoAiMaskSaveOnComplete = false;
-                    SaveAutoAiMaskDebugImages(photo, colorMask, effectiveSnapshot, skinMaskRange);
+                    SaveAutoAiMaskDebugImages(photo, colorMask, effectiveSnapshot, skinMaskRange, manualSkinReferences);
                 }
 
                 if (ReferenceEquals(SelectedPhoto, photo) &&
                     SelectedPhotos.Count == 1)
                 {
                     AutoAiMaskPreviewImage = maskPreview;
-                    AutoAiMaskPreviewStatusText = "평균색 마스크";
+                    AutoAiMaskPreviewStatusText = CreateAverageMaskStatusText(manualSkinReferences.Length);
                     OnPropertyChanged(nameof(SnapshotMaskStatusText));
                 }
             }
@@ -1235,6 +1240,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             AutoAiMaskPreviewImage = null;
             AutoAiMaskPreviewStatusText = "마스크 대기";
         }
+    }
+
+    private bool TryShowCachedAutoAiMaskPreviewForCurrentPhoto()
+    {
+        if (SelectedPhoto is null || SelectedPhotos.Count != 1)
+        {
+            return false;
+        }
+
+        PhotoItem photo = SelectedPhoto;
+        double skinMaskRange = CaptureSkinMaskRange();
+        string skinReferenceKey = CreateManualSkinReferenceKey(_manualSkinReferenceColors);
+        if (!photo.TryGetAverageFaceColorMaskPreview(skinMaskRange, skinReferenceKey, out AverageFaceColorMaskPreviewCache cachedMask))
+        {
+            return false;
+        }
+
+        AutoAiMaskPreviewImage = cachedMask.PreviewImage;
+        AutoAiMaskPreviewStatusText = CreateAverageMaskStatusText(_manualSkinReferenceColors.Count);
+        return true;
     }
 
     private static AutoAiMaskFilterLayers CreateAutoAiMaskFilterLayers(RetouchStageProcessorOutput? output, MaskPlane? averageColorDifferenceMask)
@@ -1785,7 +1810,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RetouchDebugExporter.SaveForChangedControl(bundle.BalancedImage, bundle.BalancedSnapshot, output, outputDirectory, changedControlId);
     }
 
-    private static void SaveAutoAiMaskDebugImages(PhotoItem photo, AverageFaceColorMaskResult colorMask, FaceSnapshotMaskSet snapshot, double skinMaskRange)
+    private static void SaveAutoAiMaskDebugImages(
+        PhotoItem photo,
+        AverageFaceColorMaskResult colorMask,
+        FaceSnapshotMaskSet snapshot,
+        double skinMaskRange,
+        IReadOnlyList<System.Windows.Media.Color> manualSkinReferences)
     {
         string? outputDirectory = GetSnapshotDebugDirectory(photo);
         if (outputDirectory is null)
@@ -1794,6 +1824,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         Directory.CreateDirectory(outputDirectory);
+        FacePositionDebugExporter.SaveWhiteBackground(photo.BaseImage, snapshot.Analysis, outputDirectory);
         DeleteOldAverageColorMaskDebugFiles(outputDirectory);
         MaskPlane opacityMask = ApplyMaskOpacity(colorMask.ColorDifferenceMask, skinMaskRange);
         SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(opacityMask), Path.Combine(outputDirectory, "debug_average_skin_mask_bw.png"));
@@ -1805,11 +1836,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "SkinMaskOpacity: " + Math.Clamp(skinMaskRange, 0, 1).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
             "ColorPreview: source_pixel_color_mask",
             "DisplayReferenceColor: " + colorMask.ReferenceColor.R + "," + colorMask.ReferenceColor.G + "," + colorMask.ReferenceColor.B,
+            "ManualSkinReferenceCount: " + manualSkinReferences.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "ManualSkinReferences: " + CreateManualSkinReferenceReport(manualSkinReferences),
             "AverageSignal: " + colorMask.AverageSignal.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
             "ImageId: " + snapshot.ImageId,
             "CacheKey: " + snapshot.CacheKey.StableId
         };
         File.WriteAllLines(Path.Combine(outputDirectory, "debug_average_skin_mask_report.txt"), lines, System.Text.Encoding.UTF8);
+    }
+
+    private static string CreateAverageMaskStatusText(int manualReferenceCount)
+    {
+        return manualReferenceCount > 0
+            ? $"평균색 마스크 {manualReferenceCount}/5"
+            : "평균색 마스크";
+    }
+
+    private static string CreateManualSkinReferenceKey(IReadOnlyList<System.Windows.Media.Color> colors)
+    {
+        return colors.Count == 0
+            ? "default"
+            : string.Join(";", colors.Take(ManualSkinReferenceMaxSamples).Select(color => $"{color.R:X2}{color.G:X2}{color.B:X2}"));
+    }
+
+    private static string CreateManualSkinReferenceReport(IReadOnlyList<System.Windows.Media.Color> colors)
+    {
+        return colors.Count == 0
+            ? "default"
+            : string.Join(";", colors.Take(ManualSkinReferenceMaxSamples).Select(color => $"{color.R},{color.G},{color.B}"));
     }
 
     private static void DeleteOldAverageColorMaskDebugFiles(string outputDirectory)
@@ -2302,6 +2356,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         _isSkinToneSamplingMode = isEnabled;
         PreviewSurface.Cursor = isEnabled ? System.Windows.Input.Cursors.Cross : null;
+        AutoAiMaskPreviewStatusText = isEnabled
+            ? $"피부색 클릭 {_manualSkinReferenceColors.Count}/{ManualSkinReferenceMaxSamples}"
+            : CreateAverageMaskStatusText(_manualSkinReferenceColors.Count);
     }
 
     private void LoadPhotosButton_Click(object sender, RoutedEventArgs e)
@@ -2465,10 +2522,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             FindRetouchControl("skin_smooth")?.Value ?? 0,
             FindRetouchControl("pore_clean")?.Value ?? 0,
             FindRetouchControl("tone_even")?.Value ?? 0,
-            FindRetouchControl("skin_mask_range")?.Value ?? 75,
+            100,
             FindRetouchControl("skin_texture_protect")?.Value ?? 70,
-            _manualSkinReferenceColor.HasValue,
-            _manualSkinReferenceColor ?? System.Windows.Media.Colors.Transparent,
+            _manualSkinReferenceColors.Count > 0,
+            GetCurrentManualSkinReferenceColor(),
             FindRetouchControl("oval_face")?.Value ?? 0,
             FindRetouchControl("face_balance")?.Value ?? 0,
             FindRetouchControl("cheekbone_soften")?.Value ?? 0,
@@ -2543,7 +2600,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "wrinkle_global" or "wrinkle_under_eye" or "wrinkle_glabella" or "wrinkle_forehead" or "wrinkle_nasolabial" or "wrinkle_mouth_corner" or "wrinkle_neck" or "wrinkle_nose_shadow" => new RetouchProcessingScope(Wrinkle: true),
             "tone_even" => new RetouchProcessingScope(Tone: true),
             "pore_clean" or "skin_texture_protect" => new RetouchProcessingScope(Texture: true),
-            "skin_mask_range" => CreateRetouchProcessingScopeFromActiveControls(),
             null => CreateRetouchProcessingScopeFromActiveControls(),
             _ => RetouchProcessingScope.None
         };
@@ -2581,7 +2637,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private double CaptureSkinMaskRange()
     {
-        return NormalizeSlider(FindRetouchControl("skin_mask_range"), 0.75);
+        return 1.0;
     }
 
     private AutoAiMaskPreviewOptions CaptureAutoAiMaskPreviewOptions()
@@ -3918,7 +3974,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
-            "skin_mask_range" or
             "skin_texture_protect" or
             "wrinkle_global" or
             "wrinkle_under_eye" or
@@ -4011,7 +4066,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
-            "skin_mask_range" or
             "skin_texture_protect" or
             "wrinkle_global" or
             "wrinkle_under_eye" or
@@ -4031,7 +4085,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
-            "skin_mask_range" or
             "skin_texture_protect" or
             "wrinkle_global" or
             "wrinkle_under_eye" or
@@ -4372,8 +4425,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         PhotoItem? previousSelectedPhoto = SelectedPhoto;
         bool previousSinglePhoto = previousSelectedPhoto is not null &&
             previousSelection.Length == 1;
-        bool previousSinglePhotoChanged = previousSinglePhoto &&
-            HasActiveAutoAiMaskPreviewControls();
         if (_isMaskDebugPreviewEnabled)
         {
             _isMaskDebugPreviewEnabled = false;
@@ -4395,15 +4446,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             .Distinct()
             .Take(8)
             .ToArray();
+        PhotoItem? nextSelectedPhoto = currentPhoto is not null && selected.Contains(currentPhoto)
+            ? currentPhoto
+            : selected.FirstOrDefault();
+        bool selectedPhotoWillChange = !ReferenceEquals(previousSelectedPhoto, nextSelectedPhoto);
         if (previousSinglePhoto && previousSelectedPhoto is not null)
         {
             StoreRetouchStateForPhoto(previousSelectedPhoto);
         }
 
-        if (previousSinglePhotoChanged && previousSelectedPhoto is not null)
+        if (selectedPhotoWillChange)
         {
-            _pendingAutoAiMaskSaveOnComplete = true;
-            _ = RefreshAutoAiMaskPreviewAsync();
+            CancelAutoAiMaskPreviewRender(clearPreview: true);
+            CloseAllRetouchSections();
+            AutoAiMaskPreviewStatusText = "툴 열림 대기";
         }
 
         foreach (PhotoItem photo in Photos)
@@ -4417,9 +4473,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             SelectedPhotos.Add(photo);
         }
 
-        SelectedPhoto = currentPhoto is not null && selected.Contains(currentPhoto)
-            ? currentPhoto
-            : selected.FirstOrDefault();
+        SelectedPhoto = nextSelectedPhoto;
         ReleaseInactivePhotoMemory(selected);
         bool selectedPhotoChanged = !ReferenceEquals(previousSelectedPhoto, SelectedPhoto);
         bool selectionChanged = HasSelectionChanged(previousSelection, selected);
@@ -4431,9 +4485,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (selectedPhotoChanged && SelectedPhoto is not null && selected.Length == 1)
         {
             RestoreRetouchControlsForPhotoSelection(SelectedPhoto);
-            CloseAllRetouchSections();
-            AutoAiMaskPreviewImage = null;
-            AutoAiMaskPreviewStatusText = "툴 열림 대기";
+            if (!TryShowCachedAutoAiMaskPreviewForCurrentPhoto())
+            {
+                AutoAiMaskPreviewImage = null;
+                AutoAiMaskPreviewStatusText = "툴 열림 대기";
+            }
         }
 
         UpdateCurveHistogram();
@@ -4499,8 +4555,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             curveChannel,
             curveControl?.ExportCurvePointsByChannel() ?? RetouchControl.CreateDefaultCurvePointsByChannel(),
             SelectedPhoto?.FaceWorkArea ?? FaceWorkArea.Default,
-            _manualSkinReferenceColor.HasValue,
-            _manualSkinReferenceColor ?? System.Windows.Media.Colors.Transparent);
+            _manualSkinReferenceColors.Count > 0,
+            GetCurrentManualSkinReferenceColor(),
+            _manualSkinReferenceColors.ToArray());
     }
 
     private void RestoreRetouchControlsForPhotoSelection(PhotoItem photo)
@@ -4584,14 +4641,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (SelectedPhoto is not null)
             {
                 SelectedPhoto.FaceWorkArea = state.FaceWorkArea;
-                _manualSkinReferenceColor = state.HasManualSkinReference
-                    ? state.ManualSkinReferenceColor
-                    : null;
+                RestoreManualSkinReferences(state);
                 OnFaceWorkAreaOverlayPropertiesChanged();
             }
             else
             {
-                _manualSkinReferenceColor = null;
+                ClearManualSkinReferences();
             }
         }
         finally
@@ -4656,7 +4711,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return false;
         }
 
-        if (left.HasManualSkinReference && left.ManualSkinReferenceColor != right.ManualSkinReferenceColor)
+        if (left.HasManualSkinReference && !AreColorArraysEquivalent(left.ManualSkinReferenceColors, right.ManualSkinReferenceColors))
         {
             return false;
         }
@@ -4694,6 +4749,80 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                Math.Abs(left.Height - right.Height) < 0.001;
     }
 
+    private void AddManualSkinReferenceColor(System.Windows.Media.Color color)
+    {
+        if (_manualSkinReferenceColors.Count >= ManualSkinReferenceMaxSamples)
+        {
+            _manualSkinReferenceColors.RemoveAt(0);
+        }
+
+        _manualSkinReferenceColors.Add(color);
+        _manualSkinReferenceColor = BlendManualSkinReferenceColors(_manualSkinReferenceColors);
+        AutoAiMaskPreviewStatusText = $"피부색 샘플 {_manualSkinReferenceColors.Count}/{ManualSkinReferenceMaxSamples}";
+    }
+
+    private void RestoreManualSkinReferences(RetouchAdjustmentState state)
+    {
+        _manualSkinReferenceColors.Clear();
+        if (state.HasManualSkinReference)
+        {
+            System.Windows.Media.Color[] colors = state.ManualSkinReferenceColors is { Length: > 0 }
+                ? state.ManualSkinReferenceColors
+                : new[] { state.ManualSkinReferenceColor };
+            _manualSkinReferenceColors.AddRange(colors.Take(ManualSkinReferenceMaxSamples));
+        }
+
+        _manualSkinReferenceColor = _manualSkinReferenceColors.Count > 0
+            ? BlendManualSkinReferenceColors(_manualSkinReferenceColors)
+            : null;
+    }
+
+    private void ClearManualSkinReferences()
+    {
+        _manualSkinReferenceColors.Clear();
+        _manualSkinReferenceColor = null;
+    }
+
+    private System.Windows.Media.Color GetCurrentManualSkinReferenceColor()
+    {
+        return _manualSkinReferenceColors.Count > 0
+            ? BlendManualSkinReferenceColors(_manualSkinReferenceColors)
+            : System.Windows.Media.Colors.Transparent;
+    }
+
+    private static System.Windows.Media.Color BlendManualSkinReferenceColors(IReadOnlyList<System.Windows.Media.Color> colors)
+    {
+        if (colors.Count == 0)
+        {
+            return System.Windows.Media.Colors.Transparent;
+        }
+
+        return System.Windows.Media.Color.FromRgb(
+            (byte)Math.Clamp((int)Math.Round(colors.Average(color => color.R)), 0, 255),
+            (byte)Math.Clamp((int)Math.Round(colors.Average(color => color.G)), 0, 255),
+            (byte)Math.Clamp((int)Math.Round(colors.Average(color => color.B)), 0, 255));
+    }
+
+    private static bool AreColorArraysEquivalent(IReadOnlyList<System.Windows.Media.Color>? left, IReadOnlyList<System.Windows.Media.Color>? right)
+    {
+        left ??= Array.Empty<System.Windows.Media.Color>();
+        right ??= Array.Empty<System.Windows.Media.Color>();
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (left[index] != right[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void SetRetouchControlValue(string id, double value)
     {
         RetouchControl? control = FindRetouchControl(id);
@@ -4719,7 +4848,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 control.ResetToDefault();
             }
 
-            _manualSkinReferenceColor = null;
+            ClearManualSkinReferences();
         }
         finally
         {
@@ -4992,12 +5121,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         RetouchAdjustmentState before = CaptureRetouchState();
-        _manualSkinReferenceColor = SampleWideAverageSkinColor(photo.BaseImage, pixelX, pixelY);
-        SetSkinToneSamplingMode(false);
+        AddManualSkinReferenceColor(SampleWideAverageSkinColor(photo.BaseImage, pixelX, pixelY));
         RetouchAdjustmentState after = CaptureRetouchState();
         PushRetouchHistory(before, after);
         photo.RetouchState = after;
-        await ApplyPhotoAdjustmentsAsync(showOverlay: false);
+        _pendingAutoAiMaskSaveOnComplete = true;
+        await RefreshAutoAiMaskPreviewAsync();
         return true;
     }
 
@@ -5065,7 +5194,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         byte[] pixels = new byte[stride * height];
         bitmap.CopyPixels(pixels, stride, 0);
 
-        int radius = Math.Clamp(Math.Min(width, height) / 42, 24, 90);
+        int radius = ManualSkinReferenceSampleRadius;
         int minX = Math.Max(0, centerX - radius);
         int maxX = Math.Min(width - 1, centerX + radius);
         int minY = Math.Max(0, centerY - radius);
@@ -5811,13 +5940,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         if (SelectedPhoto is { } photo)
         {
-            _ = PrepareEditingForSelectedPhotoAsync(photo, expandedSection);
             if (IsAutoAiMaskPreviewSection(expandedSection))
             {
-                _pendingAutoAiMaskSaveOnComplete = true;
-                _ = RefreshAutoAiMaskPreviewAsync();
+                if (!TryShowCachedAutoAiMaskPreviewForCurrentPhoto())
+                {
+                    _ = PrepareEditingForSelectedPhotoAsync(photo, expandedSection);
+                    _ = RefreshAutoAiMaskPreviewAsync();
+                }
+            }
+            else
+            {
+                _ = PrepareEditingForSelectedPhotoAsync(photo, expandedSection);
+                CancelAutoAiMaskPreviewRender(clearPreview: true);
             }
         }
+    }
+
+    private void RetouchSection_Collapsed(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is RetouchSection collapsedSection &&
+            ReferenceEquals(_activeRetouchSection, collapsedSection))
+        {
+            _activeRetouchSection = null;
+            OnPropertyChanged(nameof(FaceWorkAreaOverlayVisibility));
+        }
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (!RetouchSections.Any(section => section.IsExpanded && IsAutoAiMaskPreviewSection(section)))
+            {
+                CancelAutoAiMaskPreviewRender(clearPreview: true);
+                AutoAiMaskPreviewStatusText = "툴 열림 대기";
+            }
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void SectionDragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

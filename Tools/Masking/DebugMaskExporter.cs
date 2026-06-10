@@ -46,7 +46,14 @@ public static class DebugMaskExporter
         SaveBitmap(bitmap, Path.Combine(outputDirectory, "debug_original.png"));
         SaveBitmap(CreateFaceBoxOverlay(bitmap, result.Analysis), Path.Combine(outputDirectory, "debug_face_box.png"));
         SaveBitmap(CreateLandmarkOverlay(bitmap, result.Analysis), Path.Combine(outputDirectory, "debug_landmarks.png"));
-        SaveBitmap(CreateParsingPlaceholder(result.Masks), Path.Combine(outputDirectory, "debug_parsing.png"));
+        if (result.ParsingMasks is null)
+        {
+            SaveMask(MaskPlane.Empty(result.Masks.SkinMask.Width, result.Masks.SkinMask.Height), Path.Combine(outputDirectory, "debug_parsing.png"));
+        }
+        else
+        {
+            SaveBitmap(CreateParsingLabelsPreview(result.Masks.SkinMask.Width, result.Masks.SkinMask.Height, result.ParsingMasks), Path.Combine(outputDirectory, "debug_parsing.png"));
+        }
         SaveParsingDebugMasks(result, outputDirectory);
         SaveNostrilDebugMasks(bitmap, result, outputDirectory);
         SaveQualityDebugMasks(bitmap, result, outputDirectory);
@@ -139,6 +146,15 @@ public static class DebugMaskExporter
             {
                 int index = y * stride + x * 4;
                 double amount = Math.Clamp(mask[x, y] * maskOpacity, 0, 1);
+                if (amount <= 0.0001)
+                {
+                    pixels[index] = 22;
+                    pixels[index + 1] = 20;
+                    pixels[index + 2] = 18;
+                    pixels[index + 3] = 0;
+                    continue;
+                }
+
                 pixels[index] = sourcePixels[index];
                 pixels[index + 1] = sourcePixels[index + 1];
                 pixels[index + 2] = sourcePixels[index + 2];
@@ -358,11 +374,6 @@ public static class DebugMaskExporter
         SaveOptionalMask(parsing.InnerMouthMask, Path.Combine(outputDirectory, "debug_parsing_inner_mouth_mask.png"));
         SaveOptionalMask(parsing.HairMask, Path.Combine(outputDirectory, "debug_parsing_hair_mask.png"));
 
-        if (result.WarpedStandardMasks is not null)
-        {
-            SaveBitmap(CreateParsingPlaceholder(result.WarpedStandardMasks), Path.Combine(outputDirectory, "debug_warped_standard_mask.png"));
-        }
-
         SaveMask(result.Masks.EyeMask, Path.Combine(outputDirectory, "debug_merged_eye_mask.png"));
         SaveMask(result.Masks.EyebrowMask, Path.Combine(outputDirectory, "debug_merged_eyebrow_mask.png"));
         SaveMask(result.Masks.LipMask, Path.Combine(outputDirectory, "debug_merged_lip_mask.png"));
@@ -556,30 +567,6 @@ public static class DebugMaskExporter
                 pixels[index + 3] = 255;
             }
         }
-    }
-
-    private static BitmapSource CreateParsingPlaceholder(FaceMaskSet masks)
-    {
-        int width = masks.SkinMask.Width;
-        int height = masks.SkinMask.Height;
-        int stride = width * 4;
-        byte[] pixels = new byte[stride * height];
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int index = y * stride + x * 4;
-                byte red = ToByte(Math.Max(masks.HardProtectMask[x, y], masks.LipMask[x, y]));
-                byte green = 0;
-                byte blue = 0;
-                pixels[index] = blue;
-                pixels[index + 1] = green;
-                pixels[index + 2] = red;
-                pixels[index + 3] = 255;
-            }
-        }
-
-        return CreateBitmap(width, height, pixels);
     }
 
     private static BitmapSource CreateRoiOverlay(BitmapSource source, Int32Rect roi)

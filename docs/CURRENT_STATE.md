@@ -1,4 +1,4 @@
-# PhotoRetouch Current State
+﻿# PhotoRetouch Current State
 
 Last updated: 2026-06-10
 
@@ -31,6 +31,25 @@ Current work is focused on:
 - Making mask preview fast enough to feel usable.
 - Saving debug mask files only when useful.
 
+## Shape Geometry Direction
+
+Shape geometry is a controlled photographer tool, not an automatic beauty engine.
+
+K-AnchorMesh / K-AnchorWarp exists to make face rotation, left-right balance, and 2.5D local shape correction possible for the user. It should provide reference points, measurements, handles, falloff regions, and weak controllable morph groups.
+
+The final judgment belongs to the user.
+
+Rules:
+
+- Do not let AI decide whether a face is beautiful.
+- Do not automatically force an oval face.
+- Do not significantly change the subject's identity or impression.
+- Use mesh, symmetry, ratio, yaw-like, pitch-like, and oval-profile values as guides for user controls, not as automatic correction commands.
+- Shape tools may let the user "shake" or drag the face structure through handles, sliders, or brush-like local liquify.
+- Image pixels and masks should move together only when an explicit geometry tool is active.
+- Mesh movement preview should come before pixel warp.
+- K-AnchorMesh / K-AnchorWarp must stay separate from SkinRetouch.
+
 ## Current Source Of Truth
 
 The current source code is the source of truth.
@@ -46,6 +65,9 @@ Important modules:
 - `Tools/Masking/StandardMaskWarpEngine.cs`
 - `Tools/Masking/RetouchStageProcessor.cs`
 - `Tools/Shape/*`
+- `Core/AnchorMesh/*`
+- `Core/Vision/*`
+- `Core/Masks/*`
 - `Tools/PhotoAdjustment/*`
 
 ## User Experience Rules
@@ -73,6 +95,7 @@ Implemented or partially implemented:
 - C# preview engine path.
 - Curve editor first pass.
 - ShapeBalance first-pass architecture.
+- K-AnchorMesh / 2.5D geometry scaffolding for future user-controlled rotation and balance tools.
 - Retouch stage processor first pass.
 - AUTO MASK preview and debug export.
 - Per-photo retouch state memory during the session.
@@ -94,4 +117,3 @@ Not final:
 This documentation set replaces the old accumulated order documents as the active baseline.
 
 Old documents are historical reference only. Do not use them as active planning instructions unless the current source code confirms them.
-

@@ -644,6 +644,7 @@
                                             Background="Transparent">
                                         <Expander IsExpanded="{Binding IsExpanded}"
                                                   Expanded="RetouchSection_Expanded"
+                                                  Collapsed="RetouchSection_Collapsed"
                                                   Foreground="{StaticResource TextMain}"
                                                   Background="{StaticResource PanelSoft}"
                                                   BorderBrush="{StaticResource Stroke}">

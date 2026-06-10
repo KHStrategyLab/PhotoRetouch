@@ -5,15 +5,18 @@ namespace PhotoRetouch;
 
 public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
 {
-    private readonly StandardMaskLoader _loader;
-    private readonly IStandardMaskWarper _warper;
     private readonly IFaceAnalyzer _faceAnalyzer;
     private readonly IFaceParsingDetector _parsingDetector;
-    private readonly NostrilDetector _nostrilDetector;
 
     public StandardMaskWarpEngine()
-        : this(new StandardMaskLoader(), new StandardAffineMaskWarper(), new OpenCvFaceAnalyzer(), new NoFaceParsingDetector(), new NostrilDetector())
+        : this(new OpenCvFaceAnalyzer(), new NoFaceParsingDetector())
     {
+    }
+
+    public StandardMaskWarpEngine(IFaceAnalyzer faceAnalyzer, IFaceParsingDetector parsingDetector)
+    {
+        _faceAnalyzer = faceAnalyzer;
+        _parsingDetector = parsingDetector;
     }
 
     public StandardMaskWarpEngine(
@@ -22,15 +25,11 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         IFaceAnalyzer faceAnalyzer,
         IFaceParsingDetector parsingDetector,
         NostrilDetector nostrilDetector)
+        : this(faceAnalyzer, parsingDetector)
     {
-        _loader = loader;
-        _warper = warper;
-        _faceAnalyzer = faceAnalyzer;
-        _parsingDetector = parsingDetector;
-        _nostrilDetector = nostrilDetector;
     }
 
-    public string MaskVersion => "standard_mask_warp_v1+skin_tone_v1+nose_structure_v1+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
+    public string MaskVersion => "color_mask_only_v1+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
 
     public PortraitMaskResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -38,11 +37,8 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         int height = source.PixelHeight;
         FaceAnalyzerResult faceAnalyzerResult = _faceAnalyzer.Analyze(source, faceWorkArea);
         MaskWarpInput input = faceAnalyzerResult.ToMaskWarpInput(width, height);
-        StandardMaskSet standardMasks = _loader.Load();
-        WarpedMaskSet warped = _warper.Warp(standardMasks, input);
         MaskPlane empty = MaskPlane.Empty(width, height);
 
-        FaceMaskSet warpedStandardMasks = BuildFaceMaskSetFromWarpedMasks(warped, empty);
         IReadOnlyDictionary<string, WpfPoint> landmarks = faceAnalyzerResult.ToLandmarks();
         ParsingMaskSet? parsingMasks = _parsingDetector.Detect(source, new FaceParsingInput(input.FaceBox, landmarks, input.FaceAngle));
 
@@ -62,24 +58,21 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             parsingMasks?.UpperLipMask,
             parsingMasks?.LowerLipMask);
 
-        MaskPlane eyeMask = MaskPlane.Union(warped.EyeProtectMask, parsingEyeMask);
-        MaskPlane eyebrowMask = MaskPlane.Union(warped.EyebrowProtectMask, parsingEyebrowMask);
-        MaskPlane lipMask = MaskPlane.Union(warped.LipProtectMask, parsingLipMask);
+        MaskPlane eyeMask = parsingEyeMask;
+        MaskPlane eyebrowMask = parsingEyebrowMask;
+        MaskPlane lipMask = parsingLipMask;
         MaskPlane innerMouthMask = parsingMasks?.InnerMouthMask ?? empty;
         MaskPlane hairMask = parsingMasks?.HairMask ?? empty;
         MaskPlane beardMask = parsingMasks?.BeardMask ?? empty;
         MaskPlane mustacheMask = parsingMasks?.MustacheMask ?? empty;
         MaskPlane glassesMask = parsingMasks?.GlassesMask ?? empty;
-        MaskPlane neckMask = parsingMasks?.NeckMask ?? empty;
         MaskPlane skinMask = parsingMasks?.SkinMask ?? empty;
-        NostrilDetectorResult nostrilDetection = CreateDisabledNostrilDetection(width, height);
         MaskPlane nostrilMask = empty;
         MaskPlane hardProtectMask = MaskPlane.Union(
             eyeMask,
             eyebrowMask,
             lipMask,
             innerMouthMask,
-            warped.EyeProtectMask,
             nostrilMask,
             hairMask,
             beardMask,
@@ -112,14 +105,13 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
 
         List<string> warnings = new()
         {
-            "standard_mask_warp_engine",
-            "blob_mask_generators_removed"
+            "standard_dummy_masks_removed",
+            "color_only_mask_mode"
         };
         warnings.AddRange(faceAnalyzerResult.DebugWarnings);
-        warnings.AddRange(standardMasks.DebugWarnings);
         if (parsingMasks is null)
         {
-            warnings.Add("face_parsing_not_connected_no_blob_fallback");
+            warnings.Add("face_parsing_not_connected_no_dummy_fallback");
         }
         else
         {
@@ -138,52 +130,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             parsingMasks?.ParsingConfidence ?? 0,
             warnings);
         MaskQualityReport report = MaskQualityReport.FromMasks(analysis, masks);
-        return new PortraitMaskResult(analysis, masks, report, parsingMasks, warpedStandardMasks, nostrilDetection);
-    }
-
-    private static FaceMaskSet BuildFaceMaskSetFromWarpedMasks(WarpedMaskSet warped, MaskPlane empty)
-    {
-        MaskPlane hardProtectMask = MaskPlane.Union(
-            warped.EyeProtectMask,
-            warped.EyebrowProtectMask,
-            warped.LipProtectMask);
-        MaskPlane noseSkinMask = empty;
-        MaskPlane retouchAllowMask = empty;
-        MaskPlane softProtectMask = empty;
-        MaskPlane finalOverlayMask = hardProtectMask.Clone();
-
-        return new FaceMaskSet(
-            empty,
-            warped.EyeProtectMask,
-            warped.EyebrowProtectMask,
-            warped.LipProtectMask,
-            empty,
-            empty,
-            empty,
-            noseSkinMask,
-            empty,
-            empty,
-            empty,
-            empty,
-            empty,
-            empty,
-            hardProtectMask,
-            softProtectMask,
-            retouchAllowMask,
-            finalOverlayMask);
-    }
-
-    private static NostrilDetectorResult CreateDisabledNostrilDetection(int width, int height)
-    {
-        MaskPlane empty = MaskPlane.Empty(width, height);
-        return new NostrilDetectorResult(
-            empty,
-            new System.Windows.Int32Rect(0, 0, 1, 1),
-            empty,
-            empty,
-            0,
-            new[] { "nostril_detector_disabled" },
-            Array.Empty<NostrilCandidateComponent>());
+        return new PortraitMaskResult(analysis, masks, report, parsingMasks);
     }
 
     private static MaskPlane UnionOptional(int width, int height, params MaskPlane?[] masks)

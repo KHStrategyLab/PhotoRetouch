@@ -378,7 +378,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
         }
     }
 
-    public bool TryGetAverageFaceColorMaskPreview(double skinMaskRange, out AverageFaceColorMaskPreviewCache cache)
+    public bool TryGetAverageFaceColorMaskPreview(double skinMaskRange, string skinReferenceKey, out AverageFaceColorMaskPreviewCache cache)
     {
         AverageFaceColorMaskPreviewCache? cached = _averageFaceColorMaskPreviewCache;
         (DateTime lastWriteTimeUtc, long length) = GetSourceVersion();
@@ -387,6 +387,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
             cached.SourceLength == length &&
             cached.Width == BaseImage.PixelWidth &&
             cached.Height == BaseImage.PixelHeight &&
+            string.Equals(cached.SkinReferenceKey, skinReferenceKey, StringComparison.Ordinal) &&
             Math.Abs(cached.SkinMaskRange - skinMaskRange) < 0.0005)
         {
             cache = cached;
@@ -397,11 +398,12 @@ public sealed class PhotoItem : INotifyPropertyChanged
         return false;
     }
 
-    public void CacheAverageFaceColorMaskPreview(double skinMaskRange, AverageFaceColorMaskResult result, FaceSnapshotMaskSet snapshot, BitmapSource previewImage)
+    public void CacheAverageFaceColorMaskPreview(double skinMaskRange, string skinReferenceKey, AverageFaceColorMaskResult result, FaceSnapshotMaskSet snapshot, BitmapSource previewImage)
     {
         (DateTime lastWriteTimeUtc, long length) = GetSourceVersion();
         _averageFaceColorMaskPreviewCache = new AverageFaceColorMaskPreviewCache(
             skinMaskRange,
+            skinReferenceKey,
             result,
             snapshot,
             previewImage,
@@ -614,6 +616,7 @@ public sealed class PhotoItem : INotifyPropertyChanged
 
 public sealed record AverageFaceColorMaskPreviewCache(
     double SkinMaskRange,
+    string SkinReferenceKey,
     AverageFaceColorMaskResult Result,
     FaceSnapshotMaskSet Snapshot,
     BitmapSource PreviewImage,
