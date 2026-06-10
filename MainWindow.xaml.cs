@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using PhotoRetouch.AnchorMesh;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 
@@ -1825,6 +1826,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         Directory.CreateDirectory(outputDirectory);
         FacePositionDebugExporter.SaveWhiteBackground(photo.BaseImage, snapshot.Analysis, outputDirectory);
+        SaveAnchorMeshDebugImages(photo.BaseImage, snapshot, outputDirectory);
         DeleteOldAverageColorMaskDebugFiles(outputDirectory);
         MaskPlane opacityMask = ApplyMaskOpacity(colorMask.ColorDifferenceMask, skinMaskRange);
         SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(opacityMask), Path.Combine(outputDirectory, "debug_average_skin_mask_bw.png"));
@@ -1843,6 +1845,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "CacheKey: " + snapshot.CacheKey.StableId
         };
         File.WriteAllLines(Path.Combine(outputDirectory, "debug_average_skin_mask_report.txt"), lines, System.Text.Encoding.UTF8);
+    }
+
+    private static void SaveAnchorMeshDebugImages(BitmapSource source, FaceSnapshotMaskSet snapshot, string outputDirectory)
+    {
+        try
+        {
+            AnchorMeshResult anchorMesh = new KAnchorMeshEngine().Build(
+                source,
+                YuNetAnchorMapper.FromFaceAnalysisResult(snapshot.Analysis));
+            AnchorMeshDebugOverlayRenderer renderer = new();
+            renderer.SaveSnappedOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_overlay.png"));
+            renderer.SaveTopologyOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_topology.png"));
+
+            AnchorMeshFeatureMaskSet masks = AnchorMeshFeatureMaskBuilder.Build(source.PixelWidth, source.PixelHeight, anchorMesh);
+            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.EyeMask), Path.Combine(outputDirectory, "debug_anchor_eye_mask.png"));
+            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.EyebrowMask), Path.Combine(outputDirectory, "debug_anchor_eyebrow_mask.png"));
+            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.LipMask), Path.Combine(outputDirectory, "debug_anchor_lip_mask.png"));
+            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.NostrilMask), Path.Combine(outputDirectory, "debug_anchor_nostril_mask.png"));
+            SaveDebugBitmap(DebugMaskExporter.CreateMaskPreview(masks.HardProtectMask), Path.Combine(outputDirectory, "debug_anchor_hard_protect_mask.png"));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "debug_anchor_mesh_error.txt"),
+                "AnchorMesh debug export failed: " + ex.GetType().Name + Environment.NewLine + ex.Message,
+                System.Text.Encoding.UTF8);
+        }
     }
 
     private static string CreateAverageMaskStatusText(int manualReferenceCount)

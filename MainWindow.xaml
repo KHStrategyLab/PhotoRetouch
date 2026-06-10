@@ -354,8 +354,17 @@
                                                         <ColumnDefinition Width="54"/>
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <Border Width="46" Height="46" Background="#101112" BorderBrush="{StaticResource ControlStrokeSoft}" BorderThickness="1">
-                                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                    <Border Width="46"
+                                                            Height="46"
+                                                            Background="#101112"
+                                                            BorderBrush="{StaticResource ControlStrokeSoft}"
+                                                            BorderThickness="1"
+                                                            ClipToBounds="True"
+                                                            HorizontalAlignment="Center">
+                                                        <Image Source="{Binding Thumbnail}"
+                                                               Stretch="Uniform"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
                                                     </Border>
                                                     <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>

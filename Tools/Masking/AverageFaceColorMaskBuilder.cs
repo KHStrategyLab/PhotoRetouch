@@ -59,6 +59,13 @@ public static class AverageFaceColorMaskBuilder
 
         MaskPlane skinRangeMask = BuildSkinRangeMask(pixels, width, height, stride, analysis, references, rangeAmount, cancellationToken);
         skinRangeMask = FeatherColorMask(skinRangeMask, pixels, stride, analysis, references, rangeAmount, cancellationToken);
+        if (masks is not null &&
+            masks.HardProtectMask.Width == width &&
+            masks.HardProtectMask.Height == height)
+        {
+            skinRangeMask = MaskPlane.Subtract(skinRangeMask, masks.HardProtectMask);
+        }
+
         double average = skinRangeMask.Average();
         FaceColorReference displayReference = BlendReferences(references);
         MediaColor color = MediaColor.FromRgb(

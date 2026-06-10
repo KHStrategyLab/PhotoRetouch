@@ -1,4 +1,5 @@
 using System.Windows.Media.Imaging;
+using PhotoRetouch.AnchorMesh;
 using WpfPoint = System.Windows.Point;
 
 namespace PhotoRetouch;
@@ -58,16 +59,24 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             parsingMasks?.UpperLipMask,
             parsingMasks?.LowerLipMask);
 
-        MaskPlane eyeMask = parsingEyeMask;
-        MaskPlane eyebrowMask = parsingEyebrowMask;
-        MaskPlane lipMask = parsingLipMask;
-        MaskPlane innerMouthMask = parsingMasks?.InnerMouthMask ?? empty;
+        List<string> warnings = new()
+        {
+            "standard_dummy_masks_removed",
+            "color_only_mask_mode"
+        };
+        warnings.AddRange(faceAnalyzerResult.DebugWarnings);
+
+        AnchorMeshFeatureMaskSet anchorMasks = BuildAnchorFeatureMasks(source, faceAnalyzerResult, width, height, warnings);
+
+        MaskPlane eyeMask = MaskPlane.Union(parsingEyeMask, anchorMasks.EyeMask);
+        MaskPlane eyebrowMask = MaskPlane.Union(parsingEyebrowMask, anchorMasks.EyebrowMask);
+        MaskPlane lipMask = MaskPlane.Union(parsingLipMask, anchorMasks.LipMask);
+        MaskPlane innerMouthMask = MaskPlane.Union(parsingMasks?.InnerMouthMask ?? empty, anchorMasks.InnerMouthMask);
         MaskPlane hairMask = parsingMasks?.HairMask ?? empty;
         MaskPlane beardMask = parsingMasks?.BeardMask ?? empty;
         MaskPlane mustacheMask = parsingMasks?.MustacheMask ?? empty;
         MaskPlane glassesMask = parsingMasks?.GlassesMask ?? empty;
-        MaskPlane skinMask = parsingMasks?.SkinMask ?? empty;
-        MaskPlane nostrilMask = empty;
+        MaskPlane nostrilMask = anchorMasks.NostrilMask;
         MaskPlane hardProtectMask = MaskPlane.Union(
             eyeMask,
             eyebrowMask,
@@ -78,10 +87,56 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             beardMask,
             mustacheMask,
             glassesMask);
-        MaskPlane noseSkinMask = empty;
-        MaskPlane retouchAllowMask = empty;
-        MaskPlane softProtectMask = empty;
-        MaskPlane finalOverlayMask = hardProtectMask.Clone();
+        MaskPlane noseMask = anchorMasks.NoseMask;
+        MaskPlane noseSkinMask = MaskPlane.Subtract(anchorMasks.NoseSkinMask, hardProtectMask);
+        MaskPlane softProtectMask = MaskPlane.Subtract(
+            MaskPlane.Union(anchorMasks.SoftProtectMask, noseSkinMask),
+            hardProtectMask);
+
+        FaceMaskSet protectionOnlyMasks = new(
+            empty,
+            eyeMask,
+            eyebrowMask,
+            lipMask,
+            innerMouthMask,
+            empty,
+            noseMask,
+            noseSkinMask,
+            nostrilMask,
+            empty,
+            hairMask,
+            beardMask,
+            mustacheMask,
+            glassesMask,
+            hardProtectMask,
+            softProtectMask,
+            empty,
+            hardProtectMask.Clone());
+
+        FaceAnalysisResult analysis = new(
+            input.FaceBox,
+            landmarks,
+            null,
+            input.FaceAngle,
+            faceAnalyzerResult.Confidence,
+            faceAnalyzerResult.Confidence,
+            parsingMasks?.ParsingConfidence ?? 0,
+            warnings);
+
+        MaskPlane skinMask = parsingMasks?.SkinMask ?? AverageFaceColorMaskBuilder.Build(
+            source,
+            analysis,
+            protectionOnlyMasks,
+            1.0,
+            CancellationToken.None,
+            null).ColorDifferenceMask;
+        skinMask = MaskPlane.Subtract(skinMask, hardProtectMask);
+        MaskPlane retouchAllowMask = MaskPlane.Subtract(
+            MaskPlane.Union(skinMask, noseSkinMask),
+            hardProtectMask);
+        MaskPlane finalOverlayMask = MaskPlane.Subtract(
+            MaskPlane.Union(retouchAllowMask, MaskPlane.Multiply(softProtectMask, 0.45)),
+            hardProtectMask);
 
         FaceMaskSet masks = new(
             skinMask,
@@ -90,7 +145,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             lipMask,
             innerMouthMask,
             empty,
-            empty,
+            noseMask,
             noseSkinMask,
             nostrilMask,
             empty,
@@ -103,12 +158,6 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             retouchAllowMask,
             finalOverlayMask);
 
-        List<string> warnings = new()
-        {
-            "standard_dummy_masks_removed",
-            "color_only_mask_mode"
-        };
-        warnings.AddRange(faceAnalyzerResult.DebugWarnings);
         if (parsingMasks is null)
         {
             warnings.Add("face_parsing_not_connected_no_dummy_fallback");
@@ -118,19 +167,33 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             warnings.AddRange(parsingMasks.DebugWarnings);
             AddParsingAreaWarnings(warnings, parsingMasks, input.FaceBox);
         }
-        warnings.Add("nostril_detector_disabled_for_face_color_only_mask");
+        warnings.Add("nostril_detector_replaced_by_anchor_mesh_observation");
 
-        FaceAnalysisResult analysis = new(
-            input.FaceBox,
-            landmarks,
-            null,
-            input.FaceAngle,
-            faceAnalyzerResult.Confidence,
-            faceAnalyzerResult.Confidence,
-            parsingMasks?.ParsingConfidence ?? 0,
-            warnings);
         MaskQualityReport report = MaskQualityReport.FromMasks(analysis, masks);
         return new PortraitMaskResult(analysis, masks, report, parsingMasks);
+    }
+
+    private static AnchorMeshFeatureMaskSet BuildAnchorFeatureMasks(
+        BitmapSource source,
+        FaceAnalyzerResult faceAnalyzerResult,
+        int width,
+        int height,
+        List<string> warnings)
+    {
+        try
+        {
+            AnchorMeshResult anchorMesh = new KAnchorMeshEngine().BuildFromAnalyzerResult(source, faceAnalyzerResult);
+            warnings.Add("anchor_mesh_feature_masks_enabled:" + anchorMesh.Stage);
+            warnings.AddRange(anchorMesh.Warnings.Select(warning => "anchor_mesh_" + warning));
+            AnchorMeshFeatureMaskSet masks = AnchorMeshFeatureMaskBuilder.Build(width, height, anchorMesh);
+            warnings.AddRange(masks.DebugWarnings);
+            return masks;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            warnings.Add("anchor_mesh_feature_masks_failed:" + ex.GetType().Name);
+            return AnchorMeshFeatureMaskBuilder.Build(width, height, null);
+        }
     }
 
     private static MaskPlane UnionOptional(int width, int height, params MaskPlane?[] masks)
