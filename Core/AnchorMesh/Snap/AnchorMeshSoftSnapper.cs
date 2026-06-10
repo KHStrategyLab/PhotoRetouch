@@ -20,7 +20,7 @@ public sealed class AnchorMeshSoftSnapper
             (float X, float Y)[] originalPositions = feature.Points
                 .Select(point => (point.SnappedX, point.SnappedY))
                 .ToArray();
-            double maxDistance = GetMaxSnapDistance(feature.Name);
+            double maxDistance = GetMaxSnapDistance(feature.Name, snapped, feature);
             bool movedAny = false;
             foreach (AnchorMeshPoint point in feature.Points)
             {
@@ -196,18 +196,35 @@ public sealed class AnchorMeshSoftSnapper
         return false;
     }
 
-    private static double GetMaxSnapDistance(string featureName)
+    private static double GetMaxSnapDistance(string featureName, AnchorMeshFeatureSet features, AnchorMeshFeature feature)
     {
+        float eyeDistance = EstimateEyeDistance(features);
+        float faceWidth = MathF.Max(1.0f, features.FaceOutline?.Width ?? feature.Width);
+
         return featureName switch
         {
-            "LeftEye" or "RightEye" => 7,
-            "LeftBrow" or "RightBrow" => 90,
+            "LeftEye" or "RightEye" => Math.Clamp(eyeDistance * 0.42, 24.0, 110.0),
+            "LeftBrow" or "RightBrow" => Math.Clamp(eyeDistance * 0.62, 36.0, 145.0),
             "LipOuter" or "LipInner" => 20,
             "Nose" => 18,
-            "FaceOutline" => 92,
+            "FaceOutline" => Math.Clamp(faceWidth * 0.24, 70.0, 190.0),
             "Hairline" => 18,
             _ => 6
         };
+    }
+
+    private static float EstimateEyeDistance(AnchorMeshFeatureSet features)
+    {
+        AnchorMeshFeature? leftEye = features.LeftEye;
+        AnchorMeshFeature? rightEye = features.RightEye;
+        if (leftEye is null || rightEye is null)
+        {
+            return MathF.Max(1.0f, features.FaceOutline?.Width * 0.38f ?? 80.0f);
+        }
+
+        float dx = rightEye.CenterX - leftEye.CenterX;
+        float dy = rightEye.CenterY - leftEye.CenterY;
+        return MathF.Max(1.0f, MathF.Sqrt(dx * dx + dy * dy));
     }
 
     private static void ConstrainFaceOutlineToEggShape(AnchorMeshFeature feature, float amount)
