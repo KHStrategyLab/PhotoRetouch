@@ -6,7 +6,7 @@ public sealed class AnchorMeshTemplateFactory
     {
         return new AnchorMeshFeatureSet
         {
-            FaceOutline = CreateEllipse("FaceOutline", "Jaw", 32, 0.0f, 0.04f, 0.43f, 0.58f, true),
+            FaceOutline = CreateEllipse("FaceOutline", "Jaw", 60, 0.0f, 0.04f, 0.43f, 0.58f, true),
             LeftEye = CreateEllipse("LeftEye", "EyeProtect", 16, -0.18f, -0.21f, 0.095f, 0.042f, true, z: 0.06f),
             RightEye = CreateEllipse("RightEye", "EyeProtect", 16, 0.18f, -0.21f, 0.095f, 0.042f, true, z: 0.06f),
             LeftBrow = CreateCurve("LeftBrow", "BrowProtect", 12, -0.285f, -0.31f, -0.075f, -0.305f, 0.028f, false),
@@ -14,8 +14,6 @@ public sealed class AnchorMeshTemplateFactory
             Nose = CreateNose(),
             LipOuter = CreateEllipse("LipOuter", "LipOuter", 24, 0.0f, 0.31f, 0.18f, 0.075f, true, z: 0.10f),
             LipInner = CreateEllipse("LipInner", "LipInner", 16, 0.0f, 0.315f, 0.105f, 0.028f, true, z: 0.09f),
-            LeftEar = CreateEllipse("LeftEar", "Ear", 12, -0.49f, 0.01f, 0.055f, 0.18f, true, z: -0.10f),
-            RightEar = CreateEllipse("RightEar", "Ear", 12, 0.49f, 0.01f, 0.055f, 0.18f, true, z: -0.10f),
             Hairline = CreateHairline(),
             Neck = CreateNeck(),
             ShirtShoulder = CreateShoulders()
@@ -112,10 +110,10 @@ public sealed class AnchorMeshTemplateFactory
     private static AnchorMeshFeature CreateNeck()
     {
         AnchorMeshFeature feature = new() { Name = "Neck", IsClosedLoop = false };
-        float[] xs = [-0.18f, -0.13f, -0.075f, -0.025f, 0.025f, 0.075f, 0.13f, 0.18f];
+        float[] xs = [-0.22f, -0.155f, -0.095f, -0.032f, 0.032f, 0.095f, 0.155f, 0.22f];
         for (int i = 0; i < xs.Length; i++)
         {
-            feature.Points.Add(CreatePoint("Neck", "Neck", i, xs[i], 0.68f + MathF.Abs(xs[i]) * 0.08f, 0.05f, z: -0.14f));
+            feature.Points.Add(CreatePoint("Neck", "JawBottom", i, xs[i], 0.54f, 0.05f, z: -0.14f));
         }
 
         AnchorMeshMetrics.Update(feature, 0);

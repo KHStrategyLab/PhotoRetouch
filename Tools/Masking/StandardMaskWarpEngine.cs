@@ -30,7 +30,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
     {
     }
 
-    public string MaskVersion => "color_mask_only_v1+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
+    public string MaskVersion => "color_mask_only_v1+anchor_template_masks_v9+jaw_bottom_neck_is_facebox_bottom+face_outline_60_eye_center_color_boundary_snap+no_ear_features+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
 
     public PortraitMaskResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -66,7 +66,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         };
         warnings.AddRange(faceAnalyzerResult.DebugWarnings);
 
-        AnchorMeshFeatureMaskSet anchorMasks = BuildAnchorFeatureMasks(source, faceAnalyzerResult, width, height, warnings);
+        AnchorMeshFeatureMaskSet anchorMasks = BuildAnchorFeatureMasks(source, faceAnalyzerResult, width, height, landmarks, warnings);
 
         MaskPlane eyeMask = MaskPlane.Union(parsingEyeMask, anchorMasks.EyeMask);
         MaskPlane eyebrowMask = MaskPlane.Union(parsingEyebrowMask, anchorMasks.EyebrowMask);
@@ -178,11 +178,13 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
         FaceAnalyzerResult faceAnalyzerResult,
         int width,
         int height,
+        IReadOnlyDictionary<string, WpfPoint> landmarks,
         List<string> warnings)
     {
         try
         {
-            AnchorMeshResult anchorMesh = new KAnchorMeshEngine().BuildFromAnalyzerResult(source, faceAnalyzerResult);
+            FeatureMaskContourProvider contourProvider = BuildFaceOutlineColorContourProvider(source, faceAnalyzerResult, landmarks, width, height, warnings);
+            AnchorMeshResult anchorMesh = new KAnchorMeshEngine().BuildFromAnalyzerResult(source, faceAnalyzerResult, contourProvider);
             warnings.Add("anchor_mesh_feature_masks_enabled:" + anchorMesh.Stage);
             warnings.AddRange(anchorMesh.Warnings.Select(warning => "anchor_mesh_" + warning));
             AnchorMeshFeatureMaskSet masks = AnchorMeshFeatureMaskBuilder.Build(width, height, anchorMesh);
@@ -194,6 +196,53 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             warnings.Add("anchor_mesh_feature_masks_failed:" + ex.GetType().Name);
             return AnchorMeshFeatureMaskBuilder.Build(width, height, null);
         }
+    }
+
+    private static FeatureMaskContourProvider BuildFaceOutlineColorContourProvider(
+        BitmapSource source,
+        FaceAnalyzerResult faceAnalyzerResult,
+        IReadOnlyDictionary<string, WpfPoint> landmarks,
+        int width,
+        int height,
+        List<string> warnings)
+    {
+        FeatureMaskContourProvider provider = new();
+        try
+        {
+            FaceAnalysisResult analysis = new(
+                faceAnalyzerResult.FaceBox,
+                landmarks,
+                null,
+                faceAnalyzerResult.FaceAngle,
+                faceAnalyzerResult.Confidence,
+                faceAnalyzerResult.Confidence,
+                0,
+                faceAnalyzerResult.DebugWarnings);
+            AverageFaceColorMaskResult colorMask = AverageFaceColorMaskBuilder.Build(
+                source,
+                analysis,
+                null,
+                1.0,
+                CancellationToken.None,
+                null);
+            if (colorMask.ColorDifferenceMask.Width == width &&
+                colorMask.ColorDifferenceMask.Height == height &&
+                colorMask.ColorDifferenceMask.Average() > 0.0001)
+            {
+                provider.WithMask("FaceOutline", colorMask.ColorDifferenceMask);
+                warnings.Add("anchor_mesh_face_outline_color_boundary_snap_enabled");
+            }
+            else
+            {
+                warnings.Add("anchor_mesh_face_outline_color_boundary_snap_empty");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            warnings.Add("anchor_mesh_face_outline_color_boundary_snap_failed:" + ex.GetType().Name);
+        }
+
+        return provider;
     }
 
     private static MaskPlane UnionOptional(int width, int height, params MaskPlane?[] masks)

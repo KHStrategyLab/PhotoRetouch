@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <None Include="Assets\AiModels\face_detection_yunet_2023mar.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\MaskTemplates\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

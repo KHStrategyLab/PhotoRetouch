@@ -28,7 +28,7 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         _modelPath = modelPath;
     }
 
-    public string AnalyzerVersion => "opencv_yunet_2023mar_v1";
+    public string AnalyzerVersion => "opencv_yunet_2023mar_v3_retouch_facebox_bottom_is_chin";
 
     public FaceAnalyzerResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -137,8 +137,9 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         WpfPoint leftEye = eyeA.X <= eyeB.X ? eyeA : eyeB;
         WpfPoint rightEye = eyeA.X <= eyeB.X ? eyeB : eyeA;
         WpfPoint mouthCenter = new((mouthA.X + mouthB.X) / 2d, (mouthA.Y + mouthB.Y) / 2d);
-        Int32Rect faceBox = ClampRect(x, y, width, height, imageWidth, imageHeight);
-        WpfPoint chinPoint = new(faceBox.X + faceBox.Width * 0.5, faceBox.Y + faceBox.Height * 0.92);
+        Int32Rect rawFaceBox = ClampRect(x, y, width, height, imageWidth, imageHeight);
+        Int32Rect faceBox = CreateRetouchWorkFaceBox(rawFaceBox, leftEye, rightEye, noseTip, mouthCenter, imageWidth, imageHeight);
+        WpfPoint chinPoint = new(faceBox.X + faceBox.Width * 0.5, faceBox.Y + faceBox.Height);
         double faceAngle = Math.Atan2(rightEye.Y - leftEye.Y, rightEye.X - leftEye.X) * 180d / Math.PI;
         double confidence = Math.Clamp(detectionScore * CalculateLandmarkPlausibility(faceBox, leftEye, rightEye, noseTip, mouthCenter, chinPoint), 0, 1);
 
@@ -218,6 +219,42 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         int rectX = Math.Clamp((int)Math.Round(x), 0, Math.Max(0, imageWidth - rectWidth));
         int rectY = Math.Clamp((int)Math.Round(y), 0, Math.Max(0, imageHeight - rectHeight));
         return new Int32Rect(rectX, rectY, rectWidth, rectHeight);
+    }
+
+    private static Int32Rect CreateRetouchWorkFaceBox(
+        Int32Rect rawFaceBox,
+        WpfPoint leftEye,
+        WpfPoint rightEye,
+        WpfPoint noseTip,
+        WpfPoint mouthCenter,
+        int imageWidth,
+        int imageHeight)
+    {
+        double eyeDistance = Distance(leftEye, rightEye);
+        double rawCenterX = rawFaceBox.X + rawFaceBox.Width * 0.5;
+        double eyeCenterX = (leftEye.X + rightEye.X) * 0.5;
+        double structureCenterX = eyeCenterX * 0.56 + noseTip.X * 0.24 + mouthCenter.X * 0.20;
+        double centerX = rawCenterX * 0.48 + structureCenterX * 0.52;
+
+        double targetWidth = Math.Max(rawFaceBox.Width * 1.11, eyeDistance * 2.33);
+        double targetLeft = centerX - targetWidth * 0.5;
+        double targetRight = centerX + targetWidth * 0.5;
+
+        double targetBottom = rawFaceBox.Y + rawFaceBox.Height * 0.92;
+        double targetTop = rawFaceBox.Y - rawFaceBox.Height * 0.426;
+
+        targetLeft = Math.Max(0, targetLeft);
+        targetTop = Math.Max(0, targetTop);
+        targetRight = Math.Min(imageWidth - 1, targetRight);
+        targetBottom = Math.Min(imageHeight - 1, targetBottom);
+
+        return ClampRect(
+            targetLeft,
+            targetTop,
+            Math.Max(1, targetRight - targetLeft),
+            Math.Max(1, targetBottom - targetTop),
+            imageWidth,
+            imageHeight);
     }
 
     private static WpfPoint ClampPoint(WpfPoint point, int imageWidth, int imageHeight)

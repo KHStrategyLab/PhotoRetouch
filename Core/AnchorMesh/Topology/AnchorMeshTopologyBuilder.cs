@@ -17,20 +17,20 @@ public static class AnchorMeshTopologyBuilder
         Add(edges, "Nose_00", "Nose_08", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.CenterLine);
         Add(edges, "Nose_08", "Nose_23", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.CenterLine);
         Add(edges, "Nose_23", "LipOuter_18", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.CenterLine);
-        Add(edges, "LipOuter_18", "FaceOutline_08", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.CenterLine);
+        Add(edges, "LipOuter_18", "FaceOutline_15", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.CenterLine);
 
         Add(edges, "LeftEye_00", "RightEye_08", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.EyeNoseLinks);
         Add(edges, "LeftEye_04", "Nose_00", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.EyeNoseLinks);
         Add(edges, "RightEye_12", "Nose_00", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.EyeNoseLinks);
         Add(edges, "Nose_21", "LipOuter_00", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.NoseMouthLinks);
         Add(edges, "Nose_18", "LipOuter_12", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.NoseMouthLinks);
-        Add(edges, "LipOuter_00", "FaceOutline_10", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.MouthChinLinks);
-        Add(edges, "LipOuter_12", "FaceOutline_06", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.MouthChinLinks);
+        Add(edges, "LipOuter_00", "FaceOutline_19", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.MouthChinLinks);
+        Add(edges, "LipOuter_12", "FaceOutline_11", AnchorMeshEdgeKind.Structural, AnchorMeshEdgeGroup.MouthChinLinks);
 
-        Add(edges, "LeftEye_08", "FaceOutline_14", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
-        Add(edges, "RightEye_00", "FaceOutline_18", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
-        Add(edges, "FaceOutline_12", "FaceOutline_08", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
-        Add(edges, "FaceOutline_20", "FaceOutline_24", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "LeftEye_08", "FaceOutline_26", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "RightEye_00", "FaceOutline_34", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "FaceOutline_23", "FaceOutline_15", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
+        Add(edges, "FaceOutline_37", "FaceOutline_45", AnchorMeshEdgeKind.MorphControl, AnchorMeshEdgeGroup.CheekJawLinks);
         return edges;
     }
 
@@ -43,7 +43,7 @@ public static class AnchorMeshTopologyBuilder
     {
         int count = featureName switch
         {
-            "FaceOutline" => 32,
+            "FaceOutline" => 60,
             "LeftEye" or "RightEye" => 16,
             "LeftBrow" or "RightBrow" => 12,
             "Nose" => 24,

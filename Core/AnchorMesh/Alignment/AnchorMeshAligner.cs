@@ -48,6 +48,8 @@ public sealed class AnchorMeshAligner
         }
 
         LockPrimaryFeatureCenters(aligned, anchors);
+        FitFaceOutlineToNoseCenteredOval(aligned, anchors);
+        FitJawBottomLineToFaceBoxBottom(aligned, anchors);
 
         return aligned;
     }
@@ -157,6 +159,97 @@ public sealed class AnchorMeshAligner
     private static void TranslateFeatureCenterTo(AnchorMeshFeature feature, float targetX, float targetY, float angleRad)
     {
         TranslateFeature(feature, targetX - feature.CenterX, targetY - feature.CenterY, angleRad);
+    }
+
+    private static void FitFaceOutlineToNoseCenteredOval(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
+    {
+        AnchorMeshFeature? outline = features.FaceOutline;
+        if (outline is null || outline.Points.Count < 8)
+        {
+            return;
+        }
+
+        float axisX = MathF.Cos(anchors.FaceAngleRad);
+        float axisY = MathF.Sin(anchors.FaceAngleRad);
+        float downX = -axisY;
+        float downY = axisX;
+
+        float centerX = anchors.EyeCenter.X;
+        float centerY = anchors.EyeCenter.Y;
+        float boxTopLocalY = ProjectLocalY(anchors.FaceBox.X + anchors.FaceBox.Width * 0.5f, anchors.FaceBox.Top, centerX, centerY, downX, downY);
+        float chinY = anchors.FaceBox.Top + anchors.FaceBox.Height * 0.92f;
+        float chinLocalY = ProjectLocalY(anchors.FaceBox.X + anchors.FaceBox.Width * 0.5f, chinY, centerX, centerY, downX, downY);
+
+        float minTopDistance = MathF.Max(anchors.FaceBox.Height * 0.34f, anchors.EyeDistance * 0.86f);
+        float minBottomDistance = MathF.Max(anchors.FaceBox.Height * 0.23f, anchors.EyeDistance * 0.72f);
+        float topLocalY = MathF.Min(boxTopLocalY, -minTopDistance);
+        float bottomLocalY = MathF.Max(chinLocalY, minBottomDistance);
+        if (bottomLocalY <= topLocalY + anchors.EyeDistance)
+        {
+            bottomLocalY = topLocalY + MathF.Max(anchors.FaceBox.Height * 0.78f, anchors.EyeDistance * 2.4f);
+        }
+
+        float centerLocalY = (topLocalY + bottomLocalY) * 0.5f;
+        float radiusY = MathF.Max(1.0f, (bottomLocalY - topLocalY) * 0.5f);
+        float radiusX = MathF.Max(anchors.FaceBox.Width * 0.50f, anchors.EyeDistance * 1.03f);
+
+        for (int i = 0; i < outline.Points.Count; i++)
+        {
+            float t = i / (float)outline.Points.Count;
+            float theta = t * MathF.Tau;
+            float localX = MathF.Cos(theta) * radiusX;
+            float localY = centerLocalY + MathF.Sin(theta) * radiusY;
+            AnchorMeshPoint point = outline.Points[i];
+            point.ImageX = centerX + localX * axisX + localY * downX;
+            point.ImageY = centerY + localX * axisY + localY * downY;
+            point.SnappedX = point.ImageX;
+            point.SnappedY = point.ImageY;
+            point.Source = "EyeCenterOval";
+            point.Confidence = MathF.Max(point.Confidence, anchors.Score * 0.88f);
+        }
+
+        outline.SnapMode = "EyeCenterOval";
+        AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
+    }
+
+    private static void FitJawBottomLineToFaceBoxBottom(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
+    {
+        AnchorMeshFeature? jawBottom = features.Neck;
+        if (jawBottom is null || jawBottom.Points.Count == 0)
+        {
+            return;
+        }
+
+        float axisX = MathF.Cos(anchors.FaceAngleRad);
+        float axisY = MathF.Sin(anchors.FaceAngleRad);
+        float downX = -axisY;
+        float downY = axisX;
+        float centerX = anchors.FaceBox.X + anchors.FaceBox.Width * 0.5f;
+        float centerY = anchors.FaceBox.Bottom;
+        float halfWidth = MathF.Max(anchors.FaceBox.Width * 0.33f, anchors.EyeDistance * 0.72f);
+
+        int count = jawBottom.Points.Count;
+        for (int i = 0; i < count; i++)
+        {
+            float t = count == 1 ? 0.5f : i / (float)(count - 1);
+            float along = (t - 0.5f) * 2.0f * halfWidth;
+            float softArc = MathF.Sin(t * MathF.PI) * anchors.EyeDistance * 0.018f;
+            AnchorMeshPoint point = jawBottom.Points[i];
+            point.ImageX = centerX + along * axisX + softArc * downX;
+            point.ImageY = centerY + along * axisY + softArc * downY;
+            point.SnappedX = point.ImageX;
+            point.SnappedY = point.ImageY;
+            point.Source = "FaceBoxBottomJawLine";
+            point.Confidence = MathF.Max(point.Confidence, anchors.Score * 0.90f);
+        }
+
+        jawBottom.SnapMode = "FaceBoxBottomJawLine";
+        AnchorMeshMetrics.Update(jawBottom, anchors.FaceAngleRad);
+    }
+
+    private static float ProjectLocalY(float x, float y, float originX, float originY, float downX, float downY)
+    {
+        return (x - originX) * downX + (y - originY) * downY;
     }
 
     private static void TranslateFeature(AnchorMeshFeature feature, float dx, float dy, float angleRad)

@@ -30,7 +30,7 @@ public sealed class AnchorMeshSoftSnapper
                 }
 
                 bool foundTarget = feature.Name.Equals("FaceOutline", StringComparison.OrdinalIgnoreCase)
-                    ? TryFindRadialMaskBoundary(mask, feature.CenterX, feature.CenterY, point.SnappedX, point.SnappedY, maxDistance, out float targetX, out float targetY)
+                    ? TryFindOutwardMaskBoundary(mask, feature.CenterX, feature.CenterY, point.SnappedX, point.SnappedY, maxDistance, out float targetX, out float targetY)
                     : TryFindNearestMaskBoundary(mask, point.SnappedX, point.SnappedY, maxDistance, out targetX, out targetY);
                 if (!foundTarget)
                 {
@@ -111,7 +111,7 @@ public sealed class AnchorMeshSoftSnapper
         return found;
     }
 
-    private static bool TryFindRadialMaskBoundary(
+    private static bool TryFindOutwardMaskBoundary(
         MaskPlane mask,
         float centerX,
         float centerY,
@@ -133,38 +133,56 @@ public sealed class AnchorMeshSoftSnapper
 
         float ux = dx / radius;
         float uy = dy / radius;
-        double minT = Math.Max(1, radius - maxDistance);
+        double minT = Math.Max(1, radius - maxDistance * 0.22);
         double maxT = radius + maxDistance;
-        double bestDistance = maxDistance + 1;
+        double bestScore = double.MinValue;
         bool found = false;
+        double previousValue = Sample(mask, centerX + ux * minT, centerY + uy * minT);
 
-        for (double t = minT; t <= maxT; t += 1.0)
+        for (double t = minT + 1.0; t <= maxT; t += 1.0)
         {
-            int x = (int)Math.Round(centerX + ux * t);
-            int y = (int)Math.Round(centerY + uy * t);
+            double sampleX = centerX + ux * t;
+            double sampleY = centerY + uy * t;
+            int x = (int)Math.Round(sampleX);
+            int y = (int)Math.Round(sampleY);
             if (x <= 0 || y <= 0 || x >= mask.Width - 1 || y >= mask.Height - 1)
             {
                 continue;
             }
 
-            if (mask[x, y] < 0.35 || !IsBoundary(mask, x, y))
+            double currentValue = mask[x, y];
+            double gradient = Math.Abs(currentValue - previousValue);
+            bool exitsMask = previousValue >= 0.34 && currentValue < 0.34;
+            bool boundary = IsBoundary(mask, x, y);
+            if (!exitsMask && (!boundary || gradient < 0.18))
             {
+                previousValue = currentValue;
                 continue;
             }
 
-            double distance = Math.Abs(t - radius);
-            if (distance >= bestDistance)
+            double outwardBonus = Math.Max(0, t - radius) / Math.Max(1, maxDistance);
+            double score = gradient * 3.0 + outwardBonus * 0.85 - Math.Abs(t - radius) / Math.Max(1, maxDistance) * 0.18;
+            if (score <= bestScore)
             {
+                previousValue = currentValue;
                 continue;
             }
 
-            bestDistance = distance;
+            bestScore = score;
             targetX = x;
             targetY = y;
             found = true;
+            previousValue = currentValue;
         }
 
         return found;
+    }
+
+    private static double Sample(MaskPlane mask, double x, double y)
+    {
+        int ix = Math.Clamp((int)Math.Round(x), 0, mask.Width - 1);
+        int iy = Math.Clamp((int)Math.Round(y), 0, mask.Height - 1);
+        return mask[ix, iy];
     }
 
     private static bool IsBoundary(MaskPlane mask, int x, int y)
@@ -189,7 +207,7 @@ public sealed class AnchorMeshSoftSnapper
             "LeftBrow" or "RightBrow" => 14,
             "LipOuter" or "LipInner" => 20,
             "Nose" => 18,
-            "FaceOutline" => 46,
+            "FaceOutline" => 92,
             "Hairline" => 18,
             _ => 6
         };
