@@ -48,8 +48,8 @@ public sealed class AnchorMeshAligner
         }
 
         LockPrimaryFeatureCenters(aligned, anchors);
+        ApplyNoseTipFromNostrilTriangle(aligned, anchors.FaceAngleRad);
         FitFaceOutlineToNoseCenteredOval(aligned, anchors);
-        FitJawBottomLineToFaceBoxBottom(aligned, anchors);
 
         return aligned;
     }
@@ -61,9 +61,19 @@ public sealed class AnchorMeshAligner
             TranslateFeatureCenterTo(features.LeftEye, anchors.LeftEye.X, anchors.LeftEye.Y, anchors.FaceAngleRad);
         }
 
+        if (features.LeftPupil is not null)
+        {
+            TranslateFeatureCenterTo(features.LeftPupil, anchors.LeftEye.X, anchors.LeftEye.Y, anchors.FaceAngleRad);
+        }
+
         if (features.RightEye is not null)
         {
             TranslateFeatureCenterTo(features.RightEye, anchors.RightEye.X, anchors.RightEye.Y, anchors.FaceAngleRad);
+        }
+
+        if (features.RightPupil is not null)
+        {
+            TranslateFeatureCenterTo(features.RightPupil, anchors.RightEye.X, anchors.RightEye.Y, anchors.FaceAngleRad);
         }
 
         if (features.LipOuter is not null)
@@ -82,6 +92,85 @@ public sealed class AnchorMeshAligner
                 TranslateFeature(features.LipInner, dx, dy, anchors.FaceAngleRad);
             }
         }
+
+        ApplyNoseTipFromNostrilTriangle(features, anchors.FaceAngleRad);
+    }
+
+    public void ApplyNoseTipFromNostrilTriangle(AnchorMeshFeatureSet features, float angleRad)
+    {
+        AnchorMeshFeature? nose = features.Nose;
+        if (nose is null || nose.Points.Count < 22)
+        {
+            return;
+        }
+
+        List<AnchorMeshPoint> leftNostril = nose.Points
+            .Where(point => point.Role.Contains("LeftNostril", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        List<AnchorMeshPoint> rightNostril = nose.Points
+            .Where(point => point.Role.Contains("RightNostril", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        AnchorMeshPoint? tip = nose.Points.FirstOrDefault(point => point.Role.Equals("NoseTipTriangleApex", StringComparison.OrdinalIgnoreCase))
+            ?? nose.Points.FirstOrDefault(point => point.Name == "Nose_08");
+        if (leftNostril.Count == 0 || rightNostril.Count == 0 || tip is null)
+        {
+            return;
+        }
+
+        PointF leftCenter = AveragePoint(leftNostril);
+        PointF rightCenter = AveragePoint(rightNostril);
+        float midX = (leftCenter.X + rightCenter.X) * 0.5f;
+        float midY = (leftCenter.Y + rightCenter.Y) * 0.5f;
+        float dx = rightCenter.X - leftCenter.X;
+        float dy = rightCenter.Y - leftCenter.Y;
+        float baseLength = MathF.Sqrt(dx * dx + dy * dy);
+        if (baseLength < 1.0f)
+        {
+            return;
+        }
+
+        float upX = MathF.Sin(angleRad);
+        float upY = -MathF.Cos(angleRad);
+        float apexDistance = baseLength * 0.8660254f;
+        tip.ImageX = midX + upX * apexDistance;
+        tip.ImageY = midY + upY * apexDistance;
+        tip.SnappedX = tip.ImageX;
+        tip.SnappedY = tip.ImageY;
+        tip.Source = "NostrilEquilateralApex";
+        tip.Confidence = MathF.Max(tip.Confidence, 0.72f);
+
+        AdjustNoseTipSupportPoint(nose, "Nose_07", tip, leftCenter, angleRad);
+        AdjustNoseTipSupportPoint(nose, "Nose_09", tip, rightCenter, angleRad);
+        AnchorMeshMetrics.Update(nose, angleRad);
+    }
+
+    private static PointF AveragePoint(IReadOnlyList<AnchorMeshPoint> points)
+    {
+        float x = 0;
+        float y = 0;
+        foreach (AnchorMeshPoint point in points)
+        {
+            x += point.SnappedX;
+            y += point.SnappedY;
+        }
+
+        return new PointF(x / points.Count, y / points.Count);
+    }
+
+    private static void AdjustNoseTipSupportPoint(AnchorMeshFeature nose, string pointName, AnchorMeshPoint tip, PointF nostrilCenter, float angleRad)
+    {
+        AnchorMeshPoint? support = nose.Points.FirstOrDefault(point => point.Name == pointName);
+        if (support is null)
+        {
+            return;
+        }
+
+        support.ImageX = tip.SnappedX * 0.62f + nostrilCenter.X * 0.38f;
+        support.ImageY = tip.SnappedY * 0.62f + nostrilCenter.Y * 0.38f;
+        support.SnappedX = support.ImageX;
+        support.SnappedY = support.ImageY;
+        support.Source = "NostrilEquilateralSupport";
+        support.Confidence = MathF.Max(support.Confidence, 0.62f);
     }
 
     private static float ScaleLipWidthToMouthCorners(AnchorMeshFeature lipOuter, YuNetAnchorSet anchors)
@@ -210,41 +299,6 @@ public sealed class AnchorMeshAligner
 
         outline.SnapMode = "EyeCenterOval";
         AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
-    }
-
-    private static void FitJawBottomLineToFaceBoxBottom(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
-    {
-        AnchorMeshFeature? jawBottom = features.Neck;
-        if (jawBottom is null || jawBottom.Points.Count == 0)
-        {
-            return;
-        }
-
-        float axisX = MathF.Cos(anchors.FaceAngleRad);
-        float axisY = MathF.Sin(anchors.FaceAngleRad);
-        float downX = -axisY;
-        float downY = axisX;
-        float centerX = anchors.FaceBox.X + anchors.FaceBox.Width * 0.5f;
-        float centerY = anchors.FaceBox.Bottom;
-        float halfWidth = MathF.Max(anchors.FaceBox.Width * 0.33f, anchors.EyeDistance * 0.72f);
-
-        int count = jawBottom.Points.Count;
-        for (int i = 0; i < count; i++)
-        {
-            float t = count == 1 ? 0.5f : i / (float)(count - 1);
-            float along = (t - 0.5f) * 2.0f * halfWidth;
-            float softArc = MathF.Sin(t * MathF.PI) * anchors.EyeDistance * 0.018f;
-            AnchorMeshPoint point = jawBottom.Points[i];
-            point.ImageX = centerX + along * axisX + softArc * downX;
-            point.ImageY = centerY + along * axisY + softArc * downY;
-            point.SnappedX = point.ImageX;
-            point.SnappedY = point.ImageY;
-            point.Source = "FaceBoxBottomJawLine";
-            point.Confidence = MathF.Max(point.Confidence, anchors.Score * 0.90f);
-        }
-
-        jawBottom.SnapMode = "FaceBoxBottomJawLine";
-        AnchorMeshMetrics.Update(jawBottom, anchors.FaceAngleRad);
     }
 
     private static float ProjectLocalY(float x, float y, float originX, float originY, float downX, float downY)

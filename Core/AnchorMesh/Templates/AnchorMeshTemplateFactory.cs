@@ -6,11 +6,13 @@ public sealed class AnchorMeshTemplateFactory
     {
         return new AnchorMeshFeatureSet
         {
-            FaceOutline = CreateEllipse("FaceOutline", "Jaw", 60, 0.0f, 0.04f, 0.43f, 0.58f, true),
-            LeftEye = CreateEllipse("LeftEye", "EyeProtect", 16, -0.18f, -0.21f, 0.095f, 0.042f, true, z: 0.06f),
-            RightEye = CreateEllipse("RightEye", "EyeProtect", 16, 0.18f, -0.21f, 0.095f, 0.042f, true, z: 0.06f),
-            LeftBrow = CreateCurve("LeftBrow", "BrowProtect", 12, -0.285f, -0.31f, -0.075f, -0.305f, 0.028f, false),
-            RightBrow = CreateCurve("RightBrow", "BrowProtect", 12, 0.075f, -0.305f, 0.285f, -0.31f, 0.028f, false),
+            FaceOutline = CreateFaceOutline(),
+            LeftEye = CreateEye("LeftEye", -0.18f, -0.21f, isLeftEye: true),
+            RightEye = CreateEye("RightEye", 0.18f, -0.21f, isLeftEye: false),
+            LeftPupil = CreatePupil("LeftPupil", -0.18f, -0.21f, isLeftPupil: true),
+            RightPupil = CreatePupil("RightPupil", 0.18f, -0.21f, isLeftPupil: false),
+            LeftBrow = CreateBrow("LeftBrow", -0.285f, -0.31f, -0.075f, -0.305f, 0.028f, isLeftBrow: true),
+            RightBrow = CreateBrow("RightBrow", 0.075f, -0.305f, 0.285f, -0.31f, 0.028f, isLeftBrow: false),
             Nose = CreateNose(),
             LipOuter = CreateEllipse("LipOuter", "LipOuter", 24, 0.0f, 0.31f, 0.18f, 0.075f, true, z: 0.10f),
             LipInner = CreateEllipse("LipInner", "LipInner", 16, 0.0f, 0.315f, 0.105f, 0.028f, true, z: 0.09f),
@@ -45,6 +47,138 @@ public sealed class AnchorMeshTemplateFactory
         return feature;
     }
 
+    private static AnchorMeshFeature CreateFaceOutline()
+    {
+        const int count = 60;
+        const float centerX = 0.0f;
+        const float centerY = 0.04f;
+        const float radiusX = 0.43f;
+        const float radiusY = 0.58f;
+        AnchorMeshFeature feature = new() { Name = "FaceOutline", IsClosedLoop = true };
+        for (int i = 0; i < count; i++)
+        {
+            float rad = (360.0f / count * i) * MathF.PI / 180.0f;
+            string role = GetFaceOutlinePointRole(i);
+            feature.Points.Add(CreatePoint("FaceOutline", role, i, centerX + MathF.Cos(rad) * radiusX, centerY + MathF.Sin(rad) * radiusY, z: -0.04f));
+        }
+
+        AnchorMeshMetrics.Update(feature, 0);
+        return feature;
+    }
+
+    private static string GetFaceOutlinePointRole(int index)
+    {
+        return index switch
+        {
+            15 => "ChinTip",
+            13 or 14 => "RightChinLine",
+            16 or 17 => "LeftChinLine",
+            8 or 9 or 10 or 11 or 12 => "RightJawLine",
+            18 or 19 or 20 or 21 or 22 => "LeftJawLine",
+            23 or 24 or 25 or 26 or 27 or 28 or 29 or 30 => "LeftCheekContour",
+            0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 => "RightCheekContour",
+            31 or 32 or 33 or 34 or 35 or 36 or 37 or 38 or 39 or 40 or 41 or 42 or 43 or 44 => "LeftUpperFaceContour",
+            _ => "RightUpperFaceContour"
+        };
+    }
+
+    private static AnchorMeshFeature CreateEye(string name, float centerX, float centerY, bool isLeftEye)
+    {
+        const int count = 16;
+        AnchorMeshFeature feature = new() { Name = name, IsClosedLoop = true };
+        for (int i = 0; i < count; i++)
+        {
+            float rad = (360.0f / count * i) * MathF.PI / 180.0f;
+            string role = GetEyePointRole(i, isLeftEye);
+            feature.Points.Add(CreatePoint(name, role, i, centerX + MathF.Cos(rad) * 0.095f, centerY + MathF.Sin(rad) * 0.042f, z: 0.06f));
+        }
+
+        AnchorMeshMetrics.Update(feature, 0);
+        return feature;
+    }
+
+    private static string GetEyePointRole(int index, bool isLeftEye)
+    {
+        return index switch
+        {
+            0 => isLeftEye ? "LeftEyeInnerCorner" : "RightEyeOuterCorner",
+            4 => isLeftEye ? "LeftEyeLowerLidCenter" : "RightEyeLowerLidCenter",
+            8 => isLeftEye ? "LeftEyeOuterCorner" : "RightEyeInnerCorner",
+            12 => isLeftEye ? "LeftEyeUpperLidCenter" : "RightEyeUpperLidCenter",
+            _ => isLeftEye ? "LeftEyeContour" : "RightEyeContour"
+        };
+    }
+
+    private static AnchorMeshFeature CreatePupil(string name, float centerX, float centerY, bool isLeftPupil)
+    {
+        const int count = 12;
+        AnchorMeshFeature feature = new() { Name = name, IsClosedLoop = true };
+        for (int i = 0; i < count; i++)
+        {
+            float rad = (360.0f / count * i) * MathF.PI / 180.0f;
+            string role = GetPupilPointRole(i, isLeftPupil);
+            feature.Points.Add(CreatePoint(name, role, i, centerX + MathF.Cos(rad) * 0.030f, centerY + MathF.Sin(rad) * 0.030f, z: 0.08f, anchor: i == 0 || i == 3 || i == 6 || i == 9));
+        }
+
+        AnchorMeshMetrics.Update(feature, 0);
+        return feature;
+    }
+
+    private static string GetPupilPointRole(int index, bool isLeftPupil)
+    {
+        return index switch
+        {
+            0 => isLeftPupil ? "LeftPupilRightEdge" : "RightPupilRightEdge",
+            3 => isLeftPupil ? "LeftPupilBottomEdge" : "RightPupilBottomEdge",
+            6 => isLeftPupil ? "LeftPupilLeftEdge" : "RightPupilLeftEdge",
+            9 => isLeftPupil ? "LeftPupilTopEdge" : "RightPupilTopEdge",
+            _ => isLeftPupil ? "LeftPupilCircle" : "RightPupilCircle"
+        };
+    }
+
+    private static AnchorMeshFeature CreateBrow(string name, float startX, float startY, float endX, float endY, float arch, bool isLeftBrow)
+    {
+        const int count = 12;
+        AnchorMeshFeature feature = new() { Name = name, IsClosedLoop = false };
+        for (int i = 0; i < count; i++)
+        {
+            float t = (float)i / (count - 1);
+            float x = Lerp(startX, endX, t);
+            float y = Lerp(startY, endY, t) - MathF.Sin(t * MathF.PI) * arch;
+            string role = GetBrowPointRole(i, count, isLeftBrow);
+            feature.Points.Add(CreatePoint(name, role, i, x, y, z: 0.04f));
+        }
+
+        AnchorMeshMetrics.Update(feature, 0);
+        return feature;
+    }
+
+    private static string GetBrowPointRole(int index, int count, bool isLeftBrow)
+    {
+        if (index == 0)
+        {
+            return isLeftBrow ? "LeftBrowOuterEnd" : "RightBrowInnerEnd";
+        }
+
+        if (index == count - 1)
+        {
+            return isLeftBrow ? "LeftBrowInnerEnd" : "RightBrowOuterEnd";
+        }
+
+        int peakIndex = isLeftBrow ? count / 2 - 1 : count / 2;
+        if (index == peakIndex)
+        {
+            return isLeftBrow ? "LeftBrowPeak" : "RightBrowPeak";
+        }
+
+        if (index == count / 2 - 1 || index == count / 2)
+        {
+            return isLeftBrow ? "LeftBrowArchCenter" : "RightBrowArchCenter";
+        }
+
+        return isLeftBrow ? "LeftBrowContour" : "RightBrowContour";
+    }
+
     private static AnchorMeshFeature CreateCurve(string name, string role, int count, float startX, float startY, float endX, float endY, float arch, bool closed)
     {
         AnchorMeshFeature feature = new() { Name = name, IsClosedLoop = closed };
@@ -70,9 +204,9 @@ public sealed class AnchorMeshTemplateFactory
         AddPoint(feature, "Bridge", 0.028f, -0.05f, 0.15f);
         AddPoint(feature, "NoseSide", -0.055f, 0.04f, 0.13f);
         AddPoint(feature, "NoseSide", 0.055f, 0.04f, 0.13f);
-        AddPoint(feature, "Tip", -0.032f, 0.11f, 0.22f);
-        AddPoint(feature, "Tip", 0.0f, 0.13f, 0.25f, true);
-        AddPoint(feature, "Tip", 0.032f, 0.11f, 0.22f);
+        AddPoint(feature, "NoseTipLeftSupport", -0.032f, 0.11f, 0.22f);
+        AddPoint(feature, "NoseTipTriangleApex", 0.0f, 0.13f, 0.25f, true);
+        AddPoint(feature, "NoseTipRightSupport", 0.032f, 0.11f, 0.22f);
         AddPoint(feature, "LeftWing", -0.092f, 0.105f, 0.14f);
         AddPoint(feature, "LeftWing", -0.085f, 0.145f, 0.13f);
         AddPoint(feature, "LeftWing", -0.060f, 0.166f, 0.12f);
@@ -110,10 +244,10 @@ public sealed class AnchorMeshTemplateFactory
     private static AnchorMeshFeature CreateNeck()
     {
         AnchorMeshFeature feature = new() { Name = "Neck", IsClosedLoop = false };
-        float[] xs = [-0.22f, -0.155f, -0.095f, -0.032f, 0.032f, 0.095f, 0.155f, 0.22f];
+        float[] xs = [-0.18f, -0.13f, -0.075f, -0.025f, 0.025f, 0.075f, 0.13f, 0.18f];
         for (int i = 0; i < xs.Length; i++)
         {
-            feature.Points.Add(CreatePoint("Neck", "JawBottom", i, xs[i], 0.54f, 0.05f, z: -0.14f));
+            feature.Points.Add(CreatePoint("Neck", "Neck", i, xs[i], 0.68f + MathF.Abs(xs[i]) * 0.08f, 0.05f, z: -0.14f));
         }
 
         AnchorMeshMetrics.Update(feature, 0);

@@ -30,7 +30,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
     {
     }
 
-    public string MaskVersion => "color_mask_only_v1+anchor_template_masks_v9+jaw_bottom_neck_is_facebox_bottom+face_outline_60_eye_center_color_boundary_snap+no_ear_features+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
+    public string MaskVersion => "color_mask_only_v1+anchor_template_masks_v16+eye_corner_roles+pupil_circle_roles+brow_endpoint_roles+brow_peak_roles+chin_jawline_roles+nose_tip_nostril_equilateral+neck_restored+face_outline_60_eye_center_color_boundary_snap+no_ear_features+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
 
     public PortraitMaskResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {

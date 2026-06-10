@@ -327,6 +327,7 @@ public sealed class AnchorMeshDebugOverlayRenderer
         {
             "FaceOutline" => MediaColor.FromRgb(70, 150, 255),
             "LeftEye" or "RightEye" => MediaColor.FromRgb(88, 220, 255),
+            "LeftPupil" or "RightPupil" => MediaColor.FromRgb(120, 245, 255),
             "LeftBrow" or "RightBrow" => MediaColor.FromRgb(255, 164, 70),
             "Nose" => MediaColor.FromRgb(255, 230, 75),
             "LipOuter" => MediaColor.FromRgb(255, 105, 175),
@@ -340,7 +341,9 @@ public sealed class AnchorMeshDebugOverlayRenderer
 
     private static double GetFeatureStroke(string featureName)
     {
-        return featureName is "FaceOutline" or "LipOuter" ? 2.2 : 1.6;
+        return featureName is "FaceOutline" or "LipOuter" ? 2.2 :
+            featureName is "LeftPupil" or "RightPupil" ? 1.2 :
+            1.6;
     }
 
     private static void SaveVisual(string path, DrawingVisual visual, int width, int height)

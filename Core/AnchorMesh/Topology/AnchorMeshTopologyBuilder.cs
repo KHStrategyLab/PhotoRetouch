@@ -8,6 +8,8 @@ public static class AnchorMeshTopologyBuilder
         AddFeatureEdges(edges, "FaceOutline", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.FaceOutline, closed: true);
         AddFeatureEdges(edges, "LeftEye", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.LeftEyeLoop, closed: true);
         AddFeatureEdges(edges, "RightEye", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.RightEyeLoop, closed: true);
+        AddFeatureEdges(edges, "LeftPupil", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.LeftEyeLoop, closed: true);
+        AddFeatureEdges(edges, "RightPupil", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.RightEyeLoop, closed: true);
         AddFeatureEdges(edges, "LeftBrow", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.LeftBrowCurve, closed: false);
         AddFeatureEdges(edges, "RightBrow", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.RightBrowCurve, closed: false);
         AddFeatureEdges(edges, "Nose", AnchorMeshEdgeKind.Contour, AnchorMeshEdgeGroup.NoseStructure, closed: false);
@@ -45,6 +47,7 @@ public static class AnchorMeshTopologyBuilder
         {
             "FaceOutline" => 60,
             "LeftEye" or "RightEye" => 16,
+            "LeftPupil" or "RightPupil" => 12,
             "LeftBrow" or "RightBrow" => 12,
             "Nose" => 24,
             "LipOuter" => 24,

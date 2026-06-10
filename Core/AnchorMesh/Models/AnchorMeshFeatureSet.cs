@@ -8,6 +8,10 @@ public sealed class AnchorMeshFeatureSet
 
     public AnchorMeshFeature? RightEye { get; set; }
 
+    public AnchorMeshFeature? LeftPupil { get; set; }
+
+    public AnchorMeshFeature? RightPupil { get; set; }
+
     public AnchorMeshFeature? LeftBrow { get; set; }
 
     public AnchorMeshFeature? RightBrow { get; set; }
@@ -33,6 +37,8 @@ public sealed class AnchorMeshFeatureSet
         if (FaceOutline is not null) yield return FaceOutline;
         if (LeftEye is not null) yield return LeftEye;
         if (RightEye is not null) yield return RightEye;
+        if (LeftPupil is not null) yield return LeftPupil;
+        if (RightPupil is not null) yield return RightPupil;
         if (LeftBrow is not null) yield return LeftBrow;
         if (RightBrow is not null) yield return RightBrow;
         if (Nose is not null) yield return Nose;
@@ -52,6 +58,8 @@ public sealed class AnchorMeshFeatureSet
             FaceOutline = FaceOutline?.Clone(),
             LeftEye = LeftEye?.Clone(),
             RightEye = RightEye?.Clone(),
+            LeftPupil = LeftPupil?.Clone(),
+            RightPupil = RightPupil?.Clone(),
             LeftBrow = LeftBrow?.Clone(),
             RightBrow = RightBrow?.Clone(),
             Nose = Nose?.Clone(),
