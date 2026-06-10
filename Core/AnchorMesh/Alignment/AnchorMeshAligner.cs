@@ -48,7 +48,6 @@ public sealed class AnchorMeshAligner
         }
 
         LockPrimaryFeatureCenters(aligned, anchors);
-        ApplyNoseTipFromNostrilTriangle(aligned, anchors.FaceAngleRad);
         FitFaceOutlineToNoseCenteredOval(aligned, anchors);
 
         return aligned;
@@ -76,6 +75,10 @@ public sealed class AnchorMeshAligner
             TranslateFeatureCenterTo(features.RightPupil, anchors.RightEye.X, anchors.RightEye.Y, anchors.FaceAngleRad);
         }
 
+        ConstrainBrowToEyeRatioBand(features.LeftBrow, anchors.LeftEye, anchors);
+        ConstrainBrowToEyeRatioBand(features.RightBrow, anchors.RightEye, anchors);
+        ConstrainNoseToAnchorRatioBand(features.Nose, anchors);
+
         if (features.LipOuter is not null)
         {
             float lipScale = ScaleLipWidthToMouthCorners(features.LipOuter, anchors);
@@ -93,7 +96,111 @@ public sealed class AnchorMeshAligner
             }
         }
 
-        ApplyNoseTipFromNostrilTriangle(features, anchors.FaceAngleRad);
+        if (features.Nose is not null)
+        {
+            AnchorMeshMetrics.Update(features.Nose, anchors.FaceAngleRad);
+        }
+    }
+
+    private static void ConstrainBrowToEyeRatioBand(AnchorMeshFeature? brow, PointF eyeCenter, YuNetAnchorSet anchors)
+    {
+        if (brow is null || brow.Points.Count == 0 || anchors.EyeDistance <= 1)
+        {
+            return;
+        }
+
+        float axisX = MathF.Cos(anchors.FaceAngleRad);
+        float axisY = MathF.Sin(anchors.FaceAngleRad);
+        float upX = MathF.Sin(anchors.FaceAngleRad);
+        float upY = -MathF.Cos(anchors.FaceAngleRad);
+        float dx0 = brow.CenterX - eyeCenter.X;
+        float dy0 = brow.CenterY - eyeCenter.Y;
+        float currentUp = dx0 * upX + dy0 * upY;
+        float currentSide = dx0 * axisX + dy0 * axisY;
+        float targetUp = Math.Clamp(currentUp, anchors.EyeDistance * 0.18f, anchors.EyeDistance * 0.42f);
+        float targetSide = Math.Clamp(currentSide, -anchors.EyeDistance * 0.34f, anchors.EyeDistance * 0.34f);
+        float targetX = eyeCenter.X + upX * targetUp + axisX * targetSide;
+        float targetY = eyeCenter.Y + upY * targetUp + axisY * targetSide;
+        float dx = targetX - brow.CenterX;
+        float dy = targetY - brow.CenterY;
+        if (MathF.Abs(dx) > 0.5f || MathF.Abs(dy) > 0.5f)
+        {
+            TranslateFeature(brow, dx, dy, anchors.FaceAngleRad);
+            brow.SnapMode = "EyeRatioConstrainedBrowRoi";
+        }
+    }
+
+    private static void ConstrainNoseToAnchorRatioBand(AnchorMeshFeature? nose, YuNetAnchorSet anchors)
+    {
+        if (nose is null || nose.Points.Count == 0 || anchors.EyeDistance <= 1)
+        {
+            return;
+        }
+
+        AnchorMeshPoint? tip = nose.Points.FirstOrDefault(point => point.Role.Equals("NoseTipTriangleApex", StringComparison.OrdinalIgnoreCase))
+            ?? nose.Points.FirstOrDefault(point => point.Name == "Nose_08");
+        if (tip is null)
+        {
+            return;
+        }
+
+        float axisX = MathF.Cos(anchors.FaceAngleRad);
+        float axisY = MathF.Sin(anchors.FaceAngleRad);
+        float downX = -axisY;
+        float downY = axisX;
+        float tipDx = tip.SnappedX - anchors.NoseTip.X;
+        float tipDy = tip.SnappedY - anchors.NoseTip.Y;
+        float tipSide = tipDx * axisX + tipDy * axisY;
+        float tipDown = tipDx * downX + tipDy * downY;
+        float targetTipSide = Math.Clamp(tipSide, -anchors.EyeDistance * 0.07f, anchors.EyeDistance * 0.07f);
+        float targetTipDown = Math.Clamp(tipDown, -anchors.EyeDistance * 0.10f, anchors.EyeDistance * 0.10f);
+        float targetTipX = anchors.NoseTip.X + axisX * targetTipSide + downX * targetTipDown;
+        float targetTipY = anchors.NoseTip.Y + axisY * targetTipSide + downY * targetTipDown;
+        float translateX = targetTipX - tip.SnappedX;
+        float translateY = targetTipY - tip.SnappedY;
+        if (MathF.Abs(translateX) > 0.5f || MathF.Abs(translateY) > 0.5f)
+        {
+            TranslateFeature(nose, translateX, translateY, anchors.FaceAngleRad);
+        }
+
+        ConstrainNoseBaseBetweenTipAndMouth(nose, anchors, axisX, axisY, downX, downY);
+        nose.SnapMode = "NoseRatioConstrained";
+    }
+
+    private static void ConstrainNoseBaseBetweenTipAndMouth(AnchorMeshFeature nose, YuNetAnchorSet anchors, float axisX, float axisY, float downX, float downY)
+    {
+        List<AnchorMeshPoint> basePoints = nose.Points
+            .Where(point => point.Role.Contains("Nostril", StringComparison.OrdinalIgnoreCase) ||
+                            point.Role.Contains("Wing", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (basePoints.Count == 0)
+        {
+            return;
+        }
+
+        float noseToMouth = MathF.Max(anchors.EyeDistance * 0.22f, Distance(anchors.NoseTip.X, anchors.NoseTip.Y, anchors.MouthCenter.X, anchors.MouthCenter.Y));
+        float averageBaseDown = 0;
+        float averageBaseSide = 0;
+        foreach (AnchorMeshPoint point in basePoints)
+        {
+            float dx = point.SnappedX - anchors.NoseTip.X;
+            float dy = point.SnappedY - anchors.NoseTip.Y;
+            averageBaseDown += dx * downX + dy * downY;
+            averageBaseSide += dx * axisX + dy * axisY;
+        }
+
+        averageBaseDown /= basePoints.Count;
+        averageBaseSide /= basePoints.Count;
+        float targetBaseDown = Math.Clamp(averageBaseDown, noseToMouth * 0.28f, noseToMouth * 0.68f);
+        float targetBaseSide = Math.Clamp(averageBaseSide, -anchors.EyeDistance * 0.06f, anchors.EyeDistance * 0.06f);
+        float deltaDown = targetBaseDown - averageBaseDown;
+        float deltaSide = targetBaseSide - averageBaseSide;
+        if (MathF.Abs(deltaDown) <= 0.5f && MathF.Abs(deltaSide) <= 0.5f)
+        {
+            return;
+        }
+
+        TranslateFeature(nose, downX * deltaDown + axisX * deltaSide, downY * deltaDown + axisY * deltaSide, anchors.FaceAngleRad);
     }
 
     public void ApplyNoseTipFromNostrilTriangle(AnchorMeshFeatureSet features, float angleRad)
@@ -263,8 +370,9 @@ public sealed class AnchorMeshAligner
         float downX = -axisY;
         float downY = axisX;
 
-        float centerX = anchors.EyeCenter.X;
-        float centerY = anchors.EyeCenter.Y;
+        PointF center = ClampFaceOutlineCenterToEyeNoseBand(outline.CenterX, outline.CenterY, anchors, downX, downY);
+        float centerX = center.X;
+        float centerY = center.Y;
         float boxTopLocalY = ProjectLocalY(anchors.FaceBox.X + anchors.FaceBox.Width * 0.5f, anchors.FaceBox.Top, centerX, centerY, downX, downY);
         float chinY = anchors.FaceBox.Top + anchors.FaceBox.Height * 0.92f;
         float chinLocalY = ProjectLocalY(anchors.FaceBox.X + anchors.FaceBox.Width * 0.5f, chinY, centerX, centerY, downX, downY);
@@ -293,12 +401,31 @@ public sealed class AnchorMeshAligner
             point.ImageY = centerY + localX * axisY + localY * downY;
             point.SnappedX = point.ImageX;
             point.SnappedY = point.ImageY;
-            point.Source = "EyeCenterOval";
+            point.Source = "EyeNoseBandOval";
             point.Confidence = MathF.Max(point.Confidence, anchors.Score * 0.88f);
         }
 
-        outline.SnapMode = "EyeCenterOval";
+        outline.SnapMode = "EyeNoseBandOval";
         AnchorMeshMetrics.Update(outline, anchors.FaceAngleRad);
+    }
+
+    private static PointF ClampFaceOutlineCenterToEyeNoseBand(float candidateX, float candidateY, YuNetAnchorSet anchors, float downX, float downY)
+    {
+        float noseLocalY = ProjectLocalY(anchors.NoseTip.X, anchors.NoseTip.Y, anchors.EyeCenter.X, anchors.EyeCenter.Y, downX, downY);
+        if (MathF.Abs(noseLocalY) < 1.0f)
+        {
+            return new PointF(candidateX, candidateY);
+        }
+
+        float minLocalY = MathF.Min(0, noseLocalY);
+        float maxLocalY = MathF.Max(0, noseLocalY);
+        float candidateLocalY = ProjectLocalY(candidateX, candidateY, anchors.EyeCenter.X, anchors.EyeCenter.Y, downX, downY);
+        float clampedLocalY = Math.Clamp(candidateLocalY, minLocalY, maxLocalY);
+        float deltaLocalY = clampedLocalY - candidateLocalY;
+
+        return new PointF(
+            candidateX + downX * deltaLocalY,
+            candidateY + downY * deltaLocalY);
     }
 
     private static float ProjectLocalY(float x, float y, float originX, float originY, float downX, float downY)

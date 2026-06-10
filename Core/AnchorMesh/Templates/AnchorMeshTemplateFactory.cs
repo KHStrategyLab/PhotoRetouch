@@ -14,8 +14,8 @@ public sealed class AnchorMeshTemplateFactory
             LeftBrow = CreateBrow("LeftBrow", -0.285f, -0.31f, -0.075f, -0.305f, 0.028f, isLeftBrow: true),
             RightBrow = CreateBrow("RightBrow", 0.075f, -0.305f, 0.285f, -0.31f, 0.028f, isLeftBrow: false),
             Nose = CreateNose(),
-            LipOuter = CreateEllipse("LipOuter", "LipOuter", 24, 0.0f, 0.31f, 0.18f, 0.075f, true, z: 0.10f),
-            LipInner = CreateEllipse("LipInner", "LipInner", 16, 0.0f, 0.315f, 0.105f, 0.028f, true, z: 0.09f),
+            LipOuter = CreateOuterLipAlmond(),
+            LipInner = CreateInnerMouthLoop(),
             Hairline = CreateHairline(),
             Neck = CreateNeck(),
             ShirtShoulder = CreateShoulders()
@@ -192,6 +192,99 @@ public sealed class AnchorMeshTemplateFactory
 
         AnchorMeshMetrics.Update(feature, 0);
         return feature;
+    }
+
+    private static AnchorMeshFeature CreateOuterLipAlmond()
+    {
+        const int count = 24;
+        const float centerX = 0.0f;
+        const float centerY = 0.31f;
+        const float radiusX = 0.18f;
+        const float radiusY = 0.074f;
+        AnchorMeshFeature feature = new() { Name = "LipOuter", IsClosedLoop = true };
+        for (int i = 0; i < count; i++)
+        {
+            float rad = (360.0f / count * i) * MathF.PI / 180.0f;
+            float sin = MathF.Sin(rad);
+            float yScale = 0.38f + 0.62f * MathF.Pow(MathF.Abs(sin), 0.72f);
+            string role = GetOuterLipPointRole(i);
+            bool isAnchor = i is 0 or 6 or 12 or 18;
+            feature.Points.Add(CreatePoint(
+                "LipOuter",
+                role,
+                i,
+                centerX + MathF.Cos(rad) * radiusX,
+                centerY + sin * radiusY * yScale,
+                snapWeight: 0.42f,
+                z: 0.10f,
+                anchor: isAnchor));
+        }
+
+        AnchorMeshMetrics.Update(feature, 0);
+        return feature;
+    }
+
+    private static string GetOuterLipPointRole(int index)
+    {
+        return index switch
+        {
+            0 => "MouthRightCorner",
+            1 or 2 or 3 or 4 or 5 => "LowerLipRightCurve",
+            6 => "LowerLipBottomCenter",
+            7 or 8 or 9 or 10 or 11 => "LowerLipLeftCurve",
+            12 => "MouthLeftCorner",
+            13 or 14 => "UpperLipLeftPeak",
+            15 or 16 => "UpperLipCupidLeft",
+            17 or 19 => "UpperLipCupidBow",
+            18 => "UpperLipTopCenter",
+            20 or 21 => "UpperLipCupidRight",
+            22 or 23 => "UpperLipRightPeak",
+            _ => "LipOuter"
+        };
+    }
+
+    private static AnchorMeshFeature CreateInnerMouthLoop()
+    {
+        const int count = 16;
+        const float centerX = 0.0f;
+        const float centerY = 0.318f;
+        const float radiusX = 0.108f;
+        const float radiusY = 0.020f;
+        AnchorMeshFeature feature = new() { Name = "LipInner", IsClosedLoop = true };
+        for (int i = 0; i < count; i++)
+        {
+            float rad = (360.0f / count * i) * MathF.PI / 180.0f;
+            string role = GetInnerMouthPointRole(i);
+            bool isAnchor = i is 0 or 4 or 8 or 12;
+            feature.Points.Add(CreatePoint(
+                "LipInner",
+                role,
+                i,
+                centerX + MathF.Cos(rad) * radiusX,
+                centerY + MathF.Sin(rad) * radiusY,
+                snapWeight: 0.40f,
+                z: 0.09f,
+                anchor: isAnchor));
+        }
+
+        AnchorMeshMetrics.Update(feature, 0);
+        return feature;
+    }
+
+    private static string GetInnerMouthPointRole(int index)
+    {
+        return index switch
+        {
+            0 => "MouthInnerRight",
+            4 => "MouthInnerBottom",
+            8 => "MouthInnerLeft",
+            12 => "MouthInnerTop",
+            1 or 2 or 3 => "InnerMouthLowerRight",
+            5 or 6 or 7 => "InnerMouthLowerLeft",
+            9 or 10 or 11 => "InnerMouthUpperLeft",
+            13 or 14 or 15 => "InnerMouthUpperRight",
+            _ => "InnerMouth"
+        };
     }
 
     private static AnchorMeshFeature CreateNose()

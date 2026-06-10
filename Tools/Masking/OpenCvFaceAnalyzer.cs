@@ -28,7 +28,7 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         _modelPath = modelPath;
     }
 
-    public string AnalyzerVersion => "opencv_yunet_2023mar_v3_retouch_facebox_bottom_is_chin";
+    public string AnalyzerVersion => "opencv_yunet_2023mar_v4_facebox_initial_container_anchor_chin";
 
     public FaceAnalyzerResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -138,13 +138,12 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         WpfPoint rightEye = eyeA.X <= eyeB.X ? eyeB : eyeA;
         WpfPoint mouthCenter = new((mouthA.X + mouthB.X) / 2d, (mouthA.Y + mouthB.Y) / 2d);
         Int32Rect rawFaceBox = ClampRect(x, y, width, height, imageWidth, imageHeight);
-        Int32Rect faceBox = CreateRetouchWorkFaceBox(rawFaceBox, leftEye, rightEye, noseTip, mouthCenter, imageWidth, imageHeight);
-        WpfPoint chinPoint = new(faceBox.X + faceBox.Width * 0.5, faceBox.Y + faceBox.Height);
+        WpfPoint chinPoint = EstimateChinPointFromAnchors(leftEye, rightEye, noseTip, mouthCenter, imageWidth, imageHeight);
         double faceAngle = Math.Atan2(rightEye.Y - leftEye.Y, rightEye.X - leftEye.X) * 180d / Math.PI;
-        double confidence = Math.Clamp(detectionScore * CalculateLandmarkPlausibility(faceBox, leftEye, rightEye, noseTip, mouthCenter, chinPoint), 0, 1);
+        double confidence = Math.Clamp(detectionScore * CalculateLandmarkPlausibility(rawFaceBox, leftEye, rightEye, noseTip, mouthCenter, chinPoint), 0, 1);
 
         return new DetectedFace(
-            faceBox,
+            rawFaceBox,
             faceAngle,
             ClampPoint(leftEye, imageWidth, imageHeight),
             ClampPoint(rightEye, imageWidth, imageHeight),
@@ -159,7 +158,8 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         List<string> warnings = new()
         {
             "opencv_yunet_face_analyzer",
-            "chin_estimated_from_facebox"
+            "facebox_initial_detection_container_only",
+            "chin_estimated_from_eye_nose_mouth_anchors"
         };
         if (faceCount > 1)
         {
@@ -221,8 +221,7 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         return new Int32Rect(rectX, rectY, rectWidth, rectHeight);
     }
 
-    private static Int32Rect CreateRetouchWorkFaceBox(
-        Int32Rect rawFaceBox,
+    private static WpfPoint EstimateChinPointFromAnchors(
         WpfPoint leftEye,
         WpfPoint rightEye,
         WpfPoint noseTip,
@@ -231,30 +230,12 @@ public sealed class OpenCvFaceAnalyzer : IFaceAnalyzer
         int imageHeight)
     {
         double eyeDistance = Distance(leftEye, rightEye);
-        double rawCenterX = rawFaceBox.X + rawFaceBox.Width * 0.5;
         double eyeCenterX = (leftEye.X + rightEye.X) * 0.5;
-        double structureCenterX = eyeCenterX * 0.56 + noseTip.X * 0.24 + mouthCenter.X * 0.20;
-        double centerX = rawCenterX * 0.48 + structureCenterX * 0.52;
-
-        double targetWidth = Math.Max(rawFaceBox.Width * 1.11, eyeDistance * 2.33);
-        double targetLeft = centerX - targetWidth * 0.5;
-        double targetRight = centerX + targetWidth * 0.5;
-
-        double targetBottom = rawFaceBox.Y + rawFaceBox.Height * 0.92;
-        double targetTop = rawFaceBox.Y - rawFaceBox.Height * 0.426;
-
-        targetLeft = Math.Max(0, targetLeft);
-        targetTop = Math.Max(0, targetTop);
-        targetRight = Math.Min(imageWidth - 1, targetRight);
-        targetBottom = Math.Min(imageHeight - 1, targetBottom);
-
-        return ClampRect(
-            targetLeft,
-            targetTop,
-            Math.Max(1, targetRight - targetLeft),
-            Math.Max(1, targetBottom - targetTop),
-            imageWidth,
-            imageHeight);
+        double noseToMouth = Math.Max(eyeDistance * 0.30, mouthCenter.Y - noseTip.Y);
+        double mouthToChin = Math.Clamp(Math.Max(eyeDistance * 0.72, noseToMouth * 1.08), eyeDistance * 0.55, eyeDistance * 1.35);
+        double chinX = eyeCenterX * 0.18 + noseTip.X * 0.24 + mouthCenter.X * 0.58;
+        double chinY = mouthCenter.Y + mouthToChin;
+        return ClampPoint(new WpfPoint(chinX, chinY), imageWidth, imageHeight);
     }
 
     private static WpfPoint ClampPoint(WpfPoint point, int imageWidth, int imageHeight)

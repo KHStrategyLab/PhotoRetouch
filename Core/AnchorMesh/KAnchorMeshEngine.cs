@@ -83,6 +83,13 @@ public sealed class KAnchorMeshEngine
             Stage = maskContours is null ? "YuNetAligned" : "MaskSnapped"
         };
         result.TopologyEdges.AddRange(AnchorMeshTopologyBuilder.BuildDefaultEdges());
+        result.Warnings.Add(
+            "topology_edges_available:" +
+            "anchor=" + result.TopologyEdges.Count(edge => edge.Kind == AnchorMeshEdgeKind.Anchor) + "," +
+            "surface=" + result.TopologyEdges.Count(edge => edge.Kind == AnchorMeshEdgeKind.Surface) + "," +
+            "protection=" + result.TopologyEdges.Count(edge => edge.Kind == AnchorMeshEdgeKind.Protection) + "," +
+            "measurement=" + result.TopologyEdges.Count(edge => edge.Kind == AnchorMeshEdgeKind.Measurement));
+        result.Warnings.Add("mouth_topology_shared_corner_double_almond_loop");
 
         if (yunetAnchors.EyeDistance <= 1)
         {

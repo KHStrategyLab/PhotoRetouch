@@ -1,5 +1,6 @@
 using System.Windows.Media.Imaging;
 using System.Windows;
+using WpfPoint = System.Windows.Point;
 
 namespace PhotoRetouch;
 
@@ -70,8 +71,8 @@ public sealed class SnapshotMaskBuilder
         photo.SnapshotMaskSet = snapshot;
         if (photo.FaceManualAdjustOverride is not { HasOverrides: true })
         {
-            photo.ApplyAutoFaceWorkArea(CreateFaceWorkAreaFromFaceBox(
-                snapshot.Analysis.FaceBox,
+            photo.ApplyAutoFaceWorkArea(CreateFaceWorkAreaFromAnalysis(
+                snapshot.Analysis,
                 analysisSource.PixelWidth,
                 analysisSource.PixelHeight));
         }
@@ -92,7 +93,7 @@ public sealed class SnapshotMaskBuilder
         PortraitMaskResult result = _maskEngine.Analyze(source, faceWorkArea);
         FaceWorkArea effectiveFaceWorkArea = faceManualAdjustOverride is { HasOverrides: true }
             ? faceWorkArea.Clamp()
-            : CreateFaceWorkAreaFromFaceBox(result.Analysis.FaceBox, source.PixelWidth, source.PixelHeight);
+            : CreateFaceWorkAreaFromAnalysis(result.Analysis, source.PixelWidth, source.PixelHeight);
         SnapshotMaskCacheKey cacheKey = CreateCacheKey(
             sourcePath,
             sourceLastWriteTimeUtc,
@@ -120,6 +121,56 @@ public sealed class SnapshotMaskBuilder
 
     public static FaceWorkArea CreateFaceWorkAreaFromFaceBox(Int32Rect faceBox, int imageWidth, int imageHeight)
     {
+        return CreateFallbackFaceWorkAreaFromFaceBox(faceBox, imageWidth, imageHeight);
+    }
+
+    public static FaceWorkArea CreateFaceWorkAreaFromAnalysis(FaceAnalysisResult analysis, int imageWidth, int imageHeight)
+    {
+        ArgumentNullException.ThrowIfNull(analysis);
+        return TryCreateFaceWorkAreaFromLandmarks(analysis.FaceLandmarks, imageWidth, imageHeight, out FaceWorkArea anchorArea)
+            ? anchorArea
+            : CreateFallbackFaceWorkAreaFromFaceBox(analysis.FaceBox, imageWidth, imageHeight);
+    }
+
+    private static bool TryCreateFaceWorkAreaFromLandmarks(IReadOnlyDictionary<string, WpfPoint> landmarks, int imageWidth, int imageHeight, out FaceWorkArea area)
+    {
+        area = FaceWorkArea.Default;
+        if (!TryGetLandmark(landmarks, "left_eye", out WpfPoint leftEye) ||
+            !TryGetLandmark(landmarks, "right_eye", out WpfPoint rightEye) ||
+            !TryGetLandmark(landmarks, "nose_tip", out WpfPoint noseTip) ||
+            !TryGetLandmark(landmarks, "mouth_center", out WpfPoint mouthCenter))
+        {
+            return false;
+        }
+
+        double eyeDistance = Distance(leftEye, rightEye);
+        if (eyeDistance < 4)
+        {
+            return false;
+        }
+
+        WpfPoint eyeCenter = new((leftEye.X + rightEye.X) * 0.5, (leftEye.Y + rightEye.Y) * 0.5);
+        WpfPoint chin = TryGetLandmark(landmarks, "chin", out WpfPoint detectedChin)
+            ? detectedChin
+            : EstimateChinPoint(eyeCenter, noseTip, mouthCenter, eyeDistance, imageWidth, imageHeight);
+        double chinY = Math.Clamp(chin.Y, mouthCenter.Y + eyeDistance * 0.55, mouthCenter.Y + eyeDistance * 1.45);
+        double centerX = eyeCenter.X * 0.30 + noseTip.X * 0.30 + mouthCenter.X * 0.28 + chin.X * 0.12;
+        double top = eyeCenter.Y - eyeDistance * 1.22;
+        double bottom = Math.Max(chinY, mouthCenter.Y + eyeDistance * 1.05);
+        double anchorWidth = eyeDistance * 2.72;
+        double anchorHeight = Math.Max(eyeDistance * 3.05, bottom - top);
+        double centerY = (top + bottom) * 0.5;
+
+        area = new FaceWorkArea(
+            centerX / Math.Max(1, imageWidth),
+            centerY / Math.Max(1, imageHeight),
+            anchorWidth / Math.Max(1, imageWidth),
+            anchorHeight / Math.Max(1, imageHeight)).Clamp();
+        return true;
+    }
+
+    private static FaceWorkArea CreateFallbackFaceWorkAreaFromFaceBox(Int32Rect faceBox, int imageWidth, int imageHeight)
+    {
         double safeWidth = Math.Max(1, imageWidth);
         double safeHeight = Math.Max(1, imageHeight);
         double centerX = (faceBox.X + faceBox.Width / 2d) / safeWidth;
@@ -129,6 +180,30 @@ public sealed class SnapshotMaskBuilder
         return new FaceWorkArea(centerX, centerY, width, height).Clamp();
     }
 
+    private static bool TryGetLandmark(IReadOnlyDictionary<string, WpfPoint> landmarks, string key, out WpfPoint point)
+    {
+        return landmarks.TryGetValue(key, out point) &&
+               !double.IsNaN(point.X) &&
+               !double.IsNaN(point.Y);
+    }
+
+    private static WpfPoint EstimateChinPoint(WpfPoint eyeCenter, WpfPoint noseTip, WpfPoint mouthCenter, double eyeDistance, int imageWidth, int imageHeight)
+    {
+        double noseToMouth = Math.Max(eyeDistance * 0.30, mouthCenter.Y - noseTip.Y);
+        double chinX = eyeCenter.X * 0.18 + noseTip.X * 0.24 + mouthCenter.X * 0.58;
+        double chinY = mouthCenter.Y + Math.Clamp(Math.Max(eyeDistance * 0.72, noseToMouth * 1.08), eyeDistance * 0.55, eyeDistance * 1.35);
+        return new WpfPoint(
+            Math.Clamp(chinX, 0, Math.Max(0, imageWidth - 1)),
+            Math.Clamp(chinY, 0, Math.Max(0, imageHeight - 1)));
+    }
+
+    private static double Distance(WpfPoint a, WpfPoint b)
+    {
+        double dx = b.X - a.X;
+        double dy = b.Y - a.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
     private static void ApplyAutoFaceWorkAreaFromSnapshot(PhotoItem photo, FaceSnapshotMaskSet snapshot, BitmapSource analysisSource)
     {
         if (photo.FaceManualAdjustOverride is { HasOverrides: true })
@@ -136,8 +211,8 @@ public sealed class SnapshotMaskBuilder
             return;
         }
 
-        photo.ApplyAutoFaceWorkArea(CreateFaceWorkAreaFromFaceBox(
-            snapshot.Analysis.FaceBox,
+        photo.ApplyAutoFaceWorkArea(CreateFaceWorkAreaFromAnalysis(
+            snapshot.Analysis,
             analysisSource.PixelWidth,
             analysisSource.PixelHeight));
     }

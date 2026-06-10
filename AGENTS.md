@@ -20,6 +20,33 @@ Multi-face, left/right ShapeBalance, generative AI retouching, background replac
 
 The current goal is not feature expansion. The current goal is to finish the V1 engine reliably.
 
+## Program Policy
+
+PhotoRetouch is not an automatic AI face-correction program.
+
+Do not automatically beautify, reshape, resize, move, smooth, or modify the face based only on detected landmarks, ratios, masks, or confidence scores.
+
+Facial structure definitions are used for:
+
+- Local mask creation
+- Region classification
+- Slider target isolation
+- Over-correction prevention
+- Protection mask generation
+- Confidence checks
+- Avoiding unintended edits
+
+Visible correction requires user action. When the user moves a specific slider or activates a specific tool, only the related local region should be calculated and affected.
+
+Do not precompute or apply all base corrections when a tab opens. Do not globally block, smooth, reshape, or modify the entire face. Do not force ideal facial proportions. Do not auto-correct asymmetry unless the specific feature tool is active and the user requests adjustment.
+
+Default state:
+
+- Detect only if needed.
+- Protect identity.
+- Preserve original shape.
+- Apply nothing visible until the user changes a control.
+
 ## Mouse-First Workflow
 
 The app is primarily operated by mouse. Keyboard shortcuts exist, but they should support mouse work rather than take over the workflow.
@@ -69,6 +96,7 @@ Read these before making larger design or engine changes:
 
 - `docs\ENGINE_DESIGN.md`
 - `docs\FEATURE_STATUS_AND_ROADMAP.md`
+- `docs\FACE_RATIO_GUIDES.md`
 
 These documents describe the current engine state, roadmap, menu status, and next recommended steps.
 
@@ -139,7 +167,13 @@ Skin retouching is now mask-first.
 - Do not keep increasing skin filter strength before mask debug output works.
 - Use a Snapshot Mask model: analyze one photo once, save a `FaceSnapshotMaskSet`, and reuse it while retouch strengths or Stage presets change.
 - Current verification stage uses `StandardMaskWarpEngine`: load or generate `StandardMaskSet`, run `IFaceAnalyzer`, affine-warp it to `MaskWarpInput`, run `IFaceParsingDetector`, then merge warped standard masks with parsing masks before building the snapshot.
-- The current default `IFaceAnalyzer` implementation is `OpenCvFaceAnalyzer`; it uses OpenCV YuNet (`Assets/AiModels/face_detection_yunet_2023mar.onnx`) to detect a real FaceBox plus eye, nose, and mouth anchors. `ChinPoint` is still estimated from the detected FaceBox.
+- The current default `IFaceAnalyzer` implementation is `OpenCvFaceAnalyzer`; it uses OpenCV YuNet (`Assets/AiModels/face_detection_yunet_2023mar.onnx`) to detect an initial FaceBox plus eye, nose, and mouth anchors. FaceBox is an initial detection container only; `ChinPoint` is estimated from eye/nose/mouth anchor spacing, and visible correction areas must come from fitted masks/protection masks rather than FaceBox.
+- K-AnchorMesh final policy: FaceBox may support initial detection, rough normalization, landmark search, debug, and anchor-failure fallback only. Final visible correction masks must follow anchored local masks: K-AnchorMesh anchors -> ComponentROI -> CandidateMask -> FinalMask -> ProtectionMask -> CorrectionMask.
+- K-AnchorMesh topology policy: landmark points must be connected into anchor, boundary, surface, protection, measurement, structural, and morph-control edges. Edges guide ROI direction, ratios, surface candidates, protection boundaries, and confidence checks, but edges are not final masks. Pixel evidence still fits final masks.
+- Eyebrow protection masks must be fitted from pixel evidence inside an anchor-based brow ROI. Do not treat the `browHead` to `browTail` segment itself as `EyebrowMask`; brow anchors only position the ROI and fallback guide. Brow ROIs must also pass eye-to-brow distance and side-offset ratio guards; do not fix brow masks by hard-coded coordinates.
+- Nose masks must separate `NoseStructureGuide` from editable surface masks. Structure guide lines explain bridge direction, tip, wings, base, and nostril positions only; final `NoseMask` must be an area-based `NoseSurfaceMask` union of bridge, tip, wing, and base surfaces with nostril protection subtracted. Nostril dark spots are protection masks, not the nose mask.
+- Mouth/lip masks must respect nose-to-mouth proximity ratios so lip or inner-mouth protection cannot climb into nostrils or nose base. Use anchored distance guards, not fixed y positions.
+- Open-mouth topology must never become two independent circles. `LipOuter` uses shared mouth-corner anchors, and upper/lower lip surface loops must both include the same left/right mouth-corner endpoints with `InnerMouthProtectionLoop` between them. Do not create mouth masks from a mouth-center radius.
 - The current `IFaceParsingDetector` implementation is `TemporaryFaceParsingDetector`; it is a fallback scaffold, not a real AI model. `NostrilDetector` is now implemented as an image-analysis module, but real FaceParsing and triangle mesh model connections remain deferred until debug masks prove stable.
 - `SnapshotMaskCacheKey` includes image id, image size, face box, face angle, crop version, and mask version. Stage values are never part of the mask cache key.
 - `RetouchStageProcessor` is the current first-pass retouch pipeline. It maps requested Stage `1-10` through `StagePresetMapper`, gates it by `MaskQualityReport.MaxAllowedStage`, and applies retouch only through masks.

@@ -30,7 +30,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
     {
     }
 
-    public string MaskVersion => "color_mask_only_v1+anchor_template_masks_v16+eye_corner_roles+pupil_circle_roles+brow_endpoint_roles+brow_peak_roles+chin_jawline_roles+nose_tip_nostril_equilateral+neck_restored+face_outline_60_eye_center_color_boundary_snap+no_ear_features+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
+    public string MaskVersion => "color_mask_only_v1+anchor_template_masks_v16+eye_corner_roles+pupil_circle_roles+brow_endpoint_roles+brow_peak_roles+brow_eye_anchor_roi_pixel_evidence_v3+brow_eye_distance_ratio_guard_v1+nose_surface_masks_bridge_tip_wings_base_v1+mouth_shared_corner_double_almond_loop_v1+mouth_nose_proximity_guard_v1+chin_jawline_roles+nose_tip_nostril_equilateral+neck_restored+face_outline_60_eye_nose_band_component_position_snap+anchormesh_final_mask_policy_v1+no_ear_features+no_standard_dummy+nostril_disabled+" + _faceAnalyzer.AnalyzerVersion + "+" + _parsingDetector.DetectorVersion;
 
     public PortraitMaskResult Analyze(BitmapSource source, FaceWorkArea faceWorkArea)
     {
@@ -187,7 +187,7 @@ public sealed class StandardMaskWarpEngine : IPortraitMaskEngine
             AnchorMeshResult anchorMesh = new KAnchorMeshEngine().BuildFromAnalyzerResult(source, faceAnalyzerResult, contourProvider);
             warnings.Add("anchor_mesh_feature_masks_enabled:" + anchorMesh.Stage);
             warnings.AddRange(anchorMesh.Warnings.Select(warning => "anchor_mesh_" + warning));
-            AnchorMeshFeatureMaskSet masks = AnchorMeshFeatureMaskBuilder.Build(width, height, anchorMesh);
+            AnchorMeshFeatureMaskSet masks = AnchorMeshFeatureMaskBuilder.Build(width, height, anchorMesh, source);
             warnings.AddRange(masks.DebugWarnings);
             return masks;
         }

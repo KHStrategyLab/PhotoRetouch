@@ -1,5 +1,6 @@
 using PhotoRetouch.AnchorMesh;
 using System.IO;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace PhotoRetouch;
@@ -21,7 +22,7 @@ public static class AnchorMeshFeatureMaskBuilder
 {
     private static readonly Dictionary<string, TemplateMask?> TemplateCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public static AnchorMeshFeatureMaskSet Build(int width, int height, AnchorMeshResult? anchorMesh)
+    public static AnchorMeshFeatureMaskSet Build(int width, int height, AnchorMeshResult? anchorMesh, BitmapSource? source = null)
     {
         MaskPlane empty = MaskPlane.Empty(width, height);
         List<string> warnings = new();
@@ -43,20 +44,25 @@ public static class AnchorMeshFeatureMaskBuilder
         }
 
         AnchorMeshFeatureSet features = anchorMesh.Features;
+        ImagePixelData? pixelData = TryCreatePixelData(source, width, height, warnings);
         MaskPlane leftEye = BuildEyeProtectMask(width, height, features.LeftEye, 1.0);
         MaskPlane rightEye = BuildEyeProtectMask(width, height, features.RightEye, 1.0);
         MaskPlane eyeMask = MaskPlane.Union(leftEye, rightEye);
 
-        MaskPlane leftBrow = BuildBrowProtectMask(width, height, features.LeftBrow, 1.0, isRightBrow: false);
-        MaskPlane rightBrow = BuildBrowProtectMask(width, height, features.RightBrow, 1.0, isRightBrow: true);
-        MaskPlane eyebrowMask = MaskPlane.Union(leftBrow, rightBrow);
+        MaskPlane leftBrow = BuildBrowProtectMask(width, height, features.LeftBrow, features.LeftEye, 1.0, isRightBrow: false, pixelData, warnings);
+        MaskPlane rightBrow = BuildBrowProtectMask(width, height, features.RightBrow, features.RightEye, 1.0, isRightBrow: true, pixelData, warnings);
+        MaskPlane eyebrowMask = MaskPlane.Subtract(MaskPlane.Union(leftBrow, rightBrow), eyeMask);
 
         MaskPlane lipMask = BuildMouthProtectMask(width, height, features.LipOuter, 1.0);
         MaskPlane innerMouthMask = BuildMouthProtectMask(width, height, features.LipInner ?? features.LipOuter, 1.0, innerOnly: true);
 
-        MaskPlane noseMask = StrokeOpenFeature(width, height, features.Nose, 0.48, GetFeatureStrokeRadius(features.Nose, 0.16, 8.0, 28.0), 14.0);
-        MaskPlane noseSkinMask = MaskPlane.Multiply(noseMask, 0.55);
         MaskPlane nostrilMask = BuildNostrilMask(width, height, features.Nose);
+        MaskPlane noseMask = BuildNoseSurfaceMask(width, height, features.Nose, nostrilMask, warnings);
+        MaskPlane noseSkinMask = MaskPlane.Subtract(MaskPlane.Multiply(noseMask, 0.62), nostrilMask);
+        ClipMouthMaskByNoseMouthDistance(lipMask, features.Nose, features.LipOuter, warnings);
+        ClipMouthMaskByNoseMouthDistance(innerMouthMask, features.Nose, features.LipInner ?? features.LipOuter, warnings);
+        lipMask = MaskPlane.Subtract(lipMask, nostrilMask);
+        innerMouthMask = MaskPlane.Subtract(innerMouthMask, nostrilMask);
         MaskPlane faceGuideMask = FillClosedFeature(width, height, features.FaceOutline, 0.72, 4.0);
 
         MaskPlane hardProtect = MaskPlane.Union(
@@ -70,6 +76,10 @@ public static class AnchorMeshFeatureMaskBuilder
         if (hardProtect.Average() <= 0.0001)
         {
             warnings.Add("anchor_mesh_hard_protect_empty");
+        }
+        else
+        {
+            warnings.Add("anchor_mesh_component_masks_snapped_to_feature_landmarks");
         }
 
         return new AnchorMeshFeatureMaskSet(
@@ -135,7 +145,15 @@ public static class AnchorMeshFeatureMaskBuilder
         return mask;
     }
 
-    private static MaskPlane BuildBrowProtectMask(int width, int height, AnchorMeshFeature? browFeature, double opacity, bool isRightBrow)
+    private static MaskPlane BuildBrowProtectMask(
+        int width,
+        int height,
+        AnchorMeshFeature? browFeature,
+        AnchorMeshFeature? eyeFeature,
+        double opacity,
+        bool isRightBrow,
+        ImagePixelData? pixelData,
+        List<string> warnings)
     {
         MaskPlane mask = MaskPlane.Empty(width, height);
         if (browFeature is null || browFeature.Points.Count == 0)
@@ -143,34 +161,230 @@ public static class AnchorMeshFeatureMaskBuilder
             return mask;
         }
 
-        double radius = GetFeatureStrokeRadius(browFeature, 0.35, 4.0, 14.0);
         double centerShift = isRightBrow ? -browFeature.Width * 0.03 : browFeature.Width * 0.03;
-        if (AddImageTemplate(
-            mask,
-            isRightBrow ? "right_brow_protect.png" : "left_brow_protect.png",
-            browFeature.CenterX + Math.Cos(browFeature.AngleRad) * centerShift,
-            browFeature.CenterY,
-            Math.Clamp(browFeature.Width * 0.56, 12.0, 72.0),
-            Math.Clamp(Math.Max(browFeature.Height * 0.70, browFeature.Width * 0.095), 4.0, 18.0),
-            browFeature.AngleRad,
-            opacity,
-            flipX: false))
-        {
-            return mask;
-        }
+        double roiCenterX = browFeature.CenterX + Math.Cos(browFeature.AngleRad) * centerShift;
+        double roiCenterY = browFeature.CenterY;
+        double roiRadiusX = Math.Clamp(browFeature.Width * 0.66, 14.0, 84.0);
+        double roiRadiusY = Math.Clamp(Math.Max(browFeature.Height * 1.20, browFeature.Width * 0.145), 7.0, 28.0);
 
-        StrokeOpenFeatureInto(mask, browFeature, opacity, radius, 2.4);
+        MaskPlane roi = MaskPlane.Empty(width, height);
         AddTemplateShape(
-            mask,
-            browFeature.CenterX + Math.Cos(browFeature.AngleRad) * centerShift,
-            browFeature.CenterY,
-            Math.Clamp(browFeature.Width * 0.56, 12.0, 72.0),
-            Math.Clamp(Math.Max(browFeature.Height * 0.70, browFeature.Width * 0.095), 4.0, 18.0),
+            roi,
+            roiCenterX,
+            roiCenterY,
+            roiRadiusX,
+            roiRadiusY,
             browFeature.AngleRad,
-            opacity * 0.88,
+            1.0,
             featherRadius: 2.0,
             isRightBrow ? ShapeRightBrowTemplate : ShapeLeftBrowTemplate);
+
+        if (pixelData is not null)
+        {
+            ClipBrowRoiByEyeDistanceBand(roi, browFeature, eyeFeature, warnings, isRightBrow);
+            MaskPlane evidenceMask = BuildBrowPixelEvidenceMask(roi, browFeature, pixelData, opacity);
+            if (evidenceMask.Average() > 0.000015)
+            {
+                warnings.Add((isRightBrow ? "right" : "left") + "_eyebrow_mask_fitted_from_anchor_roi_pixel_evidence");
+                return evidenceMask;
+            }
+
+            warnings.Add((isRightBrow ? "right" : "left") + "_eyebrow_pixel_evidence_low_use_soft_anchor_fallback");
+        }
+        else
+        {
+            warnings.Add((isRightBrow ? "right" : "left") + "_eyebrow_pixel_evidence_unavailable_use_soft_anchor_fallback");
+        }
+
+        AddTemplateShape(
+            mask,
+            roiCenterX,
+            roiCenterY,
+            Math.Clamp(browFeature.Width * 0.56, 12.0, 72.0),
+            Math.Clamp(Math.Max(browFeature.Height * 0.70, browFeature.Width * 0.095), 4.0, 18.0),
+            browFeature.AngleRad,
+            opacity * 0.38,
+            featherRadius: 2.0,
+            isRightBrow ? ShapeRightBrowTemplate : ShapeLeftBrowTemplate);
+        ClipBrowRoiByEyeDistanceBand(mask, browFeature, eyeFeature, warnings, isRightBrow);
         return mask;
+    }
+
+    private static void ClipBrowRoiByEyeDistanceBand(MaskPlane mask, AnchorMeshFeature browFeature, AnchorMeshFeature? eyeFeature, List<string> warnings, bool isRightBrow)
+    {
+        if (eyeFeature is null || eyeFeature.Points.Count == 0 || browFeature.Width <= 1)
+        {
+            return;
+        }
+
+        double upX = Math.Sin(browFeature.AngleRad);
+        double upY = -Math.Cos(browFeature.AngleRad);
+        double minUp = Math.Clamp(eyeFeature.Width * 0.30, 14.0, 38.0);
+        double maxUp = Math.Clamp(eyeFeature.Width * 0.95, 34.0, 92.0);
+        double maxSide = Math.Clamp(browFeature.Width * 0.70, 28.0, 98.0);
+        double axisX = Math.Cos(browFeature.AngleRad);
+        double axisY = Math.Sin(browFeature.AngleRad);
+
+        for (int y = 0; y < mask.Height; y++)
+        {
+            for (int x = 0; x < mask.Width; x++)
+            {
+                if (mask[x, y] <= 0)
+                {
+                    continue;
+                }
+
+                double dx = x + 0.5 - eyeFeature.CenterX;
+                double dy = y + 0.5 - eyeFeature.CenterY;
+                double up = dx * upX + dy * upY;
+                double side = dx * axisX + dy * axisY;
+                if (up < minUp || up > maxUp || Math.Abs(side) > maxSide)
+                {
+                    mask[x, y] = 0;
+                }
+            }
+        }
+
+        warnings.Add((isRightBrow ? "right" : "left") + "_eyebrow_roi_clipped_by_eye_distance_ratio_band");
+    }
+
+    private static MaskPlane BuildBrowPixelEvidenceMask(MaskPlane roi, AnchorMeshFeature browFeature, ImagePixelData pixelData, double opacity)
+    {
+        MaskPlane candidate = MaskPlane.Empty(roi.Width, roi.Height);
+        List<double> lumas = new();
+        int left = Math.Max(0, (int)Math.Floor(browFeature.Points.Min(point => point.SnappedX) - browFeature.Width * 0.25 - 4));
+        int right = Math.Min(roi.Width - 1, (int)Math.Ceiling(browFeature.Points.Max(point => point.SnappedX) + browFeature.Width * 0.25 + 4));
+        int top = Math.Max(0, (int)Math.Floor(browFeature.CenterY - Math.Max(browFeature.Height * 2.0, browFeature.Width * 0.22) - 4));
+        int bottom = Math.Min(roi.Height - 1, (int)Math.Ceiling(browFeature.CenterY + Math.Max(browFeature.Height * 1.8, browFeature.Width * 0.20) + 4));
+
+        for (int y = top; y <= bottom; y++)
+        {
+            for (int x = left; x <= right; x++)
+            {
+                if (roi[x, y] > 0.04)
+                {
+                    lumas.Add(pixelData.GetLuma(x, y));
+                }
+            }
+        }
+
+        if (lumas.Count < 12)
+        {
+            return candidate;
+        }
+
+        lumas.Sort();
+        double p35 = lumas[(int)Math.Clamp(Math.Round((lumas.Count - 1) * 0.35), 0, lumas.Count - 1)];
+        double p65 = lumas[(int)Math.Clamp(Math.Round((lumas.Count - 1) * 0.65), 0, lumas.Count - 1)];
+        double contrast = Math.Max(6.0, p65 - p35);
+        double angle = browFeature.AngleRad;
+        double cos = Math.Cos(angle);
+        double sin = Math.Sin(angle);
+
+        for (int y = top; y <= bottom; y++)
+        {
+            for (int x = left; x <= right; x++)
+            {
+                double roiWeight = roi[x, y];
+                if (roiWeight <= 0.04)
+                {
+                    continue;
+                }
+
+                double luma = pixelData.GetLuma(x, y);
+                double darkness = Math.Clamp((p65 + contrast * 0.18 - luma) / Math.Max(1, contrast * 1.55), 0, 1);
+                if (darkness <= 0.02)
+                {
+                    continue;
+                }
+
+                double directional = GetBrowDirectionalScore(pixelData, x, y, cos, sin);
+                double connectivity = GetNeighborhoodDarkness(pixelData, roi, x, y, p65 + contrast * 0.12);
+                double colorCluster = GetBrowColorClusterScore(pixelData, x, y);
+                double value = opacity * roiWeight * Math.Clamp(darkness * 0.56 + directional * 0.18 + connectivity * 0.18 + colorCluster * 0.08, 0, 1);
+                if (value > 0.12)
+                {
+                    candidate[x, y] = Math.Clamp(value, 0, opacity);
+                }
+            }
+        }
+
+        return FeatherSmallMask(candidate, radius: 1);
+    }
+
+    private static double GetBrowDirectionalScore(ImagePixelData pixels, int x, int y, double cos, double sin)
+    {
+        int alongX = Math.Clamp((int)Math.Round(x + cos * 2), 0, pixels.Width - 1);
+        int alongY = Math.Clamp((int)Math.Round(y + sin * 2), 0, pixels.Height - 1);
+        int crossX = Math.Clamp((int)Math.Round(x - sin * 2), 0, pixels.Width - 1);
+        int crossY = Math.Clamp((int)Math.Round(y + cos * 2), 0, pixels.Height - 1);
+        double center = pixels.GetLuma(x, y);
+        double alongDiff = Math.Abs(center - pixels.GetLuma(alongX, alongY));
+        double crossDiff = Math.Abs(center - pixels.GetLuma(crossX, crossY));
+        return Math.Clamp((crossDiff - alongDiff + 8) / 28, 0, 1);
+    }
+
+    private static double GetNeighborhoodDarkness(ImagePixelData pixels, MaskPlane roi, int x, int y, double threshold)
+    {
+        int hits = 0;
+        int count = 0;
+        for (int yy = Math.Max(0, y - 1); yy <= Math.Min(pixels.Height - 1, y + 1); yy++)
+        {
+            for (int xx = Math.Max(0, x - 1); xx <= Math.Min(pixels.Width - 1, x + 1); xx++)
+            {
+                if (roi[xx, yy] <= 0.04)
+                {
+                    continue;
+                }
+
+                count++;
+                if (pixels.GetLuma(xx, yy) <= threshold)
+                {
+                    hits++;
+                }
+            }
+        }
+
+        return count == 0 ? 0 : hits / (double)count;
+    }
+
+    private static double GetBrowColorClusterScore(ImagePixelData pixels, int x, int y)
+    {
+        pixels.GetRgb(x, y, out byte red, out byte green, out byte blue);
+        double max = Math.Max(red, Math.Max(green, blue));
+        double min = Math.Min(red, Math.Min(green, blue));
+        double saturation = max <= 1 ? 0 : (max - min) / max;
+        double warmHair = red >= green - 12 && green >= blue - 18 ? 0.20 : 0.0;
+        return Math.Clamp((1 - pixels.GetLuma(x, y) / 255.0) * 0.70 + saturation * 0.20 + warmHair, 0, 1);
+    }
+
+    private static MaskPlane FeatherSmallMask(MaskPlane source, int radius)
+    {
+        MaskPlane result = source.Clone();
+        for (int y = 0; y < source.Height; y++)
+        {
+            for (int x = 0; x < source.Width; x++)
+            {
+                double max = source[x, y];
+                for (int yy = Math.Max(0, y - radius); yy <= Math.Min(source.Height - 1, y + radius); yy++)
+                {
+                    for (int xx = Math.Max(0, x - radius); xx <= Math.Min(source.Width - 1, x + radius); xx++)
+                    {
+                        double distance = Math.Sqrt((xx - x) * (xx - x) + (yy - y) * (yy - y));
+                        if (distance > radius + 0.001)
+                        {
+                            continue;
+                        }
+
+                        max = Math.Max(max, source[xx, yy] * (1 - distance / (radius + 1.0)));
+                    }
+                }
+
+                result[x, y] = Math.Clamp(max, 0, 1);
+            }
+        }
+
+        return result;
     }
 
     private static MaskPlane BuildMouthProtectMask(
@@ -186,38 +400,23 @@ public static class AnchorMeshFeatureMaskBuilder
             return mask;
         }
 
-        double angle = mouthFeature.AngleRad;
-        double faceUpX = -Math.Sin(angle);
-        double faceUpY = -Math.Cos(angle);
-        double centerLift = innerOnly ? mouthFeature.Height * 0.20 : mouthFeature.Height * 0.34;
-        double radiusX = Math.Clamp(mouthFeature.Width * (innerOnly ? 0.40 : 0.56), 12.0, 96.0);
-        double radiusY = Math.Clamp(Math.Max(mouthFeature.Height * (innerOnly ? 0.34 : 0.54), mouthFeature.Width * (innerOnly ? 0.050 : 0.085)), 4.0, 28.0);
-        if (!innerOnly &&
-            AddImageTemplate(
-                mask,
-                "mouth_protect.png",
-                mouthFeature.CenterX + faceUpX * centerLift,
-                mouthFeature.CenterY + faceUpY * centerLift,
-                radiusX,
-                radiusY,
-                angle,
-                opacity,
-                flipX: false))
+        if (mouthFeature.IsClosedLoop && mouthFeature.Points.Count >= 3)
         {
-            return mask;
+            return FillClosedFeature(
+                width,
+                height,
+                mouthFeature,
+                opacity,
+                innerOnly ? 1.5 : 2.6);
         }
 
-        AddTemplateShape(
-            mask,
-            mouthFeature.CenterX + faceUpX * centerLift,
-            mouthFeature.CenterY + faceUpY * centerLift,
-            radiusX,
-            radiusY,
-            angle,
+        return StrokeOpenFeature(
+            width,
+            height,
+            mouthFeature,
             opacity,
-            featherRadius: innerOnly ? 1.4 : 2.4,
-            innerOnly ? ShapeInnerMouthLine : ShapeMouthTemplate);
-        return mask;
+            GetFeatureStrokeRadius(mouthFeature, innerOnly ? 0.10 : 0.18, innerOnly ? 2.0 : 3.0, innerOnly ? 8.0 : 14.0),
+            innerOnly ? 1.4 : 2.4);
     }
 
     private static MaskPlane FillClosedFeature(int width, int height, AnchorMeshFeature? feature, double opacity, double featherRadius)
@@ -327,6 +526,200 @@ public static class AnchorMeshFeatureMaskBuilder
         AddNostrilEllipse(mask, rightPoints, noseFeature.AngleRad, radiusX, radiusY);
 
         return mask;
+    }
+
+    private static MaskPlane BuildNoseSurfaceMask(int width, int height, AnchorMeshFeature? noseFeature, MaskPlane nostrilProtectionMask, List<string> warnings)
+    {
+        MaskPlane empty = MaskPlane.Empty(width, height);
+        if (noseFeature is null || noseFeature.Points.Count == 0)
+        {
+            warnings.Add("nose_surface_mask_missing_anchors");
+            return empty;
+        }
+
+        AnchorMeshPoint[] bridgePoints = noseFeature.Points
+            .Where(point => point.Role.Contains("Bridge", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        AnchorMeshPoint[] tipPoints = noseFeature.Points
+            .Where(point => point.Role.Contains("Tip", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        AnchorMeshPoint[] wingPoints = noseFeature.Points
+            .Where(point => point.Role.Contains("Wing", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        AnchorMeshPoint[] nostrilPoints = noseFeature.Points
+            .Where(point => point.Role.Contains("Nostril", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        MaskPlane bridgeSurface = MaskPlane.Empty(width, height);
+        MaskPlane tipSurface = MaskPlane.Empty(width, height);
+        MaskPlane leftWingSurface = MaskPlane.Empty(width, height);
+        MaskPlane rightWingSurface = MaskPlane.Empty(width, height);
+        MaskPlane baseSurface = MaskPlane.Empty(width, height);
+
+        if (bridgePoints.Length > 0)
+        {
+            double bridgeCenterX = bridgePoints.Average(point => point.SnappedX);
+            double bridgeCenterY = bridgePoints.Average(point => point.SnappedY);
+            AddTemplateShape(
+                bridgeSurface,
+                bridgeCenterX,
+                bridgeCenterY,
+                Math.Clamp(noseFeature.Width * 0.22, 5.0, 26.0),
+                Math.Clamp(noseFeature.Height * 0.48, 16.0, 76.0),
+                noseFeature.AngleRad,
+                0.72,
+                featherRadius: 2.4,
+                ShapeEllipse);
+        }
+
+        if (tipPoints.Length > 0)
+        {
+            double tipCenterX = tipPoints.Average(point => point.SnappedX);
+            double tipCenterY = tipPoints.Average(point => point.SnappedY);
+            AddTemplateShape(
+                tipSurface,
+                tipCenterX,
+                tipCenterY,
+                Math.Clamp(noseFeature.Width * 0.36, 8.0, 42.0),
+                Math.Clamp(noseFeature.Height * 0.24, 8.0, 34.0),
+                noseFeature.AngleRad,
+                0.78,
+                featherRadius: 2.8,
+                ShapeEllipse);
+        }
+
+        if (wingPoints.Length > 0)
+        {
+            AddNoseWingSurface(leftWingSurface, wingPoints.Where(point => point.SnappedX <= noseFeature.CenterX).ToArray(), noseFeature, -1);
+            AddNoseWingSurface(rightWingSurface, wingPoints.Where(point => point.SnappedX > noseFeature.CenterX).ToArray(), noseFeature, 1);
+        }
+
+        AnchorMeshPoint[] basePoints = nostrilPoints.Length > 0
+            ? nostrilPoints.Concat(wingPoints).ToArray()
+            : wingPoints;
+        if (basePoints.Length > 0)
+        {
+            double baseCenterX = basePoints.Average(point => point.SnappedX);
+            double baseCenterY = basePoints.Average(point => point.SnappedY);
+            AddTemplateShape(
+                baseSurface,
+                baseCenterX,
+                baseCenterY,
+                Math.Clamp(noseFeature.Width * 0.44, 8.0, 50.0),
+                Math.Clamp(noseFeature.Height * 0.16, 5.0, 24.0),
+                noseFeature.AngleRad,
+                0.58,
+                featherRadius: 2.5,
+                ShapeEllipse);
+        }
+
+        MaskPlane surface = MaskPlane.Union(bridgeSurface, tipSurface, leftWingSurface, rightWingSurface, baseSurface);
+        ClipNoseMaskBelowBase(surface, noseFeature, nostrilPoints);
+        MaskPlane final = MaskPlane.Subtract(surface, nostrilProtectionMask);
+        double expectedMinArea = Math.Clamp(noseFeature.Width * noseFeature.Height * 0.000020, 0.00015, 0.006);
+        if (bridgeSurface.Average() <= 0.000001 || tipSurface.Average() <= 0.000001 || final.Average() < expectedMinArea)
+        {
+            warnings.Add("nose_surface_mask_area_too_small_possible_line_or_nostril_collapse");
+        }
+        else
+        {
+            warnings.Add("nose_surface_mask_area_based_bridge_tip_wings_base_nostril_excluded");
+        }
+
+        return final;
+    }
+
+    private static void AddNoseWingSurface(MaskPlane mask, IReadOnlyList<AnchorMeshPoint> wingPoints, AnchorMeshFeature noseFeature, int side)
+    {
+        if (wingPoints.Count == 0)
+        {
+            return;
+        }
+
+        double wingCenterX = wingPoints.Average(point => point.SnappedX);
+        double wingCenterY = wingPoints.Average(point => point.SnappedY);
+        double sideOffset = Math.Cos(noseFeature.AngleRad) * Math.Clamp(noseFeature.Width * 0.035, 1.0, 5.0) * side;
+        AddTemplateShape(
+            mask,
+            wingCenterX + sideOffset,
+            wingCenterY,
+            Math.Clamp(noseFeature.Width * 0.22, 5.0, 26.0),
+            Math.Clamp(noseFeature.Height * 0.22, 7.0, 32.0),
+            noseFeature.AngleRad,
+            0.70,
+            featherRadius: 2.8,
+            ShapeEllipse);
+    }
+
+    private static void ClipNoseMaskBelowBase(MaskPlane mask, AnchorMeshFeature noseFeature, IReadOnlyList<AnchorMeshPoint> nostrilPoints)
+    {
+        if (nostrilPoints.Count == 0)
+        {
+            return;
+        }
+
+        double baseY = nostrilPoints.Max(point => point.SnappedY) + Math.Clamp(noseFeature.Width * 0.10, 5.0, 16.0);
+        double feather = Math.Clamp(noseFeature.Width * 0.045, 3.0, 8.0);
+        for (int y = Math.Max(0, (int)Math.Floor(baseY)); y < mask.Height; y++)
+        {
+            double keep = 1 - SmoothStep(baseY, baseY + feather, y + 0.5);
+            if (keep <= 0)
+            {
+                for (int x = 0; x < mask.Width; x++)
+                {
+                    mask[x, y] = 0;
+                }
+                continue;
+            }
+
+            for (int x = 0; x < mask.Width; x++)
+            {
+                mask[x, y] *= keep;
+            }
+        }
+    }
+
+    private static void ClipMouthMaskByNoseMouthDistance(MaskPlane mask, AnchorMeshFeature? noseFeature, AnchorMeshFeature? mouthFeature, List<string> warnings)
+    {
+        if (noseFeature is null || mouthFeature is null || noseFeature.Points.Count == 0 || mouthFeature.Points.Count == 0)
+        {
+            return;
+        }
+
+        AnchorMeshPoint? tip = noseFeature.Points.FirstOrDefault(point => point.Role.Equals("NoseTipTriangleApex", StringComparison.OrdinalIgnoreCase))
+            ?? noseFeature.Points.FirstOrDefault(point => point.Role.Contains("Tip", StringComparison.OrdinalIgnoreCase));
+        if (tip is null)
+        {
+            return;
+        }
+
+        AnchorMeshPoint[] nostrilPoints = noseFeature.Points
+            .Where(point => point.Role.Contains("Nostril", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        double noseBaseY = nostrilPoints.Length > 0
+            ? nostrilPoints.Max(point => point.SnappedY)
+            : noseFeature.CenterY + noseFeature.Height * 0.36;
+        double noseToMouth = Math.Max(12.0, mouthFeature.CenterY - tip.SnappedY);
+        double upperMouthLimit = Math.Max(
+            noseBaseY + Math.Clamp(noseFeature.Width * 0.055, 3.0, 11.0),
+            mouthFeature.CenterY - Math.Clamp(noseToMouth * 0.34, 12.0, 34.0));
+        double feather = Math.Clamp(noseFeature.Width * 0.055, 4.0, 12.0);
+
+        for (int y = 0; y < mask.Height; y++)
+        {
+            double keep = SmoothStep(upperMouthLimit - feather, upperMouthLimit, y + 0.5);
+            if (keep >= 0.999)
+            {
+                continue;
+            }
+
+            for (int x = 0; x < mask.Width; x++)
+            {
+                mask[x, y] *= keep;
+            }
+        }
+
+        warnings.Add("mouth_mask_clipped_by_nose_mouth_distance_ratio");
     }
 
     private static void AddNostrilEllipse(MaskPlane mask, IReadOnlyList<AnchorMeshPoint> points, double angle, double radiusX, double radiusY)
@@ -460,6 +853,31 @@ public static class AnchorMeshFeatureMaskBuilder
         }
     }
 
+    private static ImagePixelData? TryCreatePixelData(BitmapSource? source, int width, int height, List<string> warnings)
+    {
+        if (source is null || source.PixelWidth != width || source.PixelHeight != height)
+        {
+            return null;
+        }
+
+        try
+        {
+            BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+                ? source
+                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            bitmap.Freeze();
+            int stride = width * 4;
+            byte[] pixels = new byte[stride * height];
+            bitmap.CopyPixels(pixels, stride, 0);
+            return new ImagePixelData(width, height, stride, pixels);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            warnings.Add("anchor_mesh_pixel_evidence_unavailable:" + ex.GetType().Name);
+            return null;
+        }
+    }
+
     private static void AddTemplateShape(
         MaskPlane mask,
         double centerX,
@@ -522,9 +940,55 @@ public static class AnchorMeshFeatureMaskBuilder
         }
     }
 
+    private sealed record ImagePixelData(int Width, int Height, int Stride, byte[] Pixels)
+    {
+        public double GetLuma(int x, int y)
+        {
+            int index = y * Stride + x * 4;
+            return Pixels[index + 2] * 0.2126 + Pixels[index + 1] * 0.7152 + Pixels[index] * 0.0722;
+        }
+
+        public void GetRgb(int x, int y, out byte red, out byte green, out byte blue)
+        {
+            int index = y * Stride + x * 4;
+            blue = Pixels[index];
+            green = Pixels[index + 1];
+            red = Pixels[index + 2];
+        }
+    }
+
     private static double ShapeEllipse(double x, double y)
     {
         return Math.Sqrt(x * x + y * y) - 1;
+    }
+
+    private static double ShapeNoseStructure(double x, double y)
+    {
+        if (y < -1.05 || y > 1.05)
+        {
+            return Math.Abs(y) - 1.05;
+        }
+
+        double yy = Math.Clamp(y, -1.0, 1.0);
+        double halfWidth;
+        if (yy < -0.35)
+        {
+            double t = (yy + 1.0) / 0.65;
+            halfWidth = 0.18 + t * 0.15;
+        }
+        else if (yy < 0.25)
+        {
+            double t = (yy + 0.35) / 0.60;
+            halfWidth = 0.30 + t * 0.20;
+        }
+        else
+        {
+            double t = (yy - 0.25) / 0.75;
+            halfWidth = 0.50 + Math.Sin(Math.Clamp(t, 0, 1) * Math.PI) * 0.25;
+        }
+
+        double verticalCap = Math.Pow(Math.Abs(yy), 2.4);
+        return Math.Max(Math.Abs(x) / Math.Max(0.001, halfWidth), verticalCap) - 1;
     }
 
     private static double ShapeEyeAlmond(double x, double y)

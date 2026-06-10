@@ -4,6 +4,16 @@ Last updated: 2026-06-10
 
 This document lists the current source-code modules at a practical level.
 
+## Program Policy
+
+PhotoRetouch is not an automatic AI face-correction program. Modules may detect landmarks, masks, ratios, and confidence values, but they must not apply visible beautification, smoothing, reshaping, resizing, moving, or asymmetry correction by themselves.
+
+Visible edits require user action through a specific slider or active tool, and only the related local region should be calculated and affected. Tabs should not precompute or apply all base corrections on open.
+
+FaceBox is only an initial detection container. It may be used for detection, rough normalization, search limits, fallback, cache/debug metadata, and landmark sanity checks, but it must not define final skin, jawline, cheek, forehead, under-eye, lip, beard, hair, tone, or visible correction masks.
+
+K-AnchorMesh final mask hierarchy: `FaceBox` is the detection container only, `K-AnchorMesh` provides landmark and anchor topology, `ComponentROI` is a bounded search area around anchors, `CandidateMask` comes from color/edge/texture/semantic evidence, `FinalMask` is fitted/clipped/feathered/confidence-checked, `ProtectionMask` is the hard exclusion area, and `CorrectionMask` is `FinalMask - ProtectionMask`.
+
 ## UI Entry
 
 Main files:
@@ -120,6 +130,12 @@ Current state:
 - Final quality is not finished.
 - HardProtect should restore original protected pixels at the end.
 - Stronger filter tuning should wait until AUTO MASK is reliable.
+- Skin smoothing is manual and slider-triggered. It must not run just because a tab opens.
+- Skin smoothing may use face skin masks, but it must never become whole-face global blur.
+- Skin smoothing must preserve pores, fine grain, age-appropriate detail, lighting, and protected features.
+- Blemish, wrinkle, dark-circle, shine, beard, makeup, and texture restoration behavior should remain separated instead of being hidden inside one broad smoothing pass.
+- Skin color/body color balance is also manual-control only. It must not whiten automatically, exact-match every skin region, or run on tab open.
+- Tone matching should use clean reference skin, preserve makeup and lighting direction, and harmonize face/neck/body only partially.
 
 ## ShapeBalance
 
@@ -161,6 +177,7 @@ Purpose:
 - Provide 2.5D face-structure reference data.
 - Estimate roll/yaw-like/pitch-like face direction.
 - Build reference points for eyes, brows, nose, mouth, chin, jawline, and face outline.
+- Measure practical face ratios for eyes, nose, mouth, lips, brows, philtrum, chin, whole-face proportion, and face-shape safety guidance as described in `docs/FACE_RATIO_GUIDES.md`.
 - Provide handle groups, falloff regions, locked points, and weak morph groups for future user-controlled shape tools.
 
 Current state:
@@ -169,17 +186,54 @@ Current state:
 - It is not a finished pixel liquify solver.
 - It is not a panel/tab UI feature yet.
 - It should be treated as a measurement, guide, and handle-generation layer.
+- Face shape analysis is for contour understanding, confidence, occlusion handling, protection masks, and manual tool safe limits; it must not reshape by itself.
 - Existing ShapeBalance remains the active geometry application path.
 
 Rules:
 
 - Do not use K-AnchorMesh as automatic beautification.
 - Do not force symmetry or oval face automatically.
+- Do not force ratio-guide values automatically.
+- Component masks must be positioned from the best available snapped landmark or AnchorMesh feature point; face-box percentage tables are fallback ROI and sanity guides only.
+- FaceBox must not drive editable regions after landmarks and fitted masks are available.
+- No visible correction can be driven by FaceBox; all visible correction must be driven by anchored local masks and user controls.
+- Eyebrow masks must not be a simple `browHead -> browTail` line segment. Brow head/arch/tail points are anchors for a local ROI; the final `EyebrowMask` should be fitted from dark hair texture, eyebrow directionality, local connectivity, and brow-color clustering inside that ROI.
+- Eyebrow ROI placement must be constrained by eye-to-brow distance and side-offset ratio guards. Do not fix eyebrow masks by absolute coordinates.
+- Nose masks must represent bridge, tip, wings, and base skin as area-based surface masks. `NoseStructureGuide` lines are geometry guides only; nostril dark regions are separate hard protection masks and must not become the whole `NoseMask`.
+- Lip and inner-mouth masks must respect nose-to-mouth proximity ratios and be clipped away from nostrils and nose base before final protection masks are produced.
+- Mouth topology must be mouth-corner based. Closed mouth is one horizontal almond loop; open mouth is upper and lower almond surface loops sharing the same left/right mouth-corner anchors with an `InnerMouthProtectionLoop` between them. Do not use two independent circles or a mouth-center radius mask.
+- K-AnchorMesh topology must connect points into explicit edge types: anchor, boundary, surface, protection, measurement, structural, and morph-control edges. Edges are used for direction, distance, width, ratio, surface-loop candidates, protection boundaries, and confidence checks.
+- Topology edges are not final masks. Surface loops create candidate areas only; final masks must still be fitted from pixel evidence inside anchor-based ROIs and clipped by protection masks.
 - Do not replace SkinRetouch with geometry warp.
 - User controls must remain the final authority.
 - Mesh movement preview should happen before pixel warp.
 - Image pixels and masks must be warped together only when an explicit geometry tool is active.
 - Future solver work should start with limited ROI, safe zones, and screen-sized preview.
+
+## Hair And Flyaway Cleanup
+
+Current state:
+
+- Hair and flyaway cleanup are design-level policies only.
+- A future flyaway filter must be user-controlled by slider or explicit cleanup tool.
+- It must remove or soften only distracting isolated strands with high confidence.
+- It must preserve hairline, baby hair, hairstyle, hair volume, eyelashes, eyebrows, beard, mustache, skin texture, and background.
+- It must use strand masks, protection overlaps, and restoration confidence before visible cleanup.
+- It must not run automatically when a tab opens.
+
+## Beard And Shaving Shadow Cleanup
+
+Current state:
+
+- Beard, mustache, sideburn, long beard, stubble, and shaving-shadow cleanup are design-level policies only.
+- Beard/facial hair is protected by default and is not a blemish or skin texture defect.
+- Beard landmarks are not expected from face landmark models; future beard points must be virtual estimates from beard masks, hair texture, color separation, and face anchors.
+- Beard decision order is: classify as hair first, split mustache/chin/jaw/cheek/neck/sideburn/long beard, estimate virtual points from `beardMask`, lower jaw/lip/neck confidence where beard overlaps, and protect by default.
+- A future beard cleanup filter must be user-controlled by an explicit beard/shaving cleanup slider or tool.
+- It must separate intentional beard, mustache, sideburn, long beard, stubble dots, shaving shadow, razor redness, ingrown hair, acne, pigmentation, wrinkles, lips, jawline, neck wrinkles, and under-jaw shadow before correction.
+- Skin smoothing and blemish filters must not remove beard dots or blur beard texture as normal skin.
+- Jawline tools must not use beard edge as true jaw contour unless confidence is high; long beard should reduce jaw/neck/under-jaw confidence.
+- Jawline, lips, nostrils, neck wrinkles, clothing, background, and under-jaw shadow remain protected.
 
 ## Debug And Reports
 

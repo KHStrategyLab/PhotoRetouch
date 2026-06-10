@@ -230,12 +230,24 @@ public sealed class AnchorMeshDebugOverlayRenderer
 
             MediaColor color = edge.Kind switch
             {
+                AnchorMeshEdgeKind.Anchor => MediaColor.FromArgb(175, 255, 210, 80),
                 AnchorMeshEdgeKind.Contour => MediaColor.FromArgb(115, 255, 255, 255),
-                AnchorMeshEdgeKind.Structural => MediaColor.FromArgb(165, 220, 220, 225),
+                AnchorMeshEdgeKind.Boundary => MediaColor.FromArgb(135, 120, 210, 255),
+                AnchorMeshEdgeKind.Surface => MediaColor.FromArgb(125, 80, 245, 150),
+                AnchorMeshEdgeKind.Protection => MediaColor.FromArgb(185, 255, 85, 95),
+                AnchorMeshEdgeKind.Measurement => MediaColor.FromArgb(115, 220, 220, 225),
+                AnchorMeshEdgeKind.Structural => MediaColor.FromArgb(150, 220, 220, 225),
                 AnchorMeshEdgeKind.MorphControl => MediaColor.FromArgb(210, 185, 105, 255),
                 _ => MediaColor.FromArgb(125, 255, 255, 255)
             };
-            double thickness = edge.Kind == AnchorMeshEdgeKind.MorphControl ? 2.2 : 1.2;
+            double thickness = edge.Kind switch
+            {
+                AnchorMeshEdgeKind.MorphControl => 2.2,
+                AnchorMeshEdgeKind.Protection => 1.8,
+                AnchorMeshEdgeKind.Anchor => 1.6,
+                AnchorMeshEdgeKind.Surface => 1.4,
+                _ => 1.1
+            };
             MediaPen pen = new(new MediaSolidColorBrush(color), thickness);
             context.DrawLine(pen, new WpfPoint(from.SnappedX, from.SnappedY), new WpfPoint(to.SnappedX, to.SnappedY));
         }
