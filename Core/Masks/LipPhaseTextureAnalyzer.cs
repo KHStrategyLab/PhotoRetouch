@@ -132,7 +132,7 @@ public static class LipPhaseTextureAnalyzer
                 double secondLine = 0;
                 for (int i = 0; i < lineOrientations.Length; i++)
                 {
-                    double response = GetMultiScaleLineResponse(pixels, width, height, stride, x, y, lineOrientations[i]);
+                    double response = TextureFlowAnalyzer.GetMultiScaleLineResponse(pixels, width, height, stride, x, y, lineOrientations[i]);
                     if (response > bestLine)
                     {
                         secondLine = bestLine;
@@ -144,13 +144,13 @@ public static class LipPhaseTextureAnalyzer
                     }
                 }
 
-                double horizontalSuppression = GetMultiScaleLineResponse(pixels, width, height, stride, x, y, mouthAxis);
+                double horizontalSuppression = TextureFlowAnalyzer.GetMultiScaleLineResponse(pixels, width, height, stride, x, y, mouthAxis);
                 double lineResponse = Math.Clamp(bestLine * (1 - horizontalSuppression * 0.35), 0, 1);
                 double coherence = bestLine <= 0.0001 ? 0 : Math.Clamp((bestLine - secondLine) / bestLine, 0, 1);
-                double luminance = GetLuminance(pixels, stride, x, y) / 255.0;
-                double localMean = GetLocalMeanLuma(pixels, width, height, stride, x, y, 3) / 255.0;
-                double localVariance = GetLocalVarianceLuma(pixels, width, height, stride, x, y, 2);
-                double sharpness = GetSharpness(pixels, width, height, stride, x, y);
+                double luminance = TextureFlowAnalyzer.GetLuminance(pixels, stride, x, y) / 255.0;
+                double localMean = TextureFlowAnalyzer.GetLocalMeanLuma(pixels, width, height, stride, x, y, 3) / 255.0;
+                double localVariance = TextureFlowAnalyzer.GetLocalVarianceLuma(pixels, width, height, stride, x, y, 2);
+                double sharpness = TextureFlowAnalyzer.GetSharpness(pixels, width, height, stride, x, y);
                 double darkSplit = Math.Clamp((localMean - luminance) * 2.7, 0, 1);
                 double brightFlake = Math.Clamp((luminance - localMean) * 3.2, 0, 1);
                 double crack = Math.Clamp(lineResponse * (0.55 + coherence * 0.45) * (darkSplit * 0.70 + sharpness * 0.30), 0, 1);
@@ -501,34 +501,6 @@ public static class LipPhaseTextureAnalyzer
         return 0.5 * Math.Atan2(2 * covXY, covXX - covYY);
     }
 
-    private static double GetMultiScaleLineResponse(byte[] pixels, int width, int height, int stride, int x, int y, double lineAngle)
-    {
-        double response = 0;
-        int[] radii = [1, 2, 4];
-        foreach (int radius in radii)
-        {
-            response = Math.Max(response, GetLineResponse(pixels, width, height, stride, x, y, lineAngle, radius));
-        }
-
-        return response;
-    }
-
-    private static double GetLineResponse(byte[] pixels, int width, int height, int stride, int x, int y, double lineAngle, int radius)
-    {
-        double lineX = Math.Cos(lineAngle);
-        double lineY = Math.Sin(lineAngle);
-        double crossX = -lineY;
-        double crossY = lineX;
-        double center = GetLuminance(pixels, stride, x, y);
-        double crossA = SampleLuma(pixels, width, height, stride, x + crossX * radius, y + crossY * radius);
-        double crossB = SampleLuma(pixels, width, height, stride, x - crossX * radius, y - crossY * radius);
-        double lineA = SampleLuma(pixels, width, height, stride, x + lineX * radius, y + lineY * radius);
-        double lineB = SampleLuma(pixels, width, height, stride, x - lineX * radius, y - lineY * radius);
-        double crossContrast = Math.Abs(center - (crossA + crossB) * 0.5) / 255.0;
-        double alongChange = Math.Abs(lineA - lineB) / 255.0;
-        return Math.Clamp(crossContrast * (1 - alongChange * 0.55), 0, 1);
-    }
-
     private static void BuildBorderClarityMap(MaskPlane outerLipMask, MaskPlane lipSurface, byte[] pixels, int width, int height, int stride, MaskPlane target)
     {
         for (int y = 1; y < height - 1; y++)
@@ -559,7 +531,7 @@ public static class LipPhaseTextureAnalyzer
                     continue;
                 }
 
-                target[x, y] = GetSharpness(pixels, width, height, stride, x, y);
+                target[x, y] = TextureFlowAnalyzer.GetSharpness(pixels, width, height, stride, x, y);
             }
         }
     }
@@ -587,60 +559,6 @@ public static class LipPhaseTextureAnalyzer
         }
 
         return new LipBounds(left, top, right, bottom);
-    }
-
-    private static double GetSharpness(byte[] pixels, int width, int height, int stride, int x, int y)
-    {
-        double gx = Math.Abs(GetLuminance(pixels, stride, Math.Min(width - 1, x + 1), y) - GetLuminance(pixels, stride, Math.Max(0, x - 1), y));
-        double gy = Math.Abs(GetLuminance(pixels, stride, x, Math.Min(height - 1, y + 1)) - GetLuminance(pixels, stride, x, Math.Max(0, y - 1)));
-        return Math.Clamp(Math.Sqrt(gx * gx + gy * gy) / 255.0, 0, 1);
-    }
-
-    private static double GetLocalMeanLuma(byte[] pixels, int width, int height, int stride, int x, int y, int radius)
-    {
-        double sum = 0;
-        int count = 0;
-        for (int yy = Math.Max(0, y - radius); yy <= Math.Min(height - 1, y + radius); yy++)
-        {
-            for (int xx = Math.Max(0, x - radius); xx <= Math.Min(width - 1, x + radius); xx++)
-            {
-                sum += GetLuminance(pixels, stride, xx, yy);
-                count++;
-            }
-        }
-
-        return count == 0 ? GetLuminance(pixels, stride, x, y) : sum / count;
-    }
-
-    private static double GetLocalVarianceLuma(byte[] pixels, int width, int height, int stride, int x, int y, int radius)
-    {
-        double mean = GetLocalMeanLuma(pixels, width, height, stride, x, y, radius);
-        double sum = 0;
-        int count = 0;
-        for (int yy = Math.Max(0, y - radius); yy <= Math.Min(height - 1, y + radius); yy++)
-        {
-            for (int xx = Math.Max(0, x - radius); xx <= Math.Min(width - 1, x + radius); xx++)
-            {
-                double delta = GetLuminance(pixels, stride, xx, yy) - mean;
-                sum += delta * delta;
-                count++;
-            }
-        }
-
-        return count == 0 ? 0 : Math.Clamp(Math.Sqrt(sum / count) / 64.0, 0, 1);
-    }
-
-    private static double SampleLuma(byte[] pixels, int width, int height, int stride, double x, double y)
-    {
-        int ix = Math.Clamp((int)Math.Round(x), 0, width - 1);
-        int iy = Math.Clamp((int)Math.Round(y), 0, height - 1);
-        return GetLuminance(pixels, stride, ix, iy);
-    }
-
-    private static double GetLuminance(byte[] pixels, int stride, int x, int y)
-    {
-        int index = y * stride + x * 4;
-        return pixels[index + 2] * 0.299 + pixels[index + 1] * 0.587 + pixels[index] * 0.114;
     }
 
     private static double AverageMasked(MaskPlane values, MaskPlane mask)

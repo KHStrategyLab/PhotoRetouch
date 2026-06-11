@@ -46,11 +46,28 @@ public sealed class AnchorMeshDebugOverlayRenderer
             context.DrawImage(source, new WpfRect(0, 0, width, height));
             DrawFitBoxes(context, result);
             DrawEyeCenterAxisGuide(context, result, width);
+            DrawEyeCenterCrossTicks(context, result);
             DrawEyeCenterPerpendicularGuide(context, result, width, height);
             DrawJawStartGuide(context, result, width);
             DrawFirstDarkThickSegmentGuide(context, source, result, height);
+            DrawPrimaryFeatureSketches(context, result.Features, 1.0, 1.0);
             DrawFeatures(context, result.Features, 1.0, 1.0);
             DrawLabel(context, "K-AnchorMesh snapped");
+        }
+
+        SaveVisual(path, visual, width, height);
+    }
+
+    public void SavePrimarySketchOverlay(BitmapSource source, AnchorMeshResult result, string path)
+    {
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        DrawingVisual visual = new();
+        using (DrawingContext context = visual.RenderOpen())
+        {
+            context.DrawImage(source, new WpfRect(0, 0, width, height));
+            DrawPrimaryFeatureSketches(context, result.Features, 1.0, 1.0);
+            DrawLabel(context, "K-AnchorMesh sketch");
         }
 
         SaveVisual(path, visual, width, height);
@@ -66,10 +83,12 @@ public sealed class AnchorMeshDebugOverlayRenderer
             context.DrawImage(source, new WpfRect(0, 0, width, height));
             DrawFitBoxes(context, result);
             DrawEyeCenterAxisGuide(context, result, width);
+            DrawEyeCenterCrossTicks(context, result);
             DrawEyeCenterPerpendicularGuide(context, result, width, height);
             DrawJawStartGuide(context, result, width);
             DrawFirstDarkThickSegmentGuide(context, source, result, height);
             DrawTopologyEdges(context, result.Features, result.TopologyEdges);
+            DrawPrimaryFeatureSketches(context, result.Features, 1.0, 1.0);
             DrawFeatures(context, result.Features, 1.0, 1.0);
             DrawLabel(context, "K-AnchorMesh topology");
         }
@@ -267,6 +286,29 @@ public sealed class AnchorMeshDebugOverlayRenderer
         context.DrawLine(shadowPen, start, end);
         context.DrawLine(guidePen, start, end);
         context.DrawEllipse(guideBrush, null, center, 4.2, 4.2);
+    }
+
+    private static void DrawEyeCenterCrossTicks(DrawingContext context, AnchorMeshResult result)
+    {
+        if (!TryGetEyeAxisGuidePoints(result, out WpfPoint leftGuide, out WpfPoint rightGuide) ||
+            !TryGetEyeAxisDownVector(result, out float downX, out float downY))
+        {
+            return;
+        }
+
+        const double tickLength = 25.0;
+        const double tickHalfLength = tickLength * 0.5;
+        MediaPen tickPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105)), 2.0);
+
+        DrawPerpendicularTick(context, tickPen, leftGuide, downX, downY, tickHalfLength);
+        DrawPerpendicularTick(context, tickPen, rightGuide, downX, downY, tickHalfLength);
+    }
+
+    private static void DrawPerpendicularTick(DrawingContext context, MediaPen pen, WpfPoint center, float axisX, float axisY, double halfLength)
+    {
+        WpfPoint start = new(center.X - axisX * halfLength, center.Y - axisY * halfLength);
+        WpfPoint end = new(center.X + axisX * halfLength, center.Y + axisY * halfLength);
+        context.DrawLine(pen, start, end);
     }
 
     private static bool TryGetEyeAxisDownVector(AnchorMeshResult result, out float downX, out float downY)
@@ -569,6 +611,7 @@ public sealed class AnchorMeshDebugOverlayRenderer
             DrawFitBoxes(context, result);
             DrawGhostFeatures(context, result.YuNetAlignedFeatures);
             DrawSnapVectors(context, result.YuNetAlignedFeatures, result.Features);
+            DrawPrimaryFeatureSketches(context, result.Features, 1.0, 1.0);
             DrawFeatures(context, result.Features, 1.0, 1.0);
             DrawLabel(context, "aligned gray + snapped color");
         }
@@ -587,6 +630,7 @@ public sealed class AnchorMeshDebugOverlayRenderer
         using (DrawingContext context = visual.RenderOpen())
         {
             context.DrawImage(source, new WpfRect(0, 0, width, height));
+            DrawPrimaryFeatureSketches(context, features, 1.0, 1.0);
             DrawFeatures(context, features, 1.0, 1.0);
             DrawLabel(context, label);
         }
@@ -655,6 +699,23 @@ public sealed class AnchorMeshDebugOverlayRenderer
                 WpfPoint p = new(point.SnappedX * scaleX, point.SnappedY * scaleY);
                 context.DrawEllipse(pointBrush, null, p, radius, radius);
             }
+        }
+    }
+
+    private static void DrawPrimaryFeatureSketches(DrawingContext context, AnchorMeshFeatureSet features, double scaleX, double scaleY)
+    {
+        foreach (AnchorMeshFeature feature in features.GetAll())
+        {
+            if (feature.Points.Count == 0 || !IsPrimarySketchFeature(feature.Name))
+            {
+                continue;
+            }
+
+            MediaColor baseColor = GetFeatureColor(feature.Name);
+            MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(150, 0, 0, 0)), GetPrimarySketchStroke(feature.Name) + 1.8);
+            MediaPen sketchPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(235, baseColor.R, baseColor.G, baseColor.B)), GetPrimarySketchStroke(feature.Name));
+            DrawFeatureLines(context, feature, shadowPen, scaleX, scaleY);
+            DrawFeatureLines(context, feature, sketchPen, scaleX, scaleY);
         }
     }
 
@@ -803,6 +864,18 @@ public sealed class AnchorMeshDebugOverlayRenderer
         }
     }
 
+    private static bool IsPrimarySketchFeature(string featureName)
+    {
+        return featureName is
+            "LeftEye" or
+            "RightEye" or
+            "LeftBrow" or
+            "RightBrow" or
+            "Nose" or
+            "LipOuter" or
+            "LipInner";
+    }
+
     private static void DrawLabel(DrawingContext context, string label)
     {
         FormattedText text = new(
@@ -840,6 +913,18 @@ public sealed class AnchorMeshDebugOverlayRenderer
         return featureName is "FaceOutline" or "LipOuter" ? 2.2 :
             featureName is "LeftPupil" or "RightPupil" ? 1.2 :
             1.6;
+    }
+
+    private static double GetPrimarySketchStroke(string featureName)
+    {
+        return featureName switch
+        {
+            "Nose" => 2.8,
+            "LipOuter" => 2.6,
+            "LipInner" => 2.2,
+            "LeftBrow" or "RightBrow" => 2.4,
+            _ => 2.3
+        };
     }
 
     private static void SaveVisual(string path, DrawingVisual visual, int width, int height)

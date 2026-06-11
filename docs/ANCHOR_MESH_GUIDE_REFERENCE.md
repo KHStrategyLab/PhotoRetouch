@@ -154,6 +154,36 @@ Guide inputs:
 - FaceTiltAngle from pupil center baseline
 - Optional validation angle from pupil/iris lower baseline
 
+Position guide:
+
+- Brow head usually starts near the line from the nose wing through the inner eye corner.
+- Brow peak usually sits around the line from the nose wing through the outer iris edge.
+- Brow tail usually ends near the line from the nose wing through the outer eye corner.
+- A natural peak often appears around the outer `2/3` zone of the brow length.
+- Do not force exact face-template symmetry. Use these lines as soft guide rules only.
+
+Hair-mass guide:
+
+- The brow should read as a hair mass, not as a flat dark sticker.
+- The front is usually thicker and fuller.
+- The middle body carries most of the main flow and density.
+- The tail usually becomes thinner, lighter, and more tapered.
+- Let some skin show through when the real brow is sparse.
+
+Hair-direction guide:
+
+- Front hairs often rise almost upward from below to above.
+- Mid-brow upper hairs often lean downward while lower hairs lean upward toward a soft center flow.
+- Tail hairs usually flow outward and slightly downward with a tapered finish.
+- Use this as a directional validation guide, not as a painted synthetic stroke pattern.
+
+Variation guide:
+
+- Male brows may sit slightly closer to the eye, look straighter, denser, and rougher.
+- Female brows may read softer, cleaner, and more arched.
+- Dense brows may keep small stray hairs and irregular edges.
+- Sparse brows should not be filled into a heavy solid block without evidence.
+
 Guide structure:
 
 - `BrowCenterlineGuide`
@@ -233,6 +263,7 @@ Wider guide width:
 - Brow guide width should be about 1.15 to 1.45 * EyeWidth.
 - Brow head may start slightly inside the inner eye corner or extend outside it by about 0.05 to 0.20 * EyeWidth.
 - Brow tail may extend beyond the outer eye corner by about 0.15 to 0.35 * EyeWidth.
+- In the current eyebrow analyzer, this head-start rule is applied first as a soft clamp around the inner eye corner. The nose-wing line stays a guide rule until nose anchors are wired directly into the eyebrow input.
 
 Brow peak guide:
 
@@ -269,6 +300,134 @@ The detector must use:
 - brow-like shape ratio
 - eye-based distance ratio
 - face/eye tilt angle
+
+## Nose / Nostril Guide
+
+Define the nose as a mid-face 3D structure, not as a single center line.
+
+For anchor and guide work, split the nose into:
+
+- `noseRoot`
+- `noseBridgeTop`
+- `noseBridgeMid`
+- `noseBridgeLower`
+- `noseTip`
+- `noseLeftWing`
+- `noseRightWing`
+- `noseBaseCenter`
+- `nostrilLeft`
+- `nostrilRight`
+
+Face-scale guide:
+
+- The nose usually occupies about the middle `1/3` of face height.
+- The alar width usually sits near the central `1/5` zone of face width.
+- Nose width is commonly similar to the intercanthal width, but do not force exact equality when pose, age, or expression changes it.
+
+Shape guide:
+
+- Think of the bridge as a long block or plane, not a hard drawn line.
+- Think of the tip as the main central bulb volume.
+- Think of the left and right wings as separate side volumes.
+- Use light and shadow planes for the bridge and sidewalls instead of drawing two dark straight nose lines.
+
+Nostril guide:
+
+- A nostril is a tilted breathing opening under the tip and inside the wing, not a flat black circle.
+- Depending on view angle, the opening may read closer to a bean-like, teardrop-like, or soft oblique oval cavity.
+- The darkest tone belongs only to the deepest inner pocket.
+- The outer edge toward the wing should usually open out with softer tone and reflected light.
+
+Detection rule:
+
+- Detect left and right nostrils separately.
+- Do not place nostrils only from total nose width.
+- Start from local wing and base anchors, then fit each nostril opening from its own local dark cavity candidate.
+- If one nostril is more visible because of pose, allow left-right size and height difference before calling it an error.
+
+Mask rule:
+
+- `NoseMask` should be surface-based: bridge + tip + left wing + right wing + base.
+- `NostrilMask` should protect the left and right nostril openings as separate cavities.
+- Do not let the nostril dark spots become the whole nose mask.
+
+## Philtrum Guide
+
+Define the philtrum as the soft vertical groove from the nose base to the upper-lip center.
+
+It is not a hard drawn line.
+It is a small surface structure made of:
+
+- `philtrumCenterGroove`
+- `leftPhiltrumRidge`
+- `rightPhiltrumRidge`
+- `noseBaseCenter`
+- `upperLipTopCenter`
+
+Shape guide:
+
+- The philtrum usually starts narrow below the columella and opens slightly wider toward the cupid bow.
+- A soft trapezoid reading is usually more natural than two straight parallel lines.
+- The center groove is recessed.
+- The left and right ridges are gently raised.
+
+Drawing and detection guide:
+
+- Do not draw the philtrum as two dark lines.
+- Use tone difference and shallow surface change instead of hard line contrast.
+- The upper philtrum is often darker because of nose shadow.
+- The lower philtrum near the upper lip is often slightly brighter.
+- In side or near-side view, allow a soft `C`-curve flow from under the nose toward the upper lip instead of forcing a straight vertical segment.
+- The philtrum often reads with a mostly vertical or slightly fanned surface flow, while the nearby upper-lip skin shifts into a rounder mouth-wrapping flow.
+- If color contrast is weak, use this texture-direction change between philtrum groove/ridges and upper-lip surface as a boundary clue.
+
+Protection and mask rule:
+
+- Treat the philtrum as a structure guide and local ROI, not as an aggressive correction target.
+- Philtrum correction should stay subtle.
+- If mustache, shaving shadow, nostril shadow, or lip-boundary uncertainty is strong, lower confidence and protect wider.
+- Mouth masks should not climb into the philtrum zone above the upper-lip boundary.
+
+## Lip Guide
+
+Define the lips as soft volume cushions, not as one flat painted strip.
+
+Main structure:
+
+- upper lip
+- lower lip
+- cupid bow
+- lip center line
+- left mouth corner
+- right mouth corner
+
+Volume guide:
+
+- The upper lip often reads as three soft cushions.
+- The lower lip often reads as two larger cushions.
+- A useful guide is to think of five soft oval pads meeting together.
+- The lower lip is usually slightly fuller than the upper lip.
+
+Drawing and detection guide:
+
+- Do not draw a hard outer contour around the lips.
+- Use color and tone difference for the vermilion border instead of a cartoon-like line.
+- The center line between upper and lower lips is usually the sharpest structure.
+- Mouth corners should close inward softly instead of ending as blunt line tips.
+- Under common top lighting, the upper lip tends to read darker and the lower lip tends to read brighter.
+- Lip boundary detection must not depend on color alone.
+- If lip color is weak, faded, or close to surrounding skin, compare texture direction and tissue flow.
+- Lip surface texture often shows fine vertical or slightly curved line flow.
+- Philtrum texture above the lip usually reads as a center groove with left/right ridges and a more vertical surface flow.
+- Perioral skin around the mouth usually follows a round orbicular flow wrapping around the lips.
+- Skin below the lower lip and toward the chin usually transitions into a softer downward or rounded chin-surface flow.
+- Use these flow changes as soft boundary clues between lip, philtrum, upper perioral skin, and lower-lip-to-chin skin when color evidence is weak.
+
+Mask rule:
+
+- `LipMask` should follow upper and lower lip surface loops, not only the lip center line.
+- `InnerMouthMask` stays inside and should be subtracted softly from the lip surface.
+- Keep lip corners connected so the mouth does not look cut off at both ends.
 
 Darkness rule:
 

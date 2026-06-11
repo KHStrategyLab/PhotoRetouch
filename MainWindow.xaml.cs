@@ -1855,6 +1855,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 snapshot.Masks.RetouchAllowMask);
             AnchorMeshDebugOverlayRenderer renderer = new();
             renderer.SaveSnappedOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_overlay.png"));
+            renderer.SavePrimarySketchOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_sketch_overlay.png"));
+            renderer.SavePrimarySketchOverlay(source, anchorMesh, Path.Combine(outputDirectory, "debug_anchor_mesh_sketch_overlay_FORCE.png"));
             DeleteDebugFileIfExists(outputDirectory, "debug_anchor_mesh_topology.png");
 
         }
@@ -5935,11 +5937,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             if (IsAutoAiMaskPreviewSection(expandedSection))
             {
-                if (!TryShowCachedAutoAiMaskPreviewForCurrentPhoto())
-                {
-                    _ = PrepareEditingForSelectedPhotoAsync(photo, expandedSection);
-                    _ = RefreshAutoAiMaskPreviewAsync();
-                }
+                TryShowCachedAutoAiMaskPreviewForCurrentPhoto();
+                _pendingAutoAiMaskSaveOnComplete = true;
+                _ = PrepareEditingForSelectedPhotoAsync(photo, expandedSection);
+                _ = RefreshAutoAiMaskPreviewAsync();
             }
             else
             {

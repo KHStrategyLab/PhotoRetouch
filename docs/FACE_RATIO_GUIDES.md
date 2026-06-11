@@ -123,6 +123,9 @@ Not every AI model provides every point directly. If a point is unavailable, est
 - `nostrilLeft`, `nostrilRight`
 - `noseCenterX`: nose center x-axis, often derived from nose wings.
 - `noseW`: width between `noseLeftWing` and `noseRightWing`.
+- Treat the nose as bridge planes + tip bulb + left/right wing volumes + base, not as a single center line.
+- Detect `nostrilLeft` and `nostrilRight` separately as local dark openings under the tip and inside each wing.
+- Do not define nostrils as identical black circles from total nose width only.
 
 ### Mouth
 
@@ -144,6 +147,9 @@ Not every AI model provides every point directly. If a point is unavailable, est
 - `lipTextureMask`
 - `lipCrackMask`
 - `lipPeelingMask`
+- Treat lips as upper/lower soft volume pads, not as a single flat strip.
+- The lower lip is usually a little fuller than the upper lip.
+- Keep mouth corners softly connected inward instead of ending them as hard cut line tips.
 
 ### Philtrum
 
@@ -152,6 +158,8 @@ Not every AI model provides every point directly. If a point is unavailable, est
 - `philtrumBottom`: near `upperLipTopCenter`.
 - `leftPhiltrumRidge`, `rightPhiltrumRidge`
 - `philtrumMask`: skin region between nose base and upper lip.
+- Treat the philtrum as a center groove with two soft ridges, not as two hard lines.
+- Philtrum guidance should help ROI placement and protection, not force a visible deep groove.
 
 ### Cheeks
 
@@ -236,12 +244,27 @@ Not every AI model provides every point directly. If a point is unavailable, est
 - `foreheadWrinkleMask`
 - `foreheadShineMask`
 
+Forehead surface-flow guide:
+
+- Forehead texture and tone should not be read as one flat panel.
+- The frontalis flow is largely vertical from brow area toward the hairline, while the skull volume still rolls sideward into the temples.
+- A useful reading is vertical lift plus soft horizontal skull curvature.
+- Forehead center often keeps the clearest broad plane.
+- Toward the temples, the surface usually wraps away and should be treated as a side plane rather than the same front plane.
+
 ### Glabella
 
 - `glabella`: center region between eyebrows above nose root.
 - `glabellaMask`
 - `glabellaWrinkleMask`
 - `glabellaShadowMask`
+
+Glabella surface-flow guide:
+
+- The glabella is not just a dark spot between the brows.
+- Its pull often gathers from the brow heads toward the center and slightly downward.
+- If expression is present, read it as a narrow compressed valley with adjacent raised planes, not as a single black line.
+- Use brow-head-to-center convergence, tone compression, and small ridge/valley contrast as structure clues.
 
 ### Hair
 
@@ -1067,6 +1090,14 @@ Weak jaw-neck separation can make the lower face look heavy or square. Strong sh
 
 Under-jaw shadow metrics define the shadow below the chin, the jaw-neck boundary, the submental area, lower-jaw shadow, double-chin shadow, and neck-transition shadow. This is a tone/shadow cleanup module, not a jaw-shape module.
 
+Jawline and under-chin surface-flow guide:
+
+- Jawline should be read as a hard turning edge between side face and under-jaw plane, not as one painted contour stroke.
+- The side face often falls more vertically toward the jaw edge, while the under-chin plane turns inward and backward toward the neck.
+- Under-chin tone usually groups into a broader darker mass because it receives less direct light.
+- Keep the separation between jaw brightness above and under-chin depth below, but avoid carving a fake cutout edge.
+- Neck transition can follow a broad cylindrical wrap; do not flatten chin and neck into one plane.
+
 Core rules:
 
 - Under-jaw shadow is not always a defect.
@@ -1291,6 +1322,14 @@ Before cheekbone analysis:
 - Reduce confidence for yaw, pitch, smile, hair overlap, beard overlap, directional shadow, strong makeup contour, crop, low resolution, blur, unstable face segmentation, or overexposed cheek.
 
 Cheekbone width changes strongly with yaw. Smile raises cheek volume. Makeup contour can mimic cheek hollow. Directional lighting can make one cheek look larger.
+
+Cheek and cheekbone surface-flow guide:
+
+- Zygoma and cheek should be read as different but connected flows.
+- Cheekbone flow often runs from the outer under-eye area toward the mouth corner on a diagonal support.
+- Mid-cheek flow is softer, rounder, and more cushion-like than the firmer zygoma plane.
+- Cheek texture and tone should usually wrap in larger curved surface arcs rather than straight bands.
+- Distinguish highlight on the cheekbone, soft cheek body, cheek hollow, and cheek-to-jaw transition before deciding any boundary or correction.
 
 ### Cheekbone Regions
 
@@ -2086,9 +2125,10 @@ Eyebrow detection must be orbit-guided:
 
 - Estimate `orbitalCenter` from `eyeCenter` and `irisCenter`/`pupilCenter` when available.
 - Use `eyeW = distance(eyeInner, eyeOuter)` and `eyeH = distance(eyeUpperMid, eyeLowerMid)` as the local size basis.
-- Build a soft upper orbital arc above `eyeUpperMid`; practical search range is roughly `0.60 ~ 2.20 * eyeH` above the upper eyelid with a face-ratio safety band.
-- Brow candidates should be slightly wider than the visible eye, usually `0.90 ~ 1.50 * eyeW`, and should sit near the upper orbital arc rather than in a full face box.
+- Build a soft upper orbital arc above `eyeUpperMid`; practical search range is roughly `0.25 ~ 1.60 * eyeH` above the upper eyelid with a face-ratio safety band.
+- Brow candidates should be slightly wider than the visible eye, usually `1.15 ~ 1.45 * eyeW`, and should sit near the upper orbital arc rather than in a full face box.
 - Reject candidates that are too close to the eyelid, too high in the forehead, only a thin floating line, mostly eyelash/eyelid shadow, or lacking hair-like texture.
+- Use the nose wing to inner corner, outer iris edge, and outer corner lines as soft head / arch / tail placement guides, not as forced beauty-template lines.
 
 ### Brow Anchors
 
@@ -2141,9 +2181,9 @@ Low brow-eye ratio can look heavier, serious, tired, or masculine. High brow-eye
 
 ### Brow Width And Tail
 
-- `BrowWidthEyeWidthRatio = avgBrowW / avgEyeW`: `1.05 ~ 1.35`
-- `LeftBrowWidthEyeRatio = leftBrowW / leftEyeW`: `1.05 ~ 1.35`
-- `RightBrowWidthEyeRatio = rightBrowW / rightEyeW`: `1.05 ~ 1.35`
+- `BrowWidthEyeWidthRatio = avgBrowW / avgEyeW`: `0.95 ~ 1.40`
+- `LeftBrowWidthEyeRatio = leftBrowW / leftEyeW`: `0.95 ~ 1.40`
+- `RightBrowWidthEyeRatio = rightBrowW / rightEyeW`: `0.95 ~ 1.40`
 - `BrowWidthFaceRatio = avgBrowW / faceW`: `0.20 ~ 0.32`
 - `BrowTailExtensionRatio = distance(browTail, eyeOuter) / eyeW`: `0.05 ~ 0.30`
 - `BrowHeadToEyeInnerRatio = distance(browHead, eyeInner) / eyeW`: `0.00 ~ 0.25`
@@ -2152,7 +2192,7 @@ The brow usually starts near or slightly inside the inner eye corner and extends
 
 ### Brow Thickness
 
-- `BrowThicknessEyeHeightRatio = AvgBrowThickness / avgEyeH`: `0.35 ~ 0.85`
+- `BrowThicknessEyeHeightRatio = AvgBrowThickness / avgEyeH`: `0.12 ~ 0.85`
 - `BrowThicknessEyeWidthRatio = AvgBrowThickness / avgEyeW`: `0.06 ~ 0.16`
 - `HeadToTailThicknessRatio = browHeadThickness / browTailThickness`: `1.10 ~ 2.20`
 
@@ -5570,6 +5610,14 @@ K Retouch Pro should use nose metrics to judge center drift, width, tilt, expose
 
 Nose metrics are not beauty targets. Shape edits are the last step. Check face rotation, eye line, and lighting first.
 
+Nose surface-flow guide:
+
+- The bridge should usually read as a central bright plane with side planes falling away toward the cheeks.
+- A useful reading is not a drawn center line but a tent-like or angled plane transition from bridge to sidewall.
+- The tip should read as a rounded bulb surface, not a flat cap.
+- Short directional strokes or evidence checks should favor bridge-to-cheek diagonal falloff and rounded tip flow rather than two hard dark outline lines.
+- Nostril depth belongs to the inner cavity; do not let nostril darkness replace the bridge, tip, or wing surface reading.
+
 ### Nose Anchors
 
 Dense landmark target anchors:
@@ -6344,6 +6392,8 @@ Core rules:
 - Preserve natural lip volume, color variation, fine vertical texture, mouth expression, and natural highlights.
 - Do not over-smooth the vermilion border.
 - Protect teeth, inner mouth, skin around mouth, mustache/beard, philtrum, nasolabial folds, and mouth corners.
+- Lip boundary evidence should use color, tone, and texture-direction change together rather than color alone.
+- When lip color is weak or close to skin tone, compare the local tissue flow of lip, philtrum, perioral skin, and lower-lip-to-chin skin.
 
 Definitions:
 
@@ -6410,6 +6460,16 @@ Lip guide-centered directional texture evidence:
 - If confidence is high, create candidate masks such as `lipLineCandidateMask`, `lipCrackCandidateMask`, `lipDryPatchCandidateMask`, and `lipTextureEvidenceMask`.
 - If confidence is low, keep protect-only behavior and do not guess from landmarks.
 - Visible correction still requires an explicit lip tool or slider.
+
+Texture-direction guide around the mouth:
+
+- Lip surface usually shows fine vertical or slightly curved micro-line flow.
+- Upper-lip skin above the vermilion border transitions away from lip-line texture and into softer skin grain.
+- The philtrum usually reads as a center groove with two ridges and a more vertical downward flow from nose base toward upper lip.
+- Skin around the mouth often follows the orbicular mouth-muscle flow, wrapping around the lips rather than matching lip texture.
+- Skin below the lower lip usually shifts into a broader chin-surface flow, often softer and more downward than the lip texture above.
+- If lip color evidence is weak, use these texture-direction transitions as boundary evidence before widening correction.
+- If both color and texture-direction evidence are weak, lower confidence and protect wider instead of forcing a lip edge.
 
 Protection masks:
 

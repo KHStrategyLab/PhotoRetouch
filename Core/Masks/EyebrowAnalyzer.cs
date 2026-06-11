@@ -140,9 +140,31 @@ public static class EyebrowAnalyzer
         BrowEvidenceStats stats = MeasureEvidence(evidence, roi, browFeature, eyeFeature, input);
         MaskPlane mask = evidence.Average() > 0.000015 ? BuildSurfaceMaskFromEvidence(evidence, roi, stats) : empty;
 
-        double distanceScore = ScoreRange(stats.BrowToEyeDistance / Math.Max(1.0, input.FaceH), 0.015, 0.065, 0.008, 0.085);
-        double lengthScore = ScoreRange(stats.BrowLength / Math.Max(1.0, stats.EyeW), 1.05, 1.35, 0.90, 1.50);
-        double thicknessScore = ScoreRange(stats.BrowThickness / Math.Max(1.0, stats.EyeH), 0.35, 0.85, 0.25, 1.10);
+        double distanceSoftMin = Math.Max(0.006, EyebrowGuideProfile.BrowEyeDistanceFaceRatioMin - 0.007);
+        double distanceSoftMax = EyebrowGuideProfile.BrowEyeDistanceFaceRatioMax + 0.020;
+        double lengthSoftMin = Math.Max(0.70, EyebrowGuideProfile.BrowLengthToEyeWidthMin - 0.15);
+        double lengthSoftMax = EyebrowGuideProfile.BrowLengthToEyeWidthMax + 0.18;
+        double thicknessSoftMin = Math.Max(0.06, EyebrowGuideProfile.BrowThicknessToEyeHeightMin - 0.06);
+        double thicknessSoftMax = EyebrowGuideProfile.BrowThicknessToEyeHeightMax + 0.20;
+
+        double distanceScore = ScoreRange(
+            stats.BrowToEyeDistance / Math.Max(1.0, input.FaceH),
+            EyebrowGuideProfile.BrowEyeDistanceFaceRatioMin,
+            EyebrowGuideProfile.BrowEyeDistanceFaceRatioMax,
+            distanceSoftMin,
+            distanceSoftMax);
+        double lengthScore = ScoreRange(
+            stats.BrowLength / Math.Max(1.0, stats.EyeW),
+            EyebrowGuideProfile.BrowLengthToEyeWidthMin,
+            EyebrowGuideProfile.BrowLengthToEyeWidthMax,
+            lengthSoftMin,
+            lengthSoftMax);
+        double thicknessScore = ScoreRange(
+            stats.BrowThickness / Math.Max(1.0, stats.EyeH),
+            EyebrowGuideProfile.BrowThicknessToEyeHeightMin,
+            EyebrowGuideProfile.BrowThicknessToEyeHeightMax,
+            thicknessSoftMin,
+            thicknessSoftMax);
         double directionScore = 1 - Math.Clamp(Math.Abs(NormalizeAngle(stats.BrowSlopeAngle - eyeFeature.AngleRad)) / (Math.PI / 3.0), 0, 1);
         double archScore = stats.ArchScore;
         double colorScore = stats.ColorScore;
@@ -215,17 +237,31 @@ public static class EyebrowAnalyzer
         double orbitalCenterY = eyeFeature.CenterY * (1 - pupilWeight) + (pupilFeature?.CenterY ?? eyeFeature.CenterY) * pupilWeight;
         double eyeW = eye.EyeW;
         double eyeH = eye.EyeH;
-        double minUp = Math.Max(input.FaceH * 0.008, eyeH * 0.28);
-        double maxUp = Math.Min(input.FaceH * 0.085, eyeH * 2.55);
+        double innerCornerSide = (eye.InnerX - orbitalCenterX) * axisX + (eye.InnerY - orbitalCenterY) * axisY;
+        double outerCornerSide = (eye.OuterX - orbitalCenterX) * axisX + (eye.OuterY - orbitalCenterY) * axisY;
+        double headOutsideAllowance = eyeW * EyebrowGuideProfile.HeadOutsideInnerCornerToEyeWidthMax;
+        double headInsideAllowance = eyeW * EyebrowGuideProfile.HeadInsideInnerCornerToEyeWidthMax;
+        double tailExtension = eyeW * ((EyebrowGuideProfile.TailOutsideOuterCornerToEyeWidthMin + EyebrowGuideProfile.TailOutsideOuterCornerToEyeWidthMax) * 0.5);
+        double minUp = Math.Max(input.FaceH * 0.008, eyeH * EyebrowGuideProfile.RoiLowerToEyeHeightMin);
+        double maxUp = Math.Min(input.FaceH * 0.085, eyeH * EyebrowGuideProfile.RoiUpperToEyeHeightMax);
         if (maxUp <= minUp + 2)
         {
             maxUp = minUp + Math.Clamp(eyeW * 0.42, 18.0, 74.0);
         }
 
-        double sideInner = Math.Clamp(eyeW * 0.64, 16.0, 80.0);
-        double sideOuter = Math.Clamp(eyeW * 0.92, 20.0, 110.0);
+        double sideInner = Math.Clamp(Math.Abs(innerCornerSide) + headInsideAllowance, 16.0, 86.0);
+        double sideOuter = Math.Clamp(Math.Abs(outerCornerSide) + tailExtension, 20.0, 114.0);
         double maxSide = Math.Max(sideInner, sideOuter);
-        double arcHalfBand = Math.Clamp(Math.Max(eyeH * 1.05, eyeW * 0.22), 12.0, 42.0);
+        double arcHalfBand = Math.Clamp(
+            Math.Max(eyeH * (EyebrowGuideProfile.RoiUpperToEyeHeightMax - EyebrowGuideProfile.RoiLowerToEyeHeightMin) * 0.42, eyeW * 0.18),
+            12.0,
+            42.0);
+        bool negativeSideIsInner = isRight;
+        double innerSideSign = negativeSideIsInner ? -1.0 : 1.0;
+        double browCenterUp = eyeH * ((EyebrowGuideProfile.RoiCenterToEyeHeightMin + EyebrowGuideProfile.RoiCenterToEyeHeightMax) * 0.5);
+        double browArchLift = eyeH * ((EyebrowGuideProfile.ArchRiseToEyeHeightMin + EyebrowGuideProfile.ArchRiseToEyeHeightMax) * 0.5);
+        double archCenter = (EyebrowGuideProfile.ArchPositionFromHeadMin + EyebrowGuideProfile.ArchPositionFromHeadMax) * 0.5;
+        double archRange = Math.Max(0.08, (EyebrowGuideProfile.ArchPositionFromHeadMax - EyebrowGuideProfile.ArchPositionFromHeadMin) * 0.85);
 
         if (browFeature is not null && browFeature.Points.Count > 0)
         {
@@ -255,17 +291,38 @@ public static class EyebrowAnalyzer
                 double py = y + 0.5;
                 double side = (px - orbitalCenterX) * axisX + (py - orbitalCenterY) * axisY;
                 double upFromUpperLid = (px - eye.UpperX) * upX + (py - eye.UpperY) * upY;
-                double sideLimit = side < 0 ? sideInner : sideOuter;
+                bool innerSide = negativeSideIsInner ? side < 0 : side > 0;
+                double sideLimit = innerSide ? sideInner : sideOuter;
                 if (Math.Abs(side) > sideLimit || upFromUpperLid < minUp || upFromUpperLid > maxUp)
                 {
                     continue;
                 }
 
-                double sideNorm = Math.Clamp(side / Math.Max(1.0, sideLimit), -1.0, 1.0);
-                double archLift = Math.Sin((sideNorm + 1.0) * Math.PI * 0.5) * eyeH * 0.34;
-                double preferredUp = minUp + (maxUp - minUp) * 0.45 + archLift;
+                double progress = negativeSideIsInner
+                    ? (side + sideInner) / Math.Max(1.0, sideInner + sideOuter)
+                    : (sideInner - side) / Math.Max(1.0, sideInner + sideOuter);
+                progress = Math.Clamp(progress, 0, 1);
+                double archFactor = 1.0 - Math.Clamp(Math.Abs(progress - archCenter) / archRange, 0, 1);
+                double preferredUp = browCenterUp + browArchLift * archFactor;
                 double arcDistance = Math.Abs(upFromUpperLid - preferredUp);
                 double arcWeight = 1.0 - SmoothStep(arcHalfBand, arcHalfBand * 1.85, arcDistance);
+                if (progress <= 0.38)
+                {
+                    double headOffset = (side - innerCornerSide) * innerSideSign;
+                    double headStartWeight = ScoreRange(
+                        headOffset,
+                        -headOutsideAllowance,
+                        headInsideAllowance,
+                        -headOutsideAllowance * 1.6,
+                        headInsideAllowance + eyeW * 0.12);
+                    if (headStartWeight <= 0.02)
+                    {
+                        continue;
+                    }
+
+                    arcWeight *= Math.Clamp(0.40 + headStartWeight * 0.60, 0, 1);
+                }
+
                 if (arcWeight <= 0.04)
                 {
                     continue;
@@ -763,28 +820,8 @@ public static class EyebrowAnalyzer
 
     private static BrowEvidenceAxis EstimateAxis(MaskPlane evidenceMask, AnchorMeshFeature? browFeature, AnchorMeshFeature eyeFeature)
     {
-        double total = 0;
-        double meanX = 0;
-        double meanY = 0;
-        for (int y = 0; y < evidenceMask.Height; y++)
-        {
-            for (int x = 0; x < evidenceMask.Width; x++)
-            {
-                double weight = evidenceMask[x, y];
-                if (weight <= 0.10)
-                {
-                    continue;
-                }
-
-                double px = x + 0.5;
-                double py = y + 0.5;
-                meanX += px * weight;
-                meanY += py * weight;
-                total += weight;
-            }
-        }
-
-        if (total <= 0)
+        TextureFlowAxis estimated = TextureFlowAnalyzer.EstimateWeightedAxis(evidenceMask, threshold: 0.10);
+        if (!estimated.IsValid)
         {
             double fallbackAngle = browFeature?.AngleRad ?? eyeFeature.AngleRad;
             double fallbackAxisX = Math.Cos(fallbackAngle);
@@ -799,40 +836,14 @@ public static class EyebrowAnalyzer
                 fallbackAngle);
         }
 
-        meanX /= total;
-        meanY /= total;
-        double covXX = 0;
-        double covYY = 0;
-        double covXY = 0;
-        for (int y = 0; y < evidenceMask.Height; y++)
-        {
-            for (int x = 0; x < evidenceMask.Width; x++)
-            {
-                double weight = evidenceMask[x, y];
-                if (weight <= 0.10)
-                {
-                    continue;
-                }
-
-                double dx = x + 0.5 - meanX;
-                double dy = y + 0.5 - meanY;
-                covXX += dx * dx * weight;
-                covYY += dy * dy * weight;
-                covXY += dx * dy * weight;
-            }
-        }
-
-        double angle = 0.5 * Math.Atan2(2 * covXY, covXX - covYY);
-        double axisX = Math.Cos(angle);
-        double axisY = Math.Sin(angle);
-        if (axisX < 0)
-        {
-            axisX = -axisX;
-            axisY = -axisY;
-            angle += Math.PI;
-        }
-
-        return new BrowEvidenceAxis(meanX, meanY, axisX, axisY, -axisY, axisX, Math.Atan2(axisY, axisX));
+        return new BrowEvidenceAxis(
+            estimated.CenterX,
+            estimated.CenterY,
+            estimated.AxisX,
+            estimated.AxisY,
+            estimated.UpX,
+            estimated.UpY,
+            estimated.AngleRad);
     }
 
     private static List<BrowEvidenceSample> CollectSamples(MaskPlane evidenceMask, BrowEvidenceAxis axis)
@@ -884,14 +895,7 @@ public static class EyebrowAnalyzer
 
     private static double GetDirectionalHairScore(EyebrowPixelData pixels, int x, int y, double cos, double sin)
     {
-        int alongX = Math.Clamp((int)Math.Round(x + cos * 2), 0, pixels.Width - 1);
-        int alongY = Math.Clamp((int)Math.Round(y + sin * 2), 0, pixels.Height - 1);
-        int crossX = Math.Clamp((int)Math.Round(x - sin * 2), 0, pixels.Width - 1);
-        int crossY = Math.Clamp((int)Math.Round(y + cos * 2), 0, pixels.Height - 1);
-        double center = pixels.GetLuma(x, y);
-        double alongDiff = Math.Abs(center - pixels.GetLuma(alongX, alongY));
-        double crossDiff = Math.Abs(center - pixels.GetLuma(crossX, crossY));
-        return Math.Clamp((crossDiff - alongDiff + 8) / 28, 0, 1);
+        return TextureFlowAnalyzer.GetDirectionalContrastScore(pixels.GetLuma, pixels.Width, pixels.Height, x, y, cos, sin, radius: 2);
     }
 
     private static double GetNeighborhoodDarkness(EyebrowPixelData pixels, MaskPlane roi, int x, int y, double threshold)
@@ -930,30 +934,11 @@ public static class EyebrowAnalyzer
 
     private static double EstimateDirectionalTexture(MaskPlane evidence, BrowEvidenceAxis axis)
     {
-        double sum = 0;
-        double weight = 0;
-        for (int y = 1; y < evidence.Height - 1; y++)
-        {
-            for (int x = 1; x < evidence.Width - 1; x++)
-            {
-                double center = evidence[x, y];
-                if (center <= 0.10)
-                {
-                    continue;
-                }
-
-                int alongX = Math.Clamp((int)Math.Round(x + axis.AxisX * 2), 0, evidence.Width - 1);
-                int alongY = Math.Clamp((int)Math.Round(y + axis.AxisY * 2), 0, evidence.Height - 1);
-                int crossX = Math.Clamp((int)Math.Round(x + axis.UpX * 2), 0, evidence.Width - 1);
-                int crossY = Math.Clamp((int)Math.Round(y + axis.UpY * 2), 0, evidence.Height - 1);
-                double along = Math.Abs(center - evidence[alongX, alongY]);
-                double cross = Math.Abs(center - evidence[crossX, crossY]);
-                sum += Math.Clamp(center + cross * 0.5 - along * 0.25, 0, 1) * center;
-                weight += center;
-            }
-        }
-
-        return weight <= 0 ? 0 : Math.Clamp(sum / weight, 0, 1);
+        return TextureFlowAnalyzer.EstimateDirectionalEvidenceScore(
+            evidence,
+            new TextureFlowAxis(true, axis.CenterX, axis.CenterY, axis.AxisX, axis.AxisY, axis.UpX, axis.UpY, axis.AngleRad),
+            threshold: 0.10,
+            radius: 2);
     }
 
     private static double EstimateConnectedness(MaskPlane evidence, IReadOnlyList<BrowEvidenceSample> samples, double length, double thickness)

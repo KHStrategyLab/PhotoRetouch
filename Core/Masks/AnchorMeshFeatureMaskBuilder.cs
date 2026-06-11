@@ -545,7 +545,7 @@ public static class AnchorMeshFeatureMaskBuilder
                 outerIndices: [0, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12],
                 innerIndices: [8, 9, 10, 11, 12, 13, 14, 15, 0]),
             opacity: 1.0,
-            featherRadius: 4.2);
+            featherRadius: LipGuideProfile.UpperLipFeatherRadius);
         MaskPlane lowerLoop = FillPointLoop(
             width,
             height,
@@ -555,12 +555,14 @@ public static class AnchorMeshFeatureMaskBuilder
                 outerIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
                 innerIndices: [8, 7, 6, 5, 4, 3, 2, 1, 0]),
             opacity: 1.0,
-            featherRadius: 4.2);
+            featherRadius: LipGuideProfile.LowerLipFeatherRadius);
 
         MaskPlane lipSurface = MaskPlane.Union(upperLoop, lowerLoop);
+        lipSurface = MaskPlane.Union(lipSurface, MaskPlane.Multiply(lowerLoop, LipGuideProfile.LowerLipSupportOpacity));
         MaskPlane softLoopSupport = MaskPlane.Multiply(FillClosedFeature(width, height, outerLip, 1.0, 3.8), 0.36);
         lipSurface = MaskPlane.Union(lipSurface, MaskPlane.Subtract(softLoopSupport, MaskPlane.Multiply(innerMouthProtectionMask, 0.96)));
         lipSurface = MaskPlane.Subtract(lipSurface, MaskPlane.Multiply(innerMouthProtectionMask, 0.82));
+        AddLipCornerSupport(lipSurface, outerLip);
         FillSmallLipSurfaceGaps(lipSurface, outerLip, innerMouthProtectionMask);
 
         double upperCoverage = CoverageRatio(lipSurface, upperLoop);
@@ -572,6 +574,22 @@ public static class AnchorMeshFeatureMaskBuilder
         }
 
         return lipSurface;
+    }
+
+    private static void AddLipCornerSupport(MaskPlane lipSurface, AnchorMeshFeature outerLip)
+    {
+        AnchorMeshPoint? rightCorner = outerLip.Points.FirstOrDefault(point => point.Role.Contains("MouthRightCorner", StringComparison.OrdinalIgnoreCase));
+        AnchorMeshPoint? leftCorner = outerLip.Points.FirstOrDefault(point => point.Role.Contains("MouthLeftCorner", StringComparison.OrdinalIgnoreCase));
+        double radius = Math.Clamp(outerLip.Width * LipGuideProfile.CornerSupportRadiusRatio, LipGuideProfile.CornerSupportMinRadius, LipGuideProfile.CornerSupportMaxRadius);
+        if (rightCorner is not null)
+        {
+            AddTemplateShape(lipSurface, rightCorner.SnappedX, rightCorner.SnappedY, radius, radius * 0.82, outerLip.AngleRad, LipGuideProfile.CornerSupportOpacity, 1.4, ShapeEllipse);
+        }
+
+        if (leftCorner is not null)
+        {
+            AddTemplateShape(lipSurface, leftCorner.SnappedX, leftCorner.SnappedY, radius, radius * 0.82, outerLip.AngleRad, LipGuideProfile.CornerSupportOpacity, 1.4, ShapeEllipse);
+        }
     }
 
     private static MaskPlane BuildInnerMouthProtectMask(int width, int height, AnchorMeshFeature? innerMouthFeature, double opacity)
@@ -774,7 +792,7 @@ public static class AnchorMeshFeatureMaskBuilder
     private static MaskPlane BuildNostrilMask(int width, int height, AnchorMeshFeature? noseFeature)
     {
         MaskPlane mask = MaskPlane.Empty(width, height);
-        if (noseFeature is null)
+        if (noseFeature is null || noseFeature.Points.Count == 0)
         {
             return mask;
         }
@@ -794,10 +812,8 @@ public static class AnchorMeshFeatureMaskBuilder
             .Where(point => point.Role.Contains("RightNostril", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        double radiusX = Math.Clamp(noseFeature.Width * 0.062, 4.0, 14.0);
-        double radiusY = Math.Clamp(radiusX * 0.48, 2.0, 7.5);
-        AddNostrilEllipse(mask, leftPoints, noseFeature.AngleRad, radiusX, radiusY);
-        AddNostrilEllipse(mask, rightPoints, noseFeature.AngleRad, radiusX, radiusY);
+        AddNostrilOpening(mask, leftPoints, noseFeature, isRightSide: false);
+        AddNostrilOpening(mask, rightPoints, noseFeature, isRightSide: true);
 
         return mask;
     }
@@ -875,12 +891,14 @@ public static class AnchorMeshFeatureMaskBuilder
         {
             double baseCenterX = basePoints.Average(point => point.SnappedX);
             double baseCenterY = basePoints.Average(point => point.SnappedY);
+            double baseWidth = Math.Max(1.0, basePoints.Max(point => point.SnappedX) - basePoints.Min(point => point.SnappedX));
+            double baseHeight = Math.Max(1.0, basePoints.Max(point => point.SnappedY) - basePoints.Min(point => point.SnappedY));
             AddTemplateShape(
                 baseSurface,
                 baseCenterX,
                 baseCenterY,
-                Math.Clamp(noseFeature.Width * 0.44, 8.0, 50.0),
-                Math.Clamp(noseFeature.Height * 0.16, 5.0, 24.0),
+                Math.Clamp(Math.Max(baseWidth * 0.62, noseFeature.Width * 0.32), 8.0, 50.0),
+                Math.Clamp(Math.Max(baseHeight * 0.95, noseFeature.Height * 0.10), 5.0, 24.0),
                 noseFeature.AngleRad,
                 0.58,
                 featherRadius: 2.5,
@@ -912,13 +930,15 @@ public static class AnchorMeshFeatureMaskBuilder
 
         double wingCenterX = wingPoints.Average(point => point.SnappedX);
         double wingCenterY = wingPoints.Average(point => point.SnappedY);
+        double wingWidth = Math.Max(1.0, wingPoints.Max(point => point.SnappedX) - wingPoints.Min(point => point.SnappedX));
+        double wingHeight = Math.Max(1.0, wingPoints.Max(point => point.SnappedY) - wingPoints.Min(point => point.SnappedY));
         double sideOffset = Math.Cos(noseFeature.AngleRad) * Math.Clamp(noseFeature.Width * 0.035, 1.0, 5.0) * side;
         AddTemplateShape(
             mask,
             wingCenterX + sideOffset,
             wingCenterY,
-            Math.Clamp(noseFeature.Width * 0.22, 5.0, 26.0),
-            Math.Clamp(noseFeature.Height * 0.22, 7.0, 32.0),
+            Math.Clamp(Math.Max(wingWidth * 0.95, noseFeature.Width * 0.16), 5.0, 26.0),
+            Math.Clamp(Math.Max(wingHeight * 0.95, noseFeature.Height * 0.14), 7.0, 32.0),
             noseFeature.AngleRad,
             0.70,
             featherRadius: 2.8,
@@ -973,11 +993,18 @@ public static class AnchorMeshFeatureMaskBuilder
         double noseBaseY = nostrilPoints.Length > 0
             ? nostrilPoints.Max(point => point.SnappedY)
             : noseFeature.CenterY + noseFeature.Height * 0.36;
+        double upperLipTopY = GetUpperLipTopY(mouthFeature);
         double noseToMouth = Math.Max(12.0, mouthFeature.CenterY - tip.SnappedY);
-        double upperMouthLimit = Math.Max(
-            noseBaseY + Math.Clamp(noseFeature.Width * 0.055, 3.0, 11.0),
-            mouthFeature.CenterY - Math.Clamp(noseToMouth * 0.34, 12.0, 34.0));
-        double feather = Math.Clamp(noseFeature.Width * 0.055, 4.0, 12.0);
+        double estimatedPhiltrumHeight = Math.Max(4.0, upperLipTopY - noseBaseY);
+        double philtrumHeight = PhiltrumGuideProfile.ClampPhiltrumHeight(noseToMouth, estimatedPhiltrumHeight);
+        double lipBoundaryAllowance = Math.Clamp(mouthFeature.Height * 0.08, 1.5, 5.0);
+        double upperMouthLimit = Math.Min(
+            upperLipTopY + lipBoundaryAllowance,
+            noseBaseY + philtrumHeight + lipBoundaryAllowance);
+        upperMouthLimit = Math.Max(
+            noseBaseY + Math.Clamp(noseFeature.Width * 0.045, 2.0, 9.0),
+            upperMouthLimit);
+        double feather = Math.Clamp(Math.Max(noseFeature.Width * 0.045, mouthFeature.Height * 0.16), 4.0, 12.0);
 
         for (int y = 0; y < mask.Height; y++)
         {
@@ -993,19 +1020,53 @@ public static class AnchorMeshFeatureMaskBuilder
             }
         }
 
-        warnings.Add("mouth_mask_clipped_by_nose_mouth_distance_ratio");
+        warnings.Add("mouth_mask_clipped_by_nose_mouth_distance_and_philtrum_guide");
     }
 
-    private static void AddNostrilEllipse(MaskPlane mask, IReadOnlyList<AnchorMeshPoint> points, double angle, double radiusX, double radiusY)
+    private static double GetUpperLipTopY(AnchorMeshFeature mouthFeature)
+    {
+        AnchorMeshPoint[] upperLipPoints = mouthFeature.Points
+            .Where(point =>
+                point.Role.Contains("UpperLipTopCenter", StringComparison.OrdinalIgnoreCase) ||
+                point.Role.Contains("UpperLipCupid", StringComparison.OrdinalIgnoreCase) ||
+                point.Role.Contains("UpperLip", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (upperLipPoints.Length > 0)
+        {
+            return upperLipPoints.Min(point => point.SnappedY);
+        }
+
+        return mouthFeature.Bounds.Top + mouthFeature.Height * 0.14;
+    }
+
+    private static void AddNostrilOpening(MaskPlane mask, IReadOnlyList<AnchorMeshPoint> points, AnchorMeshFeature noseFeature, bool isRightSide)
     {
         if (points.Count == 0)
         {
             return;
         }
 
-        double centerX = points.Average(point => point.SnappedX);
-        double centerY = points.Average(point => point.SnappedY);
-        AddTemplateShape(mask, centerX, centerY, radiusX, radiusY, angle, 1.0, 1.5, ShapeEllipse);
+        double meanX = points.Average(point => point.SnappedX);
+        double meanY = points.Average(point => point.SnappedY);
+        double minX = points.Min(point => point.SnappedX);
+        double maxX = points.Max(point => point.SnappedX);
+        double minY = points.Min(point => point.SnappedY);
+        double maxY = points.Max(point => point.SnappedY);
+        double estimatedWidth = Math.Max(1.0, (maxX - minX) * 1.30);
+        double nostrilWidth = NoseGuideProfile.ClampNostrilWidth(noseFeature.Width, estimatedWidth);
+        double estimatedHeight = Math.Max(1.0, (maxY - minY) * 1.10);
+        double nostrilHeight = NoseGuideProfile.ClampNostrilHeight(nostrilWidth, estimatedHeight);
+        double axisX = Math.Cos(noseFeature.AngleRad);
+        double axisY = Math.Sin(noseFeature.AngleRad);
+        double upX = Math.Sin(noseFeature.AngleRad);
+        double upY = -Math.Cos(noseFeature.AngleRad);
+        double sideSign = isRightSide ? -1.0 : 1.0;
+        double centerX = meanX + axisX * nostrilWidth * NoseGuideProfile.NostrilInwardShiftRatio * sideSign;
+        double centerY = meanY + axisY * nostrilWidth * NoseGuideProfile.NostrilInwardShiftRatio * sideSign;
+        centerX += upX * nostrilHeight * NoseGuideProfile.NostrilUpwardShiftRatio;
+        centerY += upY * nostrilHeight * NoseGuideProfile.NostrilUpwardShiftRatio;
+        double openingAngle = noseFeature.AngleRad + (isRightSide ? -NoseGuideProfile.NostrilTiltRadians : NoseGuideProfile.NostrilTiltRadians);
+        AddTemplateShape(mask, centerX, centerY, nostrilWidth * 0.5, nostrilHeight * 0.5, openingAngle, 1.0, 1.5, ShapeEllipse);
     }
 
     private static bool AddImageTemplate(
