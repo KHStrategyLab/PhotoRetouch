@@ -148,17 +148,17 @@ public static class DebugMaskExporter
                 double amount = Math.Clamp(mask[x, y] * maskOpacity, 0, 1);
                 if (amount <= 0.0001)
                 {
-                    pixels[index] = 255;
-                    pixels[index + 1] = 255;
-                    pixels[index + 2] = 255;
-                    pixels[index + 3] = 255;
+                    pixels[index] = 0;
+                    pixels[index + 1] = 0;
+                    pixels[index + 2] = 0;
+                    pixels[index + 3] = 0;
                     continue;
                 }
 
                 pixels[index] = sourcePixels[index];
                 pixels[index + 1] = sourcePixels[index + 1];
                 pixels[index + 2] = sourcePixels[index + 2];
-                pixels[index + 3] = 255;
+                pixels[index + 3] = (byte)Math.Clamp((int)Math.Round(255 * amount), 0, 255);
             }
         }
 
@@ -193,17 +193,17 @@ public static class DebugMaskExporter
                 double amount = Math.Clamp(mask[x, y] * maskOpacity, 0, 1);
                 if (amount <= 0.0001)
                 {
-                    pixels[index] = 255;
-                    pixels[index + 1] = 255;
-                    pixels[index + 2] = 255;
-                    pixels[index + 3] = 255;
+                    pixels[index] = 0;
+                    pixels[index + 1] = 0;
+                    pixels[index + 2] = 0;
+                    pixels[index + 3] = 0;
                     continue;
                 }
 
                 pixels[index] = sourcePixels[index];
                 pixels[index + 1] = sourcePixels[index + 1];
                 pixels[index + 2] = sourcePixels[index + 2];
-                pixels[index + 3] = 255;
+                pixels[index + 3] = (byte)Math.Clamp((int)Math.Round(255 * amount), 0, 255);
             }
         }
 

@@ -55,22 +55,24 @@ public sealed class AnchorMeshAligner
 
     public void LockPrimaryFeatureCenters(AnchorMeshFeatureSet features, YuNetAnchorSet anchors)
     {
-        if (features.LeftEye is not null)
+        bool leftEyeFollowedPupil = TryFollowEyeCenterToPupil(features.LeftEye, features.LeftPupil, anchors.FaceAngleRad);
+        if (!leftEyeFollowedPupil && features.LeftEye is not null)
         {
             TranslateFeatureCenterTo(features.LeftEye, anchors.LeftEye.X, anchors.LeftEye.Y, anchors.FaceAngleRad);
         }
 
-        if (features.LeftPupil is not null)
+        if (!leftEyeFollowedPupil && features.LeftPupil is not null)
         {
             TranslateFeatureCenterTo(features.LeftPupil, anchors.LeftEye.X, anchors.LeftEye.Y, anchors.FaceAngleRad);
         }
 
-        if (features.RightEye is not null)
+        bool rightEyeFollowedPupil = TryFollowEyeCenterToPupil(features.RightEye, features.RightPupil, anchors.FaceAngleRad);
+        if (!rightEyeFollowedPupil && features.RightEye is not null)
         {
             TranslateFeatureCenterTo(features.RightEye, anchors.RightEye.X, anchors.RightEye.Y, anchors.FaceAngleRad);
         }
 
-        if (features.RightPupil is not null)
+        if (!rightEyeFollowedPupil && features.RightPupil is not null)
         {
             TranslateFeatureCenterTo(features.RightPupil, anchors.RightEye.X, anchors.RightEye.Y, anchors.FaceAngleRad);
         }
@@ -355,6 +357,34 @@ public sealed class AnchorMeshAligner
         float dy = anchors.RightMouthCorner.Y - anchors.LeftMouthCorner.Y;
         float length = MathF.Sqrt(dx * dx + dy * dy);
         return length < 1 ? MathF.Sin(anchors.FaceAngleRad) : dy / length;
+    }
+
+    private static bool TryFollowEyeCenterToPupil(AnchorMeshFeature? eye, AnchorMeshFeature? pupil, float angleRad)
+    {
+        if (eye is null || pupil is null || pupil.Points.Count == 0)
+        {
+            return false;
+        }
+
+        if (!HasGuidedPupilCenter(eye, pupil))
+        {
+            return false;
+        }
+
+        TranslateFeatureCenterTo(eye, pupil.CenterX, pupil.CenterY, angleRad);
+        eye.SnapMode = "FollowPupilCenterGuide";
+        return true;
+    }
+
+    private static bool HasGuidedPupilCenter(AnchorMeshFeature eye, AnchorMeshFeature pupil)
+    {
+        bool hasSnappedGuide = pupil.Points.Any(point => point.Source.Equals("MaskSnapped", StringComparison.OrdinalIgnoreCase));
+        if (!hasSnappedGuide)
+        {
+            return false;
+        }
+
+        return PupilGuideProfile.IsPupilDiameterPlausible(eye.Width, pupil.Width);
     }
 
     private static void TranslateFeatureCenterTo(AnchorMeshFeature feature, float targetX, float targetY, float angleRad)

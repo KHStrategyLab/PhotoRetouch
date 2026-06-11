@@ -1523,6 +1523,7 @@ Pupil guide:
 
 - `pupilXRatio`: `0.45 ~ 0.55`
 - `pupilYRatio`: `0.42 ~ 0.58`
+- Example: if visible eye width is about `100 px`, a pupil may appear as a dark circle about `8 px` in diameter inside the iris, and a white catchlight around `4 px x 4 px` may partially cover it.
 
 Do not force pupils to mathematical center. Small asymmetry is natural.
 
@@ -1591,6 +1592,7 @@ Guide:
 - `RightPupilXRatio = (rightPupilCenter.x - rightEyeInner.x) / rightEyeW`: `0.45 ~ 0.55`
 - `LeftPupilYRatio = (leftPupilCenter.y - leftEyeUpperMid.y) / leftEyeH`: `0.42 ~ 0.58`
 - `RightPupilYRatio = (rightPupilCenter.y - rightEyeUpperMid.y) / rightEyeH`: `0.42 ~ 0.58`
+- A small bright catchlight can overlap the pupil, so use the dark-circle trend plus iris context together instead of requiring a perfect solid black disk.
 - `PupilXBalanceScore = abs(LeftPupilXRatio - RightPupilXRatio)`
   - `0.00 ~ 0.05`: natural.
   - `0.05 ~ 0.10`: possible gaze difference.

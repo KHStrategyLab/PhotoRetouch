@@ -82,22 +82,20 @@ public sealed class AnchorMeshDebugOverlayRenderer
 
     private static void DrawEyeCenterAxisGuide(DrawingContext context, AnchorMeshResult result, int width)
     {
-        if (result.YuNetAnchors is null)
+        if (!TryGetEyeAxisGuidePoints(result, out WpfPoint leftGuide, out WpfPoint rightGuide))
         {
             return;
         }
 
-        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
-        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
-        float dx = rightEye.X - leftEye.X;
+        float dx = (float)(rightGuide.X - leftGuide.X);
         if (MathF.Abs(dx) < 0.001f)
         {
             return;
         }
 
-        float slope = (rightEye.Y - leftEye.Y) / dx;
-        float startY = leftEye.Y + slope * (0 - leftEye.X);
-        float endY = leftEye.Y + slope * (width - leftEye.X);
+        float slope = (float)((rightGuide.Y - leftGuide.Y) / dx);
+        float startY = (float)(leftGuide.Y + slope * (0 - leftGuide.X));
+        float endY = (float)(leftGuide.Y + slope * (width - leftGuide.X));
         MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105)), 1.0);
         context.DrawLine(guidePen, new WpfPoint(0, startY), new WpfPoint(width, endY));
     }
@@ -248,12 +246,11 @@ public sealed class AnchorMeshDebugOverlayRenderer
 
     private static void DrawEyeCenterPerpendicularGuide(DrawingContext context, AnchorMeshResult result, int width, int height)
     {
-        if (result.YuNetAnchors is null)
+        if (!TryGetEyeGuideCenter(result, out WpfPoint eyeCenter))
         {
             return;
         }
 
-        System.Drawing.PointF eyeCenter = result.YuNetAnchors.EyeCenter;
         if (!TryGetEyeAxisDownVector(result, out float downX, out float downY))
         {
             return;
@@ -262,7 +259,7 @@ public sealed class AnchorMeshDebugOverlayRenderer
         float guideLength = MathF.Max(width, height) * 1.5f;
         WpfPoint start = new(eyeCenter.X - downX * guideLength, eyeCenter.Y - downY * guideLength);
         WpfPoint end = new(eyeCenter.X + downX * guideLength, eyeCenter.Y + downY * guideLength);
-        WpfPoint center = new(eyeCenter.X, eyeCenter.Y);
+        WpfPoint center = eyeCenter;
         MediaPen shadowPen = new(new MediaSolidColorBrush(MediaColor.FromArgb(150, 0, 0, 0)), 4.0);
         MediaPen guidePen = new(new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105)), 2.0);
         MediaBrush guideBrush = new MediaSolidColorBrush(MediaColor.FromArgb(245, 40, 235, 105));
@@ -276,15 +273,13 @@ public sealed class AnchorMeshDebugOverlayRenderer
     {
         downX = 0;
         downY = 1;
-        if (result.YuNetAnchors is null)
+        if (!TryGetEyeAxisGuidePoints(result, out WpfPoint leftGuide, out WpfPoint rightGuide))
         {
             return false;
         }
 
-        System.Drawing.PointF leftEye = result.YuNetAnchors.LeftEye;
-        System.Drawing.PointF rightEye = result.YuNetAnchors.RightEye;
-        float axisX = rightEye.X - leftEye.X;
-        float axisY = rightEye.Y - leftEye.Y;
+        float axisX = (float)(rightGuide.X - leftGuide.X);
+        float axisY = (float)(rightGuide.Y - leftGuide.Y);
         float axisLength = MathF.Sqrt(axisX * axisX + axisY * axisY);
         if (axisLength < 0.001f)
         {
@@ -302,6 +297,115 @@ public sealed class AnchorMeshDebugOverlayRenderer
         }
 
         return true;
+    }
+
+    private static bool TryGetEyeAxisGuidePoints(AnchorMeshResult result, out WpfPoint leftGuide, out WpfPoint rightGuide)
+    {
+        leftGuide = default;
+        rightGuide = default;
+
+        AnchorMeshFeature? leftPupil = result.Features?.LeftPupil;
+        AnchorMeshFeature? rightPupil = result.Features?.RightPupil;
+        AnchorMeshFeature? leftEye = result.Features?.LeftEye;
+        AnchorMeshFeature? rightEye = result.Features?.RightEye;
+
+        bool hasLeftLower = TryGetPupilLowerGuidePoint(leftPupil, leftEye, out leftGuide);
+        bool hasRightLower = TryGetPupilLowerGuidePoint(rightPupil, rightEye, out rightGuide);
+        if (hasLeftLower && hasRightLower)
+        {
+            return true;
+        }
+
+        bool hasLeftCenter = TryGetPupilCenterGuidePoint(leftPupil, leftEye, out leftGuide);
+        bool hasRightCenter = TryGetPupilCenterGuidePoint(rightPupil, rightEye, out rightGuide);
+        if (hasLeftCenter && hasRightCenter)
+        {
+            return true;
+        }
+
+        if (result.YuNetAnchors is null)
+        {
+            return false;
+        }
+
+        leftGuide = new WpfPoint(result.YuNetAnchors.LeftEye.X, result.YuNetAnchors.LeftEye.Y);
+        rightGuide = new WpfPoint(result.YuNetAnchors.RightEye.X, result.YuNetAnchors.RightEye.Y);
+        return true;
+    }
+
+    private static bool TryGetEyeGuideCenter(AnchorMeshResult result, out WpfPoint center)
+    {
+        center = default;
+        AnchorMeshFeature? leftPupil = result.Features?.LeftPupil;
+        AnchorMeshFeature? rightPupil = result.Features?.RightPupil;
+        AnchorMeshFeature? leftEye = result.Features?.LeftEye;
+        AnchorMeshFeature? rightEye = result.Features?.RightEye;
+
+        bool hasLeftCenter = TryGetPupilCenterGuidePoint(leftPupil, leftEye, out WpfPoint leftCenter);
+        bool hasRightCenter = TryGetPupilCenterGuidePoint(rightPupil, rightEye, out WpfPoint rightCenter);
+        if (hasLeftCenter && hasRightCenter)
+        {
+            center = new WpfPoint((leftCenter.X + rightCenter.X) * 0.5, (leftCenter.Y + rightCenter.Y) * 0.5);
+            return true;
+        }
+
+        bool hasLeftLower = TryGetPupilLowerGuidePoint(leftPupil, leftEye, out WpfPoint leftLower);
+        bool hasRightLower = TryGetPupilLowerGuidePoint(rightPupil, rightEye, out WpfPoint rightLower);
+        if (hasLeftLower && hasRightLower)
+        {
+            center = new WpfPoint((leftLower.X + rightLower.X) * 0.5, (leftLower.Y + rightLower.Y) * 0.5);
+            return true;
+        }
+
+        if (result.YuNetAnchors is null)
+        {
+            return false;
+        }
+
+        center = new WpfPoint(result.YuNetAnchors.EyeCenter.X, result.YuNetAnchors.EyeCenter.Y);
+        return true;
+    }
+
+    private static bool TryGetPupilCenterGuidePoint(AnchorMeshFeature? pupil, AnchorMeshFeature? eye, out WpfPoint point)
+    {
+        point = default;
+        if (!IsUsablePupilGuideFeature(pupil, eye))
+        {
+            return false;
+        }
+
+        point = new WpfPoint(pupil!.CenterX, pupil.CenterY);
+        return true;
+    }
+
+    private static bool TryGetPupilLowerGuidePoint(AnchorMeshFeature? pupil, AnchorMeshFeature? eye, out WpfPoint point)
+    {
+        point = default;
+        if (!IsUsablePupilGuideFeature(pupil, eye))
+        {
+            return false;
+        }
+
+        AnchorMeshPoint? lowerPoint = pupil!.Points
+            .FirstOrDefault(candidate => candidate.Role.Contains("BottomEdge", StringComparison.OrdinalIgnoreCase));
+        if (lowerPoint is not null)
+        {
+            point = new WpfPoint(lowerPoint.SnappedX, lowerPoint.SnappedY);
+            return true;
+        }
+
+        point = new WpfPoint(pupil.CenterX, pupil.CenterY + pupil.Height * 0.5);
+        return true;
+    }
+
+    private static bool IsUsablePupilGuideFeature(AnchorMeshFeature? pupil, AnchorMeshFeature? eye)
+    {
+        if (pupil is null || eye is null || pupil.Points.Count == 0 || eye.Width <= 1)
+        {
+            return false;
+        }
+
+        return PupilGuideProfile.IsPupilDiameterPlausible(eye.Width, pupil.Width);
     }
 
     private static float Distance(float ax, float ay, float bx, float by)

@@ -417,6 +417,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 new("skin_smooth", "\uD53C\uBD80\uACB0 \uC815\uB9AC", 0, 100, 0),
                 new("pore_clean", "\uBAA8\uACF5 \uC815\uB9AC", 0, 100, 0),
                 new("tone_even", "\uD53C\uBD80\uD1A4 \uBCF4\uC815", 0, 100, 0),
+                new("skin_mask_range", "\uD53C\uBD80 \uBCF4\uC815 \uBC94\uC704", 0, 100, 45),
                 RetouchControl.CreateAction("skin_sample_tone", "\uD53C\uBD80\uD1A4 \uAE30\uC900", "\uD53C\uBD80\uC0C9 \uC120\uD0DD\uD558\uAE30"),
                 new("skin_texture_protect", "\uD53C\uBD80\uACB0 \uBCF4\uC874", 0, 100, 70)
             }),
@@ -1300,7 +1301,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 "texture_restore" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.TextureRestoreMask, 90, 220, 210, 0.68),
                 "texture_strength" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.TextureRestoreStrengthMap, 70, 210, 230, 0.72),
                 "plastic_risk" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.PlasticSkinRiskMap, 255, 180, 40, 0.74),
-                "hardprotect_diff" => DebugMaskExporter.CreateMaskOverlayPreview(source, output.HardProtectAfterRestoreDiffMask, 255, 40, 40, 0.88),
                 _ => null
             };
 
@@ -1319,8 +1319,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "beard_shadow" => DebugMaskExporter.CreateMaskOverlayPreview(source, SkinToneMaskBuilder.Build(masks).BeardShadowMask, 80, 110, 170, 0.68),
             "nose_structure" => DebugMaskExporter.CreateMaskOverlayPreview(source, SkinToneMaskBuilder.Build(masks).NoseStructureProtectMask, 255, 200, 70, 0.68),
             "nose_retouch_strength" => DebugMaskExporter.CreateMaskOverlayPreview(source, SkinToneMaskBuilder.Build(masks).NoseRetouchStrengthMap, 70, 180, 255, 0.54),
-            "hard_protect" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.HardProtectMask, 235, 60, 70, 0.72),
-            "soft_protect" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.SoftProtectMask, 255, 210, 50, 0.68),
             "retouch_allow" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.RetouchAllowMask, 50, 210, 90, 0.60),
             "eye" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.EyeMask, 90, 170, 255, 0.76),
             "eyebrow" => DebugMaskExporter.CreateMaskOverlayPreview(source, masks.EyebrowMask, 180, 150, 80, 0.76),
@@ -1339,7 +1337,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return id is "blemish_candidate" or "blemish_applied" or
             "wrinkle_candidate" or "wrinkle_applied" or "wrinkle_combined" or
             "glabella_wrinkle" or "under_eye_wrinkle" or
-            "texture_restore" or "texture_strength" or "plastic_risk" or "hardprotect_diff";
+            "texture_restore" or "texture_strength" or "plastic_risk";
     }
 
     private void RestoreMaskDebugPreviousPreview()
@@ -1463,7 +1461,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     sourceAdjustment,
                     retouchSnapshot.Masks.HairMask);
                 BitmapSource downstreamResult = _previewEngine.Render(result.FinalImage, downstreamAdjustment);
-                downstreamResult = RestoreHardProtectDetails(
+                downstreamResult = MergeGuidePreviewDetails(
                     result.FinalImage,
                     downstreamResult,
                     retouchSnapshot.Masks.HardProtectMask);
@@ -1669,7 +1667,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     sourceAdjustment,
                     retouchSnapshot.Masks.HairMask);
                 BitmapSource downstreamResult = _previewEngine.Render(result.FinalImage, downstreamAdjustment);
-                downstreamResult = RestoreHardProtectDetails(
+                downstreamResult = MergeGuidePreviewDetails(
                     result.FinalImage,
                     downstreamResult,
                     retouchSnapshot.Masks.HardProtectMask);
@@ -2238,7 +2236,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     sourceAdjustment,
                     balancedBundleUse.Bundle.BalancedSnapshot.Masks.HairMask);
                 BitmapSource downstreamResult = _previewEngine.Render(balancedBundleUse.Bundle.BalancedImage, downstreamAdjustment);
-                downstreamResult = RestoreHardProtectDetails(
+                downstreamResult = MergeGuidePreviewDetails(
                     balancedBundleUse.Bundle.BalancedImage,
                     downstreamResult,
                     balancedBundleUse.Bundle.BalancedSnapshot.Masks.HardProtectMask);
@@ -2490,7 +2488,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     adjustment,
                     retouchSnapshot.Masks.HairMask);
                 BitmapSource finalImage = _previewEngine.Render(retouchOutput.FinalImage, balancedDownstreamAdjustment);
-                finalImage = RestoreHardProtectDetails(
+                finalImage = MergeGuidePreviewDetails(
                     retouchOutput.FinalImage,
                     finalImage,
                     retouchSnapshot.Masks.HardProtectMask);
@@ -2555,7 +2553,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             FindRetouchControl("skin_smooth")?.Value ?? 0,
             FindRetouchControl("pore_clean")?.Value ?? 0,
             FindRetouchControl("tone_even")?.Value ?? 0,
-            100,
+            FindRetouchControl("skin_mask_range")?.Value ?? 45,
             FindRetouchControl("skin_texture_protect")?.Value ?? 70,
             _manualSkinReferenceColors.Count > 0,
             GetCurrentManualSkinReferenceColor(),
@@ -2670,7 +2668,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private double CaptureSkinMaskRange()
     {
-        return 1.0;
+        return NormalizeSlider(FindRetouchControl("skin_mask_range"), 0.45);
     }
 
     private AutoAiMaskPreviewOptions CaptureAutoAiMaskPreviewOptions()
@@ -3139,56 +3137,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return HighResolutionProcessingPolicy.CreatePreviewSource(source, policy.MaxLongSide.Value);
     }
 
-    private static BitmapSource RestoreHardProtectDetails(BitmapSource protectedReference, BitmapSource renderedImage, MaskPlane hardProtectMask)
+    private static BitmapSource MergeGuidePreviewDetails(BitmapSource guideReference, BitmapSource renderedImage, MaskPlane guideMask)
     {
-        if (protectedReference.PixelWidth != renderedImage.PixelWidth ||
-            protectedReference.PixelHeight != renderedImage.PixelHeight ||
-            hardProtectMask.Width != renderedImage.PixelWidth ||
-            hardProtectMask.Height != renderedImage.PixelHeight)
-        {
-            return renderedImage;
-        }
-
-        BitmapSource reference = protectedReference.Format == PixelFormats.Bgra32
-            ? protectedReference
-            : new FormatConvertedBitmap(protectedReference, PixelFormats.Bgra32, null, 0);
-        BitmapSource rendered = renderedImage.Format == PixelFormats.Bgra32
-            ? renderedImage
-            : new FormatConvertedBitmap(renderedImage, PixelFormats.Bgra32, null, 0);
-        int width = rendered.PixelWidth;
-        int height = rendered.PixelHeight;
-        int stride = width * 4;
-        byte[] referencePixels = new byte[stride * height];
-        byte[] renderedPixels = new byte[stride * height];
-        reference.CopyPixels(referencePixels, stride, 0);
-        rendered.CopyPixels(renderedPixels, stride, 0);
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double protect = Math.Clamp(hardProtectMask[x, y], 0, 1);
-                if (protect <= 0.001)
-                {
-                    continue;
-                }
-
-                int index = y * stride + x * 4;
-                renderedPixels[index] = BlendByte(renderedPixels[index], referencePixels[index], protect);
-                renderedPixels[index + 1] = BlendByte(renderedPixels[index + 1], referencePixels[index + 1], protect);
-                renderedPixels[index + 2] = BlendByte(renderedPixels[index + 2], referencePixels[index + 2], protect);
-                renderedPixels[index + 3] = referencePixels[index + 3];
-            }
-        }
-
-        BitmapSource restored = BitmapSource.Create(width, height, rendered.DpiX, rendered.DpiY, PixelFormats.Bgra32, null, renderedPixels, stride);
-        restored.Freeze();
-        return restored;
-    }
-
-    private static byte BlendByte(byte source, byte target, double amount)
-    {
-        return (byte)Math.Clamp((int)Math.Round(source + (target - source) * amount), 0, 255);
+        _ = guideReference;
+        _ = guideMask;
+        return renderedImage;
     }
 
     private static BitmapEncoder CreateBitmapEncoder(string path)
@@ -4007,6 +3960,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
+            "skin_mask_range" or
             "skin_texture_protect" or
             "wrinkle_global" or
             "wrinkle_under_eye" or
@@ -4099,6 +4053,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             "skin_smooth" or
             "pore_clean" or
             "tone_even" or
+            "skin_mask_range" or
             "skin_texture_protect" or
             "wrinkle_global" or
             "wrinkle_under_eye" or
@@ -4136,6 +4091,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private bool HasActiveAutoAiMaskPreviewControls()
     {
+        if (RetouchSections.Any(section => section.IsExpanded && IsAutoAiMaskPreviewSection(section)))
+        {
+            return true;
+        }
+
         return RetouchSections
             .SelectMany(section => section.Controls)
             .Any(control => IsAutoAiMaskPreviewControl(control) && HasUserOverride(control) && NormalizeSlider(control) > 0);
@@ -6358,8 +6318,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new("beard_shadow", "BeardShadow"),
             new("nose_structure", "NoseStructure"),
             new("nose_retouch_strength", "NoseStrength"),
-            new("hard_protect", "HardProtect"),
-            new("soft_protect", "SoftProtect"),
             new("retouch_allow", "RetouchAllow"),
             new("eye", "Eye"),
             new("eyebrow", "Eyebrow"),
@@ -6378,8 +6336,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             new("glabella_wrinkle", "GlabellaWrinkle"),
             new("texture_restore", "TextureRestore"),
             new("texture_strength", "TextureStrength"),
-            new("plastic_risk", "PlasticRisk"),
-            new("hardprotect_diff", "HardProtectDiff")
+            new("plastic_risk", "PlasticRisk")
         };
     }
 }
